@@ -18,6 +18,8 @@ callables passed in by the wiring layer; this module is pure glue.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 from ...report_v2_3.research import (
@@ -32,7 +34,12 @@ from ...report_v2_3.research.registry import (
     NewsTransport,
     PricesTransport,
 )
+from ...report_v2_3.schemas import DataProviderSource
 from ..ledger import CitationLedger
+
+# Transport the earnings-calendar tool dispatches against. Supplied by
+# the server wiring layer; returns the upcoming-events list for a ticker.
+EarningsCalendarTransport = Callable[[str], list[dict[str, Any]]]
 
 
 def build_data_tools(
@@ -66,9 +73,7 @@ def _wrap(tool: ResearchTool, ledger: CitationLedger) -> ResearchTool:
         except ToolExecutionError:
             raise
         except Exception as exc:
-            raise ToolExecutionError(
-                f"{tool.name} failed: {exc!s}"
-            ) from exc
+            raise ToolExecutionError(f"{tool.name} failed: {exc!s}") from exc
 
         entry = ledger.append(
             tool_name=tool.name,
@@ -98,6 +103,77 @@ def _wrap(tool: ResearchTool, ledger: CitationLedger) -> ResearchTool:
         ),
         execute=_execute,
         metadata=dict(tool.metadata),
+    )
+
+
+def build_earnings_calendar_tool(
+    *,
+    ledger: CitationLedger,
+    earnings_calendar: EarningsCalendarTransport,
+) -> ResearchTool:
+    """Return the ``get_earnings_calendar`` tool, ledger-aware.
+
+    Wraps a transport callable ``earnings_calendar(ticker) -> list[dict]``
+    (the upcoming-events list for a ticker). On a successful call it
+    appends one ledger entry so the model receives the assigned
+    ``source_id`` alongside the data, and surfaces transport failures as
+    a structured ``ToolExecutionError`` the model can react to instead
+    of crashing the loop.
+    """
+
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        ticker = str(args.get("ticker", "")).strip()
+        if not ticker:
+            raise ToolExecutionError("get_earnings_calendar requires `ticker`.")
+        try:
+            events = earnings_calendar(ticker)
+        except Exception as exc:
+            raise ToolExecutionError(
+                f"get_earnings_calendar failed for {ticker!r}: {exc!s}"
+            ) from exc
+
+        provenance = DataProviderSource(
+            provider="EODHD",
+            endpoint="calendar/earnings",
+            period="upcoming",
+            retrieved_at=datetime.now(UTC),
+        )
+        summary = f"Upcoming earnings for {ticker}: {len(events)} event(s)."
+        entry = ledger.append(
+            tool_name="get_earnings_calendar",
+            arguments=dict(args),
+            result_summary=summary,
+            provenance=_provenance_to_dict(provenance),
+        )
+        annotated_payload: dict[str, Any] = {
+            "source_id": entry.source_id,
+            "summary": summary,
+            "data": {"ticker": ticker, "upcoming_earnings": list(events)},
+        }
+        return ToolResult(payload=annotated_payload, provenance=provenance, summary=summary)
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="get_earnings_calendar",
+            description=(
+                "Fetch the upcoming EODHD earnings calendar for a ticker: "
+                "release date(s), timing, and consensus estimates. Use to "
+                "confirm the release you are covering and pull estimate "
+                "figures to score the print against."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "ticker": {
+                        "type": "string",
+                        "description": "Equity ticker, EODHD-formatted (e.g. 'MSFT.US').",
+                    },
+                },
+                "required": ["ticker"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
     )
 
 
