@@ -8,6 +8,7 @@ import {
   listV3Runs,
   startV3Run,
   startV3RunAsync,
+  uploadV3Instructions,
   v3EventsUrl,
   v3HtmlUrl,
   v3PdfUrl,
@@ -192,6 +193,99 @@ describe("equity-research-v3 api client", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/departments/equity-research/v3/runs/abc-123/cancel");
     expect(init.method).toBe("POST");
+  });
+
+  it("startV3RunAsync sends instructions_id in the JSON body", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json: async () => ({ report_id: "x" }),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await startV3RunAsync({
+      subject: "RKLB.US",
+      template_id: "freeform",
+      instructions_id: "instr-1",
+      provider_kind: "anthropic",
+      model: "claude-sonnet-4-6",
+    });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toMatchObject({
+      template_id: "freeform",
+      instructions_id: "instr-1",
+    });
+  });
+
+  it("startV3RunAsync (multipart) appends template_id + instructions_id alongside files", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => "application/json" },
+      json: async () => ({ report_id: "x" }),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["bytes"], "deck.pdf", { type: "application/pdf" });
+    await startV3RunAsync(
+      {
+        subject: "RKLB.US",
+        template_id: "freeform",
+        instructions_id: "instr-1",
+        provider_kind: "anthropic",
+        model: "claude-sonnet-4-6",
+      },
+      [file],
+    );
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/departments/equity-research/v3/runs/start");
+    const fd = init.body as FormData;
+    expect(fd.get("template_id")).toBe("freeform");
+    expect(fd.get("instructions_id")).toBe("instr-1");
+    expect(fd.getAll("files")).toHaveLength(1);
+  });
+
+  it("uploadV3Instructions POSTs multipart name + file and returns the profile", async () => {
+    const profile = {
+      id: "instr-1",
+      name: "Winner framework",
+      is_builtin: false,
+      created_at: "2026-05-29T00:00:00Z",
+      updated_at: "2026-05-29T00:00:00Z",
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      headers: { get: () => "application/json" },
+      json: async () => profile,
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File(["methodology"], "framework.md", { type: "text/markdown" });
+    const result = await uploadV3Instructions("Winner framework", file);
+    expect(result).toEqual(profile);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/departments/equity-research/v3/instructions");
+    expect(init.method).toBe("POST");
+    const fd = init.body as FormData;
+    expect(fd.get("name")).toBe("Winner framework");
+    expect((fd.get("file") as File).name).toBe("framework.md");
+  });
+
+  it("uploadV3Instructions surfaces the server error detail", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      headers: { get: () => "application/json" },
+      json: async () => ({ detail: "No instruction text could be extracted." }),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const file = new File([""], "empty.pdf", { type: "application/pdf" });
+    await expect(uploadV3Instructions("x", file)).rejects.toThrow(
+      "No instruction text could be extracted.",
+    );
   });
 
   it("v3EventsUrl encodes the report id", () => {

@@ -25,6 +25,11 @@ import { request } from "./_request";
 
 const PREFIX = "/api/departments/equity-research/v3";
 
+// Sentinel ``template_id`` for "No template (instructions only)". The
+// server resolves it to a sections-less freeform spec; keep in lockstep
+// with ``FREEFORM_TEMPLATE_ID`` in the v3 route.
+export const FREEFORM_TEMPLATE_ID = "freeform";
+
 export type V3Language = "en" | "zh-TW";
 export type V3ReportLength = "concise" | "normal" | "elaborative";
 export type V3ReportType = "initiation" | "update" | "sector_research";
@@ -49,8 +54,14 @@ export interface V3StartPayload {
   report_type?: V3ReportType;
   // When set, resolves against ``report_v3_templates`` (built-in or
   // user upload). When omitted, the server falls back to the
-  // ``report_type`` default built-in.
+  // ``report_type`` default built-in. The sentinel ``"freeform"``
+  // (``FREEFORM_TEMPLATE_ID``) means "no template" — the report's
+  // shape is driven entirely by the selected instruction profile.
   template_id?: string | null;
+  // Optional saved instruction profile. Its text is injected verbatim
+  // into the system prompt. Required when ``template_id`` is
+  // ``"freeform"`` (a no-template run has no shape without it).
+  instructions_id?: string | null;
   provider_kind: string;
   model: string;
   // Wire enum has "medium" | "high" only; the UI's "off" maps to
@@ -316,6 +327,7 @@ export function startV3RunAsync(
   if (payload.length) fd.append("length", payload.length);
   if (payload.report_type) fd.append("report_type", payload.report_type);
   if (payload.template_id) fd.append("template_id", payload.template_id);
+  if (payload.instructions_id) fd.append("instructions_id", payload.instructions_id);
   fd.append("provider_kind", payload.provider_kind);
   fd.append("model", payload.model);
   if (payload.reasoning_effort) fd.append("reasoning_effort", payload.reasoning_effort);
@@ -329,26 +341,31 @@ async function startV3RunMultipart(fd: FormData): Promise<V3StartAsyncResponse> 
     credentials: "same-origin",
     body: fd,
   });
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const body = await res.json();
-      const detail = body?.detail;
-      if (typeof detail === "string") {
-        message = detail;
-      } else if (detail?.message) {
-        message = detail.message;
-      } else if (Array.isArray(detail?.errors)) {
-        message = detail.errors
-          .map((e: { filename: string; reason: string }) => `${e.filename}: ${e.reason}`)
-          .join("; ");
-      }
-    } catch {
-      /* keep the default HTTP <status> message */
-    }
-    throw new Error(message);
-  }
+  if (!res.ok) throw new Error(await extractErrorMessage(res));
   return (await res.json()) as V3StartAsyncResponse;
+}
+
+/** Best-effort human message from a FastAPI error envelope. Handles a
+ *  string ``detail``, ``detail.message``, and the ``detail.errors[]``
+ *  upload-validation shape; falls back to ``HTTP <status>``. */
+async function extractErrorMessage(res: Response): Promise<string> {
+  let message = `HTTP ${res.status}`;
+  try {
+    const body = await res.json();
+    const detail = body?.detail;
+    if (typeof detail === "string") {
+      message = detail;
+    } else if (detail?.message) {
+      message = detail.message;
+    } else if (Array.isArray(detail?.errors)) {
+      message = detail.errors
+        .map((e: { filename: string; reason: string }) => `${e.filename}: ${e.reason}`)
+        .join("; ");
+    }
+  } catch {
+    /* keep the default HTTP <status> message */
+  }
+  return message;
 }
 
 /**
@@ -397,6 +414,51 @@ export function uploadV3Template(
 export function deleteV3Template(templateId: string): Promise<void> {
   return request<void>(
     `${PREFIX}/templates/${encodeURIComponent(templateId)}`,
+    { method: "DELETE" },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Instruction profiles
+// ---------------------------------------------------------------------------
+
+export interface V3InstructionsSummary {
+  id: string;
+  name: string;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function listV3Instructions(): Promise<V3InstructionsSummary[]> {
+  return request<V3InstructionsSummary[]>(`${PREFIX}/instructions`);
+}
+
+/**
+ * Upload an instruction profile. Multipart: the raw document rides
+ * alongside the display name and the server extracts plain text (any
+ * supported document type — pdf / docx / md / txt). The browser sets
+ * the multipart boundary, so we must NOT set a Content-Type here.
+ */
+export async function uploadV3Instructions(
+  name: string,
+  file: File,
+): Promise<V3InstructionsSummary> {
+  const fd = new FormData();
+  fd.append("name", name);
+  fd.append("file", file, file.name);
+  const res = await fetch(`${PREFIX}/instructions`, {
+    method: "POST",
+    credentials: "same-origin",
+    body: fd,
+  });
+  if (!res.ok) throw new Error(await extractErrorMessage(res));
+  return (await res.json()) as V3InstructionsSummary;
+}
+
+export function deleteV3Instructions(instructionsId: string): Promise<void> {
+  return request<void>(
+    `${PREFIX}/instructions/${encodeURIComponent(instructionsId)}`,
     { method: "DELETE" },
   );
 }
