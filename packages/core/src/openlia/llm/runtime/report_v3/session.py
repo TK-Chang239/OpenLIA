@@ -34,7 +34,6 @@ from ...types import (
     ToolSchema,
 )
 
-
 # Token headroom added to ``max_tokens`` when reasoning is enabled.
 # Thinking tokens count against the same ceiling as visible output on
 # every provider, so the ceiling must absorb both. Mirrors v2.3's
