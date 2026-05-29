@@ -1,13 +1,19 @@
-"""Lean schemas for the v3 equity-research engine.
+"""Lean schemas for the Earnings Update v2 engine.
 
-v3 deliberately keeps the schema surface small: a chart spec, a citation
-log entry, the run request, and the run result. Everything else (facts,
-provenance graphs, marker grammars) is gone — citations live in a
-server-side ledger keyed by ``source_id`` and the model cites them
-inline with standard Markdown footnote syntax (``[^web_3]``).
+Forked from report_v3. EU v2 keeps the schema surface small: a chart
+spec, a citation log entry, the run request, and the run result.
+Citations live in a server-side ledger keyed by ``source_id`` and the
+model cites them inline with standard Markdown footnote syntax
+(``[^web_3]``).
+
+EU v2 deltas vs. v3:
+  - ``RunRequest`` drops ``attachments`` / ``instructions`` (out of
+    scope) and gains ``enabled_connectors`` (which tool groups to
+    build) and ``trigger_context`` (the earnings event covered).
+  - No revision schemas — EU v2 has no revise flow.
 
 The ``TemplateSpec`` itself is reused verbatim from v2.3 — same Pydantic
-model, same built-ins. v3 only changes how the engine consumes the
+model, same built-ins. EU v2 only changes how the engine consumes the
 template, not what a template is.
 """
 
@@ -19,7 +25,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from ...types import ReasoningEffort
-from ..messages import Attachment
 from ..report_v2_3.schemas import Language, ReportLength
 from ..report_v2_3.templates.spec import SectionSpec, TemplateSpec
 
@@ -30,6 +35,7 @@ __all__ = [
     "CitationLogEntry",
     "CoverMetric",
     "CoverSpec",
+    "EnabledConnectors",
     "Language",
     "ReportLength",
     "RunRequest",
@@ -37,6 +43,7 @@ __all__ = [
     "RunStatus",
     "SectionSpec",
     "TemplateSpec",
+    "TriggerContext",
 ]
 
 
@@ -109,33 +116,56 @@ class CitationLogEntry(BaseModel):
     wall_time_ms: int = 0
 
 
-class RunRequest(BaseModel):
-    """Input to a v3 run.
+class EnabledConnectors(BaseModel):
+    """Which connector tool groups the LLM may call this run.
 
-    ``subject`` is either a ticker (``RKLB.US``) or a free-form topic;
-    the template's ``ticker_anchored`` flag decides how to interpret
-    it. ``provider_kind`` and ``model`` resolve through the existing
-    capability map at runner construction so v3 inherits the same
-    provider rules as the rest of the codebase.
+    Per-user global toggles resolved from ``eu_v2_settings``. None are
+    required — all-False yields an output-tools-only catalog and the
+    model writes from the prompt and trigger context alone.
+    """
+
+    financial: bool = True
+    earnings_calendar: bool = True
+    web_search: bool = False
+
+
+class TriggerContext(BaseModel):
+    """Earnings event metadata handed to a run.
+
+    For scheduled runs this is populated from the matched
+    ``eu_v2_earnings_schedule`` row; for on-demand runs the route fills
+    in what it can (ticker always; estimates when the calendar
+    connector is enabled). Injected into the system prompt so the model
+    knows which release it is covering before it calls any tool.
+    """
+
+    ticker: str = Field(..., min_length=1)
+    company_name: str | None = None
+    fiscal_period: str | None = None
+    report_date: str | None = None
+    release_timing: str | None = None
+    eps_estimate: str | None = None
+    revenue_estimate: str | None = None
+
+
+class RunRequest(BaseModel):
+    """Input to an Earnings Update v2 run.
+
+    Forked from report_v3's RunRequest. Differences: no ``attachments``
+    / ``instructions`` (out of scope for EU v2), and two added fields —
+    ``enabled_connectors`` (which tool groups to build) and
+    ``trigger_context`` (the earnings event being covered).
+
+    ``subject`` is either a ticker (``MSFT.US``) or a free-form earnings
+    topic; the template's ``ticker_anchored`` flag decides how to
+    interpret it. ``provider_kind`` and ``model`` resolve through the
+    existing capability map at runner construction.
 
     ``reasoning_effort`` is the user-selected extended-thinking knob.
     ``None`` (the default) maps to "off" — no reasoning param is sent
-    to the adapter. v3 applies the chosen effort on every model turn
-    (unlike v2.3 which scopes it to specific stages) since v3 is a
-    single free-running loop with no stage notion. Adapters whose
-    model does not support thinking silently ignore the field.
-
-    ``attachments`` are user-uploaded source documents (filings, decks)
-    the runner materializes into multimodal content blocks on the first
-    turn so the model can read them. Empty for runs with no uploads.
-
-    ``instructions`` is free-form analyst methodology the user attached
-    (extracted from an uploaded instruction profile). It is injected
-    verbatim into the system prompt as authoritative guidance — how to
-    approach the report, what to emphasize, tone, and (when no template
-    is selected) the report's structure. ``None`` when no profile was
-    chosen. Pairs with a freeform template (empty ``sections``) when the
-    user runs instructions-only.
+    to the adapter. EU v2 applies the chosen effort on every model turn
+    since the engine is a single free-running loop with no stage notion.
+    Adapters whose model does not support thinking silently ignore it.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -147,52 +177,8 @@ class RunRequest(BaseModel):
     provider_kind: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     reasoning_effort: ReasoningEffort | None = None
-    attachments: list[Attachment] = Field(default_factory=list)
-    instructions: str | None = None
-
-
-class PriorSection(BaseModel):
-    """Snapshot of one section as it stood before a revision started.
-
-    Fed into ``ReviseContext`` so the engine can render the prior
-    report verbatim into the model's context window. ``markdown`` is
-    the raw text with un-rewritten ``[^source_id]`` markers so the
-    ledger seeded from the same revision can still resolve them.
-    """
-
-    section_id: str
-    title: str
-    markdown: str
-
-
-class PriorCitation(BaseModel):
-    """Snapshot of one citation row from the report before a revision.
-
-    The revision engine seeds its ledger with these so prior sections'
-    ``[^source_id]`` markers still resolve and new web_search calls
-    append rather than collide.
-    """
-
-    source_id: str
-    tool_name: str
-    provenance: dict[str, Any] = Field(default_factory=dict)
-
-
-class ReviseContext(BaseModel):
-    """Inputs that turn an ordinary v3 run into a revision pass.
-
-    The runner pre-loads the workspace with the prior sections +
-    charts so the in-flight ``RunResult`` always reflects the full
-    report (touched + untouched), seeds the ledger with prior
-    citations so existing markers resolve, and switches to revision
-    prompts. ``request`` is the free-form user instruction (e.g.
-    "rewrite the bull case to lead with EBITDA margin expansion").
-    """
-
-    revision_request: str = Field(..., min_length=1)
-    prior_sections: list[PriorSection] = Field(default_factory=list)
-    prior_charts: list[ChartSpec] = Field(default_factory=list)
-    prior_citations: list[PriorCitation] = Field(default_factory=list)
+    enabled_connectors: EnabledConnectors = Field(default_factory=EnabledConnectors)
+    trigger_context: TriggerContext | None = None
 
 
 class CoverMetric(BaseModel):
