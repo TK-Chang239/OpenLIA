@@ -48,6 +48,7 @@ from openlia.llm.runtime.report_v3 import (
 )
 from openlia.llm.types import ReasoningEffort
 from pydantic import BaseModel, Field
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
@@ -63,6 +64,8 @@ from openlia_server.services import v3_render_service as render_svc
 from openlia_server.services import v3_revision_service as revision_svc
 from openlia_server.services import v3_run_service as svc
 from openlia_server.services import v3_template_service as templates_svc
+from openlia_server.services.attachments import FileUpload, validate_uploads
+from openlia_server.services.v3_attachments import prepare_v3_attachments
 from openlia_server.services.v3_filename import build_download_filename
 from openlia_server.services.v3_wiring import build_v3_transports
 
@@ -92,6 +95,61 @@ class StartV3Payload(BaseModel):
     # "high" enable provider-specific reasoning params. Adapters whose
     # model doesn't support thinking ignore the field silently.
     reasoning_effort: ReasoningEffort | None = None
+
+
+_START_FORM_FIELDS = (
+    "subject",
+    "language",
+    "length",
+    "template_id",
+    "report_type",
+    "provider_kind",
+    "model",
+    "reasoning_effort",
+)
+
+
+async def _parse_start_request(
+    request: Request,
+) -> tuple[StartV3Payload, list[FileUpload]]:
+    """Parse a start-run request as either JSON or multipart/form-data.
+
+    JSON keeps the original ``StartV3Payload`` body shape. multipart adds
+    a ``files`` array for source-document uploads; the scalar fields ride
+    as form fields and are validated through the same Pydantic model so
+    enum coercion (language/length/reasoning_effort) stays identical.
+    Raises ``HTTPException(422)`` on an invalid payload.
+    """
+    ctype = request.headers.get("content-type", "")
+    is_form = ctype.startswith("multipart/form-data") or ctype.startswith(
+        "application/x-www-form-urlencoded"
+    )
+    if not is_form:
+        body = await request.json()
+        return _validate_start_payload(body), []
+
+    form = await request.form()
+    data = {k: form.get(k) for k in _START_FORM_FIELDS if form.get(k) not in (None, "")}
+    uploads: list[FileUpload] = []
+    for upload in form.getlist("files"):
+        if not hasattr(upload, "read"):
+            continue
+        content = await upload.read()
+        uploads.append(
+            FileUpload(
+                filename=upload.filename or "unnamed",
+                mime_type=upload.content_type or "application/octet-stream",
+                content=content,
+            )
+        )
+    return _validate_start_payload(data), uploads
+
+
+def _validate_start_payload(data: Any) -> StartV3Payload:
+    try:
+        return StartV3Payload.model_validate(data)
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors(include_url=False)) from exc
 
 
 class StartV3Response(BaseModel):
@@ -483,12 +541,15 @@ def build_equity_research_v3_router(
 
     @router.post("/runs/start")
     async def start_run_async(
-        payload: StartV3Payload,
         request: Request,
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> dict[str, str]:
         """Non-blocking POST: returns {report_id} immediately.
+
+        Accepts JSON (the original ``StartV3Payload`` shape) or
+        multipart/form-data with a ``files`` array of source-document
+        uploads (filings, decks) the engine reads as primary evidence.
 
         The engine runs in a background task; the client connects to
         ``GET /v3/runs/{report_id}/events`` (SSE) to receive
@@ -507,6 +568,21 @@ def build_equity_research_v3_router(
             raise _engine_disabled()
         broker, cancel_registry = _streaming_state(request)
 
+        payload, uploads = await _parse_start_request(request)
+        attachments = []
+        if uploads:
+            errors = validate_uploads(uploads)
+            if errors:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "errors": [
+                            {"filename": e.filename, "reason": e.reason} for e in errors
+                        ]
+                    },
+                )
+            attachments = prepare_v3_attachments(uploads)
+
         template: TemplateSpec = _resolve_template_for_run(db=db, user_id=user.id, payload=payload)
         run_request = RunRequest(
             subject=payload.subject,
@@ -516,6 +592,7 @@ def build_equity_research_v3_router(
             provider_kind=payload.provider_kind,
             model=payload.model,
             reasoning_effort=payload.reasoning_effort,
+            attachments=attachments,
         )
         try:
             handle = svc.start_run_async(

@@ -16,9 +16,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ...types import ReasoningEffort
+from ..messages import Attachment
 from ..report_v2_3.schemas import Language, ReportLength
 from ..report_v2_3.templates.spec import SectionSpec, TemplateSpec
 
@@ -123,7 +124,13 @@ class RunRequest(BaseModel):
     (unlike v2.3 which scopes it to specific stages) since v3 is a
     single free-running loop with no stage notion. Adapters whose
     model does not support thinking silently ignore the field.
+
+    ``attachments`` are user-uploaded source documents (filings, decks)
+    the runner materializes into multimodal content blocks on the first
+    turn so the model can read them. Empty for runs with no uploads.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     subject: str = Field(..., min_length=1)
     template: TemplateSpec
@@ -132,6 +139,7 @@ class RunRequest(BaseModel):
     provider_kind: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     reasoning_effort: ReasoningEffort | None = None
+    attachments: list[Attachment] = Field(default_factory=list)
 
 
 class PriorSection(BaseModel):
