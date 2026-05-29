@@ -24,6 +24,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../api/_request";
 import {
+  FREEFORM_TEMPLATE_ID,
   type V3ReportDetail,
   type V3StartPayload,
   getV3Run,
@@ -45,6 +46,7 @@ import {
   V3ReportSettingsModal,
   type V3SettingsValue,
 } from "../../components/equity-research-v3/V3ReportSettingsModal";
+import { V3InstructionsUploadModal } from "../../components/equity-research-v3/V3InstructionsUploadModal";
 import { V3RunsPopover } from "../../components/equity-research-v3/V3RunsPopover";
 import { V3TemplateUploadModal } from "../../components/equity-research-v3/V3TemplateUploadModal";
 import { useV3RunStream } from "../../components/equity-research-v3/useV3RunStream";
@@ -61,6 +63,8 @@ const DEFAULT_SETTINGS: V3SettingsValue = {
   // see on the WelcomeStage pill before opening settings.
   templateId: "initiation_default",
   templateName: "Stock Initiation",
+  instructionsId: null,
+  instructionsName: null,
 };
 
 function loadSettings(): V3SettingsValue {
@@ -76,6 +80,8 @@ function loadSettings(): V3SettingsValue {
         parsed.reasoningEffort ?? DEFAULT_SETTINGS.reasoningEffort,
       templateId: parsed.templateId ?? DEFAULT_SETTINGS.templateId,
       templateName: parsed.templateName ?? DEFAULT_SETTINGS.templateName,
+      instructionsId: parsed.instructionsId ?? DEFAULT_SETTINGS.instructionsId,
+      instructionsName: parsed.instructionsName ?? DEFAULT_SETTINGS.instructionsName,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -97,6 +103,16 @@ function firstName(displayName: string | null | undefined): string {
   return trimmed.split(/\s+/)[0];
 }
 
+// Label for the WelcomeStage / composer mode pill. A no-template run
+// shows the instruction profile's name (or a generic fallback) since
+// the profile is what shapes the report; otherwise the template name.
+function pillLabelFor(s: V3SettingsValue): string {
+  if (s.templateId === FREEFORM_TEMPLATE_ID) {
+    return s.instructionsName ?? "Instructions only";
+  }
+  return s.templateName;
+}
+
 // The shared WelcomeStage/ErComposer chrome still requires a
 // ``mode: ReportMode`` prop for v1/v2 callers. v3 doesn't track
 // report type as a separate concept (templates ARE the report type),
@@ -115,6 +131,8 @@ export default function EquityResearchV3(): JSX.Element {
   const [model, setModel] = useState<V3ModelSelection | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [templatesRefreshKey, setTemplatesRefreshKey] = useState(0);
+  const [instructionsUploadOpen, setInstructionsUploadOpen] = useState(false);
+  const [instructionsRefreshKey, setInstructionsRefreshKey] = useState(0);
 
   const [startError, setStartError] = useState<string | null>(null);
   const [detail, setDetail] = useState<V3ReportDetail | null>(null);
@@ -245,13 +263,21 @@ export default function EquityResearchV3(): JSX.Element {
         setStartError("No model selected. Configure one in Settings → Models.");
         return;
       }
+      // A no-template run is shaped entirely by an instruction profile;
+      // block dispatch (the server would 400) and point at Settings.
+      if (settings.templateId === FREEFORM_TEMPLATE_ID && !settings.instructionsId) {
+        setStartError(
+          "No template selected. Pick an instruction profile in Settings, or choose a template.",
+        );
+        return;
+      }
       setStartError(null);
       setDetail(null);
       setPrompt("");
       setActiveSubject(text);
       setInitialPrompt(text);
       setInitialSettings({
-        templateName: settings.templateName,
+        templateName: pillLabelFor(settings),
         length: settings.length,
         language: settings.language,
         reasoningEffort: settings.reasoningEffort,
@@ -267,6 +293,9 @@ export default function EquityResearchV3(): JSX.Element {
           // (initiation_default etc.) and user uploads both resolve
           // through the same path.
           template_id: settings.templateId,
+          // Optional saved instruction profile; required (guarded above)
+          // when template_id is the freeform sentinel.
+          instructions_id: settings.instructionsId,
           provider_kind: model.provider_kind,
           model: model.model,
           // Wire enum is "medium" | "high" only; off → null so the
@@ -296,6 +325,7 @@ export default function EquityResearchV3(): JSX.Element {
       settings.reasoningEffort,
       settings.templateId,
       settings.templateName,
+      settings.instructionsId,
     ],
   );
 
@@ -374,6 +404,7 @@ export default function EquityResearchV3(): JSX.Element {
   ]);
 
   const isWelcome = activeReportId === null && detail === null && !isStreaming;
+  const pillLabel = pillLabelFor(settings);
   const placeholder = isWelcome
     ? 'What should this report cover? (e.g., "RKLB.US — initiation, focus on launch cadence")'
     : canRevise
@@ -397,7 +428,7 @@ export default function EquityResearchV3(): JSX.Element {
               mode={V3_MODE_FOR_SHARED_CHROME}
               length={settings.length}
               onModeRowClick={() => setSettingsOpen(true)}
-              templateLabel={settings.templateName}
+              templateLabel={pillLabel}
             />
           ) : (
             <div className="flex w-full flex-col gap-4 px-6 py-6">
@@ -453,7 +484,7 @@ export default function EquityResearchV3(): JSX.Element {
           (model === null && !canRevise) || revisionInFlight
           || (isStreaming && !canRevise)
         }
-        templateLabel={settings.templateName}
+        templateLabel={pillLabel}
       />
 
       <V3ReportSettingsModal
@@ -466,6 +497,11 @@ export default function EquityResearchV3(): JSX.Element {
           setUploadOpen(true);
         }}
         templatesRefreshKey={templatesRefreshKey}
+        onUploadInstructionsClick={() => {
+          setSettingsOpen(false);
+          setInstructionsUploadOpen(true);
+        }}
+        instructionsRefreshKey={instructionsRefreshKey}
       />
 
       <V3TemplateUploadModal
@@ -480,6 +516,22 @@ export default function EquityResearchV3(): JSX.Element {
             templateName: created.name,
           });
           setTemplatesRefreshKey((k) => k + 1);
+          setSettingsOpen(true);
+        }}
+      />
+
+      <V3InstructionsUploadModal
+        open={instructionsUploadOpen}
+        onClose={() => setInstructionsUploadOpen(false)}
+        onSaved={(created) => {
+          // Auto-select the new profile + reopen settings so the user
+          // sees it land selected in the list.
+          persistSettings({
+            ...settings,
+            instructionsId: created.id,
+            instructionsName: created.name,
+          });
+          setInstructionsRefreshKey((k) => k + 1);
           setSettingsOpen(true);
         }}
       />
