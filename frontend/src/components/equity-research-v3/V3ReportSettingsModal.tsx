@@ -19,11 +19,15 @@ import { type JSX, useEffect, useState } from "react";
 
 import { ApiError } from "../../api/_request";
 import {
+  FREEFORM_TEMPLATE_ID,
+  type V3InstructionsSummary,
   type V3Language,
   type V3ReasoningEffort,
   type V3ReportLength,
   type V3TemplateSummary,
+  deleteV3Instructions,
   deleteV3Template,
+  listV3Instructions,
   listV3Templates,
 } from "../../api/equity-research-v3";
 
@@ -32,11 +36,16 @@ export interface V3SettingsValue {
   language: V3Language;
   reasoningEffort: V3ReasoningEffort;
   /** Active template id. Built-ins use their seeded id
-   *  (``initiation_default`` etc.); user uploads use a UUID hex. */
+   *  (``initiation_default`` etc.); user uploads use a UUID hex. The
+   *  sentinel ``FREEFORM_TEMPLATE_ID`` means "No template". */
   templateId: string;
   /** Cached display name so the page can render the mode pill
    *  without re-fetching the templates list. */
   templateName: string;
+  /** Active instruction-profile id, or null when none is selected. */
+  instructionsId: string | null;
+  /** Cached profile name for the mode pill; null when none. */
+  instructionsName: string | null;
 }
 
 interface Props {
@@ -50,6 +59,11 @@ interface Props {
   /** Fires when the user clicks "Upload template" — the parent owns
    *  the upload modal so we don't nest dialogs. */
   onUploadClick: () => void;
+  /** Bumped by the parent after a successful instructions upload so
+   *  the profile list refetches without remounting the modal. */
+  instructionsRefreshKey?: number;
+  /** Fires when the user clicks "Upload instructions". */
+  onUploadInstructionsClick: () => void;
 }
 
 const LENGTH_OPTIONS: { value: V3ReportLength; label: string }[] = [
@@ -127,6 +141,8 @@ export function V3ReportSettingsModal({
   onSave,
   templatesRefreshKey = 0,
   onUploadClick,
+  instructionsRefreshKey = 0,
+  onUploadInstructionsClick,
 }: Props): JSX.Element {
   const [length, setLength] = useState<V3ReportLength>(value.length);
   const [language, setLanguage] = useState<V3Language>(value.language);
@@ -137,6 +153,16 @@ export function V3ReportSettingsModal({
   const [templateName, setTemplateName] = useState<string>(value.templateName);
   const [templates, setTemplates] = useState<V3TemplateSummary[] | null>(null);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [instructionsId, setInstructionsId] = useState<string | null>(
+    value.instructionsId,
+  );
+  const [instructionsName, setInstructionsName] = useState<string | null>(
+    value.instructionsName,
+  );
+  const [instructions, setInstructions] = useState<V3InstructionsSummary[] | null>(
+    null,
+  );
+  const [instructionsError, setInstructionsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -145,6 +171,8 @@ export function V3ReportSettingsModal({
     setReasoningEffort(value.reasoningEffort);
     setTemplateId(value.templateId);
     setTemplateName(value.templateName);
+    setInstructionsId(value.instructionsId);
+    setInstructionsName(value.instructionsName);
   }, [
     open,
     value.length,
@@ -152,6 +180,8 @@ export function V3ReportSettingsModal({
     value.reasoningEffort,
     value.templateId,
     value.templateName,
+    value.instructionsId,
+    value.instructionsName,
   ]);
 
   useEffect(() => {
@@ -177,6 +207,30 @@ export function V3ReportSettingsModal({
       cancelled = true;
     };
   }, [open, templatesRefreshKey]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setInstructionsError(null);
+    listV3Instructions()
+      .then((rows) => {
+        if (!cancelled) setInstructions(rows);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 503) {
+          setInstructionsError("v3 engine disabled on the server.");
+        } else {
+          setInstructionsError(
+            err instanceof Error ? err.message : "Failed to load instructions",
+          );
+        }
+        setInstructions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, instructionsRefreshKey]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -204,8 +258,45 @@ export function V3ReportSettingsModal({
     setTemplateName(row.name);
   };
 
+  const pickNoTemplate = () => {
+    setTemplateId(FREEFORM_TEMPLATE_ID);
+    setTemplateName("No template");
+  };
+
+  const pickInstructions = (row: V3InstructionsSummary | null) => {
+    setInstructionsId(row?.id ?? null);
+    setInstructionsName(row?.name ?? null);
+  };
+
+  const handleDeleteInstructions = async (id: string) => {
+    try {
+      await deleteV3Instructions(id);
+      setInstructions((prev) => prev?.filter((i) => i.id !== id) ?? null);
+      if (instructionsId === id) {
+        setInstructionsId(null);
+        setInstructionsName(null);
+      }
+    } catch (err) {
+      setInstructionsError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  const isFreeform = templateId === FREEFORM_TEMPLATE_ID;
+  // A freeform run has no shape without an instruction profile; block
+  // Save so the user can't dispatch a run the server would 400.
+  const freeformNeedsInstructions = isFreeform && !instructionsId;
+
   const save = () => {
-    onSave({ length, language, reasoningEffort, templateId, templateName });
+    if (freeformNeedsInstructions) return;
+    onSave({
+      length,
+      language,
+      reasoningEffort,
+      templateId,
+      templateName,
+      instructionsId,
+      instructionsName,
+    });
     onClose();
   };
 
@@ -292,6 +383,24 @@ export function V3ReportSettingsModal({
                   Upload
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={pickNoTemplate}
+                data-testid="er-v3-template-option-freeform"
+                className={[
+                  "mb-[6px] flex w-full flex-col rounded-md border px-3 py-2 text-left",
+                  isFreeform
+                    ? "border-[--color-accent-primary] bg-[rgba(212,255,0,0.06)]"
+                    : "border-[--color-border-subtle] bg-[--color-bg-base] hover:border-[--color-border-strong]",
+                ].join(" ")}
+              >
+                <span className="text-[12.5px] font-medium text-[--color-text-primary]">
+                  No template
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+                  instructions only — model designs the structure
+                </span>
+              </button>
               {templates === null ? (
                 <p className="text-[12px] text-[--color-text-tertiary]">
                   Loading templates…
@@ -348,6 +457,103 @@ export function V3ReportSettingsModal({
                 </ul>
               )}
             </section>
+
+            <section
+              className="border-b border-[--color-border-subtle] px-[22px] py-[18px]"
+              data-testid="er-v3-instructions-picker"
+            >
+              <div className="mb-[10px] flex items-center justify-between">
+                <SectionHeader label="Instructions" />
+                <button
+                  type="button"
+                  onClick={onUploadInstructionsClick}
+                  data-testid="er-v3-instructions-upload-trigger"
+                  className="inline-flex items-center gap-[6px] rounded-md border border-dashed border-[--color-border-strong] bg-transparent px-[10px] py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-solid hover:border-[--color-feedback-success] hover:text-[--color-feedback-success]"
+                >
+                  <Upload size={11} strokeWidth={2} />
+                  Upload
+                </button>
+              </div>
+              <p className="mb-[10px] text-[12px] leading-[1.5] text-[--color-text-secondary]">
+                Optional free-form methodology fed to the model verbatim.
+                Required when no template is selected.
+              </p>
+              <button
+                type="button"
+                onClick={() => pickInstructions(null)}
+                data-testid="er-v3-instructions-option-none"
+                className={[
+                  "mb-[6px] flex w-full flex-col rounded-md border px-3 py-2 text-left",
+                  instructionsId === null
+                    ? "border-[--color-accent-primary] bg-[rgba(212,255,0,0.06)]"
+                    : "border-[--color-border-subtle] bg-[--color-bg-base] hover:border-[--color-border-strong]",
+                ].join(" ")}
+              >
+                <span className="text-[12.5px] font-medium text-[--color-text-primary]">
+                  None
+                </span>
+              </button>
+              {instructions === null ? (
+                <p className="text-[12px] text-[--color-text-tertiary]">
+                  Loading instructions…
+                </p>
+              ) : instructionsError ? (
+                <p className="text-[12px] text-[--color-feedback-danger]">
+                  {instructionsError}
+                </p>
+              ) : instructions.length === 0 ? (
+                <p className="text-[12px] text-[--color-text-tertiary]">
+                  No instruction profiles yet.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-[4px]">
+                  {instructions.map((i) => {
+                    const active = instructionsId === i.id;
+                    return (
+                      <li key={i.id}>
+                        <div
+                          className={[
+                            "flex items-center gap-2 rounded-md border px-3 py-2",
+                            active
+                              ? "border-[--color-accent-primary] bg-[rgba(212,255,0,0.06)]"
+                              : "border-[--color-border-subtle] bg-[--color-bg-base] hover:border-[--color-border-strong]",
+                          ].join(" ")}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => pickInstructions(i)}
+                            data-testid={`er-v3-instructions-option-${i.id}`}
+                            className="flex min-w-0 flex-1 flex-col text-left"
+                          >
+                            <span className="truncate text-[12.5px] font-medium text-[--color-text-primary]">
+                              {i.name}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete instructions ${i.name}`}
+                            onClick={() => handleDeleteInstructions(i.id)}
+                            className="rounded p-1 text-[--color-feedback-danger] hover:bg-[--color-surface-hover]"
+                          >
+                            <Trash size={12} />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {freeformNeedsInstructions ? (
+                <p
+                  role="alert"
+                  data-testid="er-v3-freeform-needs-instructions"
+                  className="mt-[10px] text-[12px] text-[--color-feedback-danger]"
+                >
+                  Select an instruction profile — a run with no template
+                  needs one to define the report.
+                </p>
+              ) : null}
+            </section>
           </div>
 
           <div className="flex justify-end gap-2 rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[22px] py-[14px]">
@@ -361,8 +567,9 @@ export function V3ReportSettingsModal({
             <button
               type="button"
               onClick={save}
+              disabled={freeformNeedsInstructions}
               data-testid="er-v3-settings-save"
-              className="inline-flex h-9 items-center rounded-md bg-[--color-accent-primary] px-4 font-display text-[13.5px] font-medium text-[--color-accent-on] hover:bg-[--color-accent-hover]"
+              className="inline-flex h-9 items-center rounded-md bg-[--color-accent-primary] px-4 font-display text-[13.5px] font-medium text-[--color-accent-on] hover:bg-[--color-accent-hover] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Save
             </button>
