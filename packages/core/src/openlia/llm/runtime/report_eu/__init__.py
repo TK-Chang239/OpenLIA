@@ -1,10 +1,14 @@
-"""v3 equity-research engine — single-model tool-use loop.
+"""Earnings Update v2 engine — single-model tool-use loop.
 
-Public surface for the server, frontend (via the route layer), and
-tests. Phase 0 shipped scaffolding; Phase 1 ships the tool catalog +
-main loop. Persistence and rendering land in Phase 2. See
-``planning/2026-05-27-equity-research-v3-single-model-spec.md``.
+Forked from report_v3. Public surface for the server, frontend (via the
+route layer), and tests. EU v2 differs from v3 in three ways: no
+capability gate (web search is opt-in), no revision flow, and a fixed
+connector-gated tool catalog (no discovery).
 """
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 from .events import (
     BrokerEmitter,
@@ -17,7 +21,7 @@ from .events import (
     is_finish_sentinel,
 )
 from .ledger import CitationLedger
-from .runner import DataTransports, Runner
+from .runner import Runner
 from .schemas import (
     ChartDataPoint,
     ChartSpec,
@@ -25,19 +29,34 @@ from .schemas import (
     CitationLogEntry,
     CoverMetric,
     CoverSpec,
+    EnabledConnectors,
     Language,
-    PriorCitation,
-    PriorSection,
     ReportLength,
-    ReviseContext,
     RunRequest,
     RunResult,
     RunStatus,
     SectionSpec,
     TemplateSpec,
+    TriggerContext,
 )
 from .session import CapabilityError, CredentialError, LLMSession
 from .workspace import RunWorkspace, WrittenSection
+
+
+@dataclass(frozen=True)
+class EuDataTransports:
+    """Callables the EU v2 data tools dispatch against.
+
+    Supplied by the server wiring layer so the core package stays free
+    of the EODHD SDK. ``earnings_calendar`` returns the upcoming-events
+    list for a ticker.
+    """
+
+    fundamentals: Callable[[str], dict[str, Any]]
+    prices: Callable[[str, str, str], list[dict[str, Any]]]
+    news: Callable[[str, int], list[dict[str, Any]]]
+    earnings_calendar: Callable[[str], list[dict[str, Any]]]
+
 
 __all__ = [
     "BrokerEmitter",
@@ -51,7 +70,8 @@ __all__ = [
     "CoverMetric",
     "CoverSpec",
     "CredentialError",
-    "DataTransports",
+    "EnabledConnectors",
+    "EuDataTransports",
     "Event",
     "EventBroker",
     "EventEmitter",
@@ -59,10 +79,7 @@ __all__ = [
     "Language",
     "ListEmitter",
     "NullEmitter",
-    "PriorCitation",
-    "PriorSection",
     "ReportLength",
-    "ReviseContext",
     "RunRequest",
     "RunResult",
     "RunStatus",
@@ -70,6 +87,7 @@ __all__ = [
     "Runner",
     "SectionSpec",
     "TemplateSpec",
+    "TriggerContext",
     "WrittenSection",
     "is_finish_sentinel",
 ]
