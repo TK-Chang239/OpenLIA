@@ -107,3 +107,42 @@ def ingest_web_citations(
         rewrites[cite.id] = entry.source_id
         url_to_source_id[url] = entry.source_id
     return rewrites
+
+
+def format_web_citation_notice(citations: Iterable, rewrites: dict[str, str]) -> str | None:
+    """Build a message body announcing the ``[^web_N]`` ids the model can cite.
+
+    Native web-search results don't flow through the ledger-annotated
+    tool-result path the dispatched tools use, so the model never sees
+    the ``web_N`` source_id assigned to each result — it falls back to
+    the provider's own citation markers (``<cite index=...>`` /
+    ``[^6-1]``), which don't resolve to the bibliography. Feeding this
+    notice back into the conversation after a turn that did web search
+    teaches the model the exact markers to use.
+
+    Returns ``None`` when the turn surfaced no web citations.
+    """
+    lines: list[str] = []
+    seen: set[str] = set()
+    for cite in citations:
+        if getattr(cite, "kind", None) != "web":
+            continue
+        source_id = rewrites.get(getattr(cite, "id", ""))
+        if source_id is None or source_id in seen:
+            continue
+        seen.add(source_id)
+        url = getattr(cite, "url", None) or ""
+        title = (getattr(cite, "title", None) or url or "web source").strip()
+        line = f'- [^{source_id}]: "{title}"'
+        if url:
+            line += f" ({url})"
+        lines.append(line)
+    if not lines:
+        return None
+    header = (
+        "The web search you just ran returned these sources. They are now "
+        "citable. When a claim draws on one, cite it inline with the exact "
+        "marker shown below (e.g. [^web_1]) — do not use any other citation "
+        "format."
+    )
+    return header + "\n" + "\n".join(lines)

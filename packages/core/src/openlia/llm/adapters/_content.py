@@ -164,7 +164,35 @@ def render_anthropic_messages(messages: list[Message]) -> list[dict[str, Any]]:
         out.append({"role": m.role, "content": parts})
 
     flush_tool_results()
-    return out
+    return _coalesce_anthropic_user_turns(out)
+
+
+def _coalesce_anthropic_user_turns(
+    out: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge adjacent user-role turns into one.
+
+    Anthropic requires user/assistant turns to alternate, so two
+    consecutive user messages (e.g. a tool-result turn immediately
+    followed by a runtime-injected user note) would 400. Normalize each
+    user content to a block list and concatenate."""
+    merged: list[dict[str, Any]] = []
+    for entry in out:
+        if merged and entry["role"] == "user" and merged[-1]["role"] == "user":
+            merged[-1] = {
+                "role": "user",
+                "content": _as_anthropic_blocks(merged[-1]["content"])
+                + _as_anthropic_blocks(entry["content"]),
+            }
+        else:
+            merged.append(entry)
+    return merged
+
+
+def _as_anthropic_blocks(content: Any) -> list[dict[str, Any]]:
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    return list(content)
 
 
 # ─── OpenAI / OpenRouter (OpenAI-style chat completions) ────────────────────
@@ -234,7 +262,26 @@ def render_gemini_contents(messages: list[Message]) -> list[dict[str, Any]]:
             elif isinstance(b, (ImageBlock, DocumentBlock)):
                 parts.append({"inline_data": {"mime_type": b.mime_type, "data": _b64(b.data)}})
         out.append({"role": role, "parts": parts})
-    return out
+    return _coalesce_gemini_user_turns(out)
+
+
+def _coalesce_gemini_user_turns(
+    out: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge adjacent user-role turns. Gemini's ``contents`` must
+    alternate user/model — tool results already map to ``user``, so a
+    following injected user turn would otherwise produce two adjacent
+    user entries and 400 the request."""
+    merged: list[dict[str, Any]] = []
+    for entry in out:
+        if merged and entry["role"] == "user" and merged[-1]["role"] == "user":
+            merged[-1] = {
+                "role": "user",
+                "parts": list(merged[-1]["parts"]) + list(entry["parts"]),
+            }
+        else:
+            merged.append(entry)
+    return merged
 
 
 # ─── Ollama (text-only path) ────────────────────────────────────────────────
