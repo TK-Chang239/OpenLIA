@@ -297,6 +297,58 @@ class ReportV3Template(Base):
     )
 
 
+class ReportV3Instructions(Base):
+    """A saved instruction profile — free-form analyst methodology.
+
+    Distinct from a template: a template defines the report's *shape*
+    (sections, order); an instruction profile is free-form prose
+    guidance fed verbatim into the system prompt (principles, how to
+    reason, tone, emphasis). It needs no structural parsing — the
+    upload path extracts plain text from any supported document and
+    stores it in ``body_text``.
+
+    Profiles are reusable across reports and orthogonal to templates:
+    a run pairs any template (or none — freeform) with any profile.
+
+    User uploads:
+      - ``id`` = UUID hex
+      - ``user_id`` = the owner
+      - ``is_builtin`` = False
+      - ``body_text`` = server-extracted plain text (the prompt input)
+      - ``source_doc_blob`` / ``source_doc_mime`` keep the original
+        upload so a future edit / re-extract flow can round-trip
+      - ``deleted_at`` flips on owner-scoped soft-delete; the resolver
+        ignores soft-deleted rows but they linger for audit
+
+    The ``is_builtin`` / nullable ``user_id`` columns mirror
+    ``report_v3_templates`` for parity; no built-ins are seeded today.
+    """
+
+    __tablename__ = "report_v3_instructions"
+
+    id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Server-extracted plain text — the verbatim prompt input.
+    body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Original upload artifacts — kept so the UI can re-render / re-extract.
+    source_doc_blob: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    source_doc_mime: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_report_v3_instructions"),
+        Index("ix_report_v3_instructions_user_id", "user_id"),
+    )
+
+
 class ReportV3ToolCallLog(Base):
     """Per-turn audit trail of every tool call the engine dispatched.
 
