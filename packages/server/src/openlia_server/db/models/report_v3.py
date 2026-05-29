@@ -66,6 +66,10 @@ class ReportV3(Base):
     )
     subject: Mapped[str] = mapped_column(String(256), nullable=False)
     template_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Saved instruction profile this run used (report_v3_instructions.id),
+    # or NULL when none. Persisted so a revision can re-resolve the same
+    # methodology and replay it into the revise prompt.
+    instructions_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     language: Mapped[str] = mapped_column(String(16), nullable=False)
     length: Mapped[str] = mapped_column(String(16), nullable=False)
     provider_kind: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -21,11 +21,15 @@ from openlia.llm.runtime.report_v3 import (
     CitationLedger,
     Language,
     ReportLength,
+    ReviseContext,
     RunRequest,
     RunWorkspace,
     TemplateSpec,
 )
-from openlia.llm.runtime.report_v3.prompts import build_system_prompt
+from openlia.llm.runtime.report_v3.prompts import (
+    build_revise_system_prompt,
+    build_system_prompt,
+)
 from openlia.llm.runtime.report_v3.tools import build_catalog
 from openlia.llm.runtime.report_v3.tools.output_tools import build_output_tools
 
@@ -177,3 +181,53 @@ def test_finalize_freeform_succeeds_after_one_section():
     result = tools["finalize"].execute({})
     assert result.payload["ok"] is True
     assert workspace.finalized is True
+
+
+# --- revise prompt: instructions replayed ------------------------------------
+
+
+def _revise_ctx() -> ReviseContext:
+    return ReviseContext(
+        revision_request="Tighten the bull case.",
+        prior_sections=[],
+        prior_charts=[],
+        prior_citations=[],
+    )
+
+
+def test_revise_prompt_injects_instructions_block_when_present():
+    template = get_builtin(ReportType.INITIATION)
+    catalog, _ = _catalog(template)
+    marker = "WINNER METHODOLOGY REVISION MARKER"
+    prompt = build_revise_system_prompt(
+        request=_request(template=template, instructions=f"{marker}\nStay disciplined."),
+        catalog=catalog,
+        revise=_revise_ctx(),
+    )
+    assert "# Analyst instructions" in prompt
+    assert marker in prompt
+
+
+def test_revise_prompt_omits_instructions_block_when_absent():
+    template = get_builtin(ReportType.INITIATION)
+    catalog, _ = _catalog(template)
+    prompt = build_revise_system_prompt(
+        request=_request(template=template, instructions=None),
+        catalog=catalog,
+        revise=_revise_ctx(),
+    )
+    assert "# Analyst instructions" not in prompt
+
+
+def test_revise_prompt_freeform_template_renders():
+    # A no-template report being revised: empty sections must not break
+    # the revise prompt, and the instructions still ride along.
+    template = _freeform_template()
+    catalog, _ = _catalog(template)
+    prompt = build_revise_system_prompt(
+        request=_request(template=template, instructions="Methodology."),
+        catalog=catalog,
+        revise=_revise_ctx(),
+    )
+    assert "# Analyst instructions" in prompt
+    assert "revision request" in prompt.lower()

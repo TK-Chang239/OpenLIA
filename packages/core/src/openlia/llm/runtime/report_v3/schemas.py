@@ -136,6 +136,13 @@ class RunRequest(BaseModel):
     is selected) the report's structure. ``None`` when no profile was
     chosen. Pairs with a freeform template (empty ``sections``) when the
     user runs instructions-only.
+
+    ``instructions_id`` is the saved-profile handle the server persists
+    on the run row so a later revision can re-resolve the same
+    methodology. ``None`` for ad-hoc / no-instructions runs. The engine
+    itself never reads it — only ``instructions`` (the text) matters at
+    runtime; it rides on the request purely so the persistence layer has
+    one object to read from.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -149,6 +156,7 @@ class RunRequest(BaseModel):
     reasoning_effort: ReasoningEffort | None = None
     attachments: list[Attachment] = Field(default_factory=list)
     instructions: str | None = None
+    instructions_id: str | None = None
 
 
 class PriorSection(BaseModel):
