@@ -64,6 +64,7 @@ from openlia_server.services import v3_revision_service as revision_svc
 from openlia_server.services import v3_run_service as svc
 from openlia_server.services import v3_template_service as templates_svc
 from openlia_server.services.v3_filename import build_download_filename
+from openlia_server.services.v3_wiring import build_v3_transports
 
 _ENV_FLAG = "REPORT_ENGINE_VERSION"
 _ENABLED_VALUE = "v3"
@@ -427,6 +428,7 @@ def build_equity_research_v3_router(
                 db=db,
                 user_id=user.id,
                 request=run_request,
+                transports=build_v3_transports(),
             )
         except CapabilityError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -523,6 +525,7 @@ def build_equity_research_v3_router(
                 session_factory=db_session_factory,
                 broker=broker,
                 cancel_registry=cancel_registry,
+                transports=build_v3_transports(),
             )
         except CapabilityError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -865,6 +868,7 @@ def build_equity_research_v3_router(
                 session_factory=db_session_factory,
                 broker=broker,
                 cancel_registry=cancel_registry,
+                transports=build_v3_transports(),
             )
         except revision_svc.RevisionInFlightError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc

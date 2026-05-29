@@ -40,6 +40,7 @@ from openlia.llm.runtime.report_v3 import (
     BrokerEmitter,
     CancelToken,
     CapabilityError,
+    DataTransports,
     EventBroker,
     LLMSession,
     PriorCitation,
@@ -150,8 +151,14 @@ def start_revision_async(
     cancel_registry: dict[str, CancelToken],
     runner: Runner | None = None,
     llm_session: LLMSession | None = None,
+    transports: DataTransports | None = None,
 ) -> StartRevisionHandle:
-    """Create the revision row, schedule the background runner."""
+    """Create the revision row, schedule the background runner.
+
+    ``transports`` wires the EODHD data tools so a revision that needs
+    fresh data (new ratios, updated prices) can fetch it. Without it
+    the revision runner falls back to the loud null transports.
+    """
     if has_active_revision(db=db, report_id=report_id):
         raise RevisionInFlightError(
             f"Another revision is already in flight for report {report_id!r}. "
@@ -192,7 +199,7 @@ def start_revision_async(
 
     cancel_token = CancelToken()
     cancel_registry[_cancel_key(revision_id)] = cancel_token
-    bg_runner = runner or _default_runner(transports=None)
+    bg_runner = runner or _default_runner(transports)
     emitter = BrokerEmitter(broker=broker, report_id=revision_id)
 
     task = asyncio.create_task(
