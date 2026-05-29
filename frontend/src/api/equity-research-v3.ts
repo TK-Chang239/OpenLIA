@@ -297,11 +297,58 @@ export function v3DocxUrl(reportId: string): string {
  * immediately; the engine runs in a background task. Connect to
  * ``v3EventsUrl(report_id)`` via EventSource to receive progress.
  */
-export function startV3RunAsync(payload: V3StartPayload): Promise<V3StartAsyncResponse> {
-  return request<V3StartAsyncResponse>(`${PREFIX}/runs/start`, {
+export function startV3RunAsync(
+  payload: V3StartPayload,
+  files?: File[],
+): Promise<V3StartAsyncResponse> {
+  if (!files || files.length === 0) {
+    return request<V3StartAsyncResponse>(`${PREFIX}/runs/start`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+  // Source documents present -> multipart so the bytes ride alongside
+  // the scalar fields. The browser sets the multipart boundary; we must
+  // NOT send an application/json Content-Type here.
+  const fd = new FormData();
+  fd.append("subject", payload.subject);
+  if (payload.language) fd.append("language", payload.language);
+  if (payload.length) fd.append("length", payload.length);
+  if (payload.report_type) fd.append("report_type", payload.report_type);
+  if (payload.template_id) fd.append("template_id", payload.template_id);
+  fd.append("provider_kind", payload.provider_kind);
+  fd.append("model", payload.model);
+  if (payload.reasoning_effort) fd.append("reasoning_effort", payload.reasoning_effort);
+  for (const f of files) fd.append("files", f, f.name);
+  return startV3RunMultipart(fd);
+}
+
+async function startV3RunMultipart(fd: FormData): Promise<V3StartAsyncResponse> {
+  const res = await fetch(`${PREFIX}/runs/start`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    credentials: "same-origin",
+    body: fd,
   });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      const detail = body?.detail;
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (detail?.message) {
+        message = detail.message;
+      } else if (Array.isArray(detail?.errors)) {
+        message = detail.errors
+          .map((e: { filename: string; reason: string }) => `${e.filename}: ${e.reason}`)
+          .join("; ");
+      }
+    } catch {
+      /* keep the default HTTP <status> message */
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as V3StartAsyncResponse;
 }
 
 /**
