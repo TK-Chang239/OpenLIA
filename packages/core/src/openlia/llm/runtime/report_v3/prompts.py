@@ -48,10 +48,8 @@ def build_system_prompt(
         )
     sections_block = "\n".join(section_lines)
 
-    tool_lines: list[str] = []
-    for descriptor in catalog.descriptors:
-        tool_lines.append(f"  - {descriptor.name}: {descriptor.description}")
-    tools_block = "\n".join(tool_lines)
+    tools_block = _render_tools_block(catalog)
+    capability_index = _render_capability_index(catalog)
 
     return _PROMPT_TEMPLATE.format(
         subject=request.subject,
@@ -61,6 +59,28 @@ def build_system_prompt(
         shape_description=template.shape_description,
         sections_block=sections_block,
         tools_block=tools_block,
+        capability_index=capability_index,
+    )
+
+
+def _render_tools_block(catalog: ToolCatalog) -> str:
+    """One line per always-on core tool."""
+    return "\n".join(
+        f"  - {descriptor.name}: {descriptor.description}" for descriptor in catalog.descriptors
+    )
+
+
+def _render_capability_index(catalog: ToolCatalog) -> str:
+    """Render the Layer-1 capability map (category -> summary).
+
+    This advertises what can be summoned via ``find_tools`` without
+    listing every individual schema — keeping always-on context flat
+    while the model still knows the full surface exists.
+    """
+    if not catalog.category_index:
+        return "  (no specialized tool categories registered)"
+    return "\n".join(
+        f"  - {category}: {summary}" for category, summary in sorted(catalog.category_index.items())
     )
 
 
@@ -89,11 +109,29 @@ for every section id below before calling `finalize`.
 
 # Tools
 
-You have these tools. Use them freely. Research thoroughly, verify
-numbers before citing them, and run `run_dcf` / `run_comps` /
-`run_sensitivity` when valuation is in scope.
+You have these tools always available. Use them freely. Research
+thoroughly, verify numbers before citing them, and run `run_dcf` /
+`run_comps` / `run_sensitivity` when valuation is in scope.
 
 {tools_block}
+
+# Specialized tool library
+
+Beyond the always-available tools above, a larger library of
+specialized analysis tools exists. They are NOT loaded by default — to
+keep your focus sharp you only load what a given subject needs. Call
+`find_tools(query=..., category=...)` to discover and load them; the
+matched tools become callable immediately and you cite their results
+the same way (by the `source_id` each returns).
+
+Capability categories you can search:
+
+{capability_index}
+
+Use `find_tools` whenever the subject calls for analysis the core
+tools don't cover (e.g. a forensic accounting check, a sector KPI
+pack, a statement-integrity panel). Don't force it — if the core tools
+suffice, proceed without it.
 
 # Citation rules
 
@@ -158,10 +196,8 @@ def build_revise_system_prompt(
         )
     sections_block = "\n".join(section_lines)
 
-    tool_lines: list[str] = []
-    for descriptor in catalog.descriptors:
-        tool_lines.append(f"  - {descriptor.name}: {descriptor.description}")
-    tools_block = "\n".join(tool_lines)
+    tools_block = _render_tools_block(catalog)
+    capability_index = _render_capability_index(catalog)
 
     prior_lines: list[str] = []
     for section in revise.prior_sections:
@@ -169,12 +205,9 @@ def build_revise_system_prompt(
     prior_block = "\n\n".join(prior_lines) if prior_lines else "(no prior sections)"
 
     prior_chart_lines = [
-        f"  - {c.chart_id}: {c.chart_type} — {c.title}"
-        for c in revise.prior_charts
+        f"  - {c.chart_id}: {c.chart_type} — {c.title}" for c in revise.prior_charts
     ]
-    prior_charts_block = (
-        "\n".join(prior_chart_lines) if prior_chart_lines else "  (none)"
-    )
+    prior_charts_block = "\n".join(prior_chart_lines) if prior_chart_lines else "  (none)"
 
     return _REVISE_PROMPT_TEMPLATE.format(
         subject=request.subject,
@@ -184,6 +217,7 @@ def build_revise_system_prompt(
         shape_description=template.shape_description,
         sections_block=sections_block,
         tools_block=tools_block,
+        capability_index=capability_index,
         revision_request=revise.revision_request,
         prior_block=prior_block,
         prior_charts_block=prior_charts_block,
@@ -229,7 +263,17 @@ the same way you would for a template id.
 
 # Tools
 
+These tools are always available:
+
 {tools_block}
+
+# Specialized tool library
+
+A larger library of specialized tools is available on demand. Call
+`find_tools(query=..., category=...)` to discover and load the ones
+your revision needs; they become callable immediately. Categories:
+
+{capability_index}
 
 # Citation rules
 
