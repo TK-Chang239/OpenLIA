@@ -27,10 +27,18 @@ from openlia.llm.runtime.report_v3 import (
 )
 from openlia.llm.runtime.report_v3.tools.output_tools import build_output_tools
 from openlia.llm.runtime.report_v3.tools.valuation_tools import build_valuation_tools
-from openlia.llm.runtime.report_v3.tools.web_search import ingest_web_citations
+from openlia.llm.runtime.report_v3.tools.web_search import (
+    format_web_citation_notice,
+    ingest_web_citations,
+)
 from openlia.llm.types import Citation, ReasoningEffort
 
-from ._fakes import FakeLLMProvider, script_text, script_tool_calls
+from ._fakes import (
+    FakeLLMProvider,
+    script_text,
+    script_tool_call,
+    script_tool_calls,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -393,6 +401,35 @@ def test_ingest_web_citations_assigns_source_ids_and_dedupes_by_url():
     assert len(ledger) == 2
 
 
+def test_format_web_citation_notice_lists_markers_and_dedupes():
+    ledger = CitationLedger()
+    citations = (
+        Citation(id="c1", kind="web", url="https://a.com", title="Alpha"),
+        Citation(id="c2", kind="web", url="https://b.com", title="Beta"),
+        Citation(id="c3", kind="web", url="https://a.com", title="Alpha dup"),
+        Citation(id="ctool", kind="tool", url=None),
+    )
+    rewrites = ingest_web_citations(citations, ledger)
+    notice = format_web_citation_notice(citations, rewrites)
+    assert notice is not None
+    assert "[^web_1]" in notice
+    assert "[^web_2]" in notice
+    assert "Alpha" in notice and "Beta" in notice
+    assert "https://a.com" in notice
+    # Two bullet lines despite three web citations (two share a URL).
+    bullet_lines = [ln for ln in notice.splitlines() if ln.startswith("- [^")]
+    assert len(bullet_lines) == 2
+    # The non-web tool citation is not announced.
+    assert "ctool" not in notice
+
+
+def test_format_web_citation_notice_returns_none_without_web_citations():
+    ledger = CitationLedger()
+    citations = (Citation(id="ctool", kind="tool", url=None),)
+    rewrites = ingest_web_citations(citations, ledger)
+    assert format_web_citation_notice(citations, rewrites) is None
+
+
 # ---------------------------------------------------------------------------
 # Runner end-to-end (FakeLLMProvider)
 # ---------------------------------------------------------------------------
@@ -508,6 +545,47 @@ async def test_runner_returns_structured_error_for_unknown_tool():
         if m.role == "tool" and "Unknown tool" in m.content
     ]
     assert error_msgs, "Expected the unknown-tool error to be replayed back to the model"
+
+
+@pytest.mark.asyncio
+async def test_runner_feeds_web_citation_ids_back_to_model():
+    """After a turn that did native web search, the next request carries
+    a message announcing the [^web_N] markers so the model can cite them."""
+    template = get_builtin(ReportType.INITIATION)
+    section_ids = [s.id for s in template.sections]
+
+    script = [
+        # Turn 1: native web search returns a citation alongside a tool call.
+        script_tool_call(
+            name="write_section",
+            arguments={"section_id": section_ids[0], "markdown": f"{section_ids[0]} body."},
+            citations=(
+                Citation(id="c1", kind="web", url="https://snow.test/q1", title="SNOW Q1"),
+            ),
+        ),
+    ]
+    for sid in section_ids[1:]:
+        script.append(
+            script_tool_calls(
+                ("write_section", {"section_id": sid, "markdown": f"{sid} body."}),
+            )
+        )
+    script.append(script_tool_calls(("finalize", {})))
+
+    runner, session, fake = _runner_with_fake(script)
+    result = await runner.run(_request(), session=session)
+    assert result.status == "completed"
+
+    # Turn 2's request must carry the web-citation notice as a user message.
+    turn2_user_msgs = [
+        m.content
+        for m in fake.captured_requests[1].messages
+        if m.role == "user"
+    ]
+    notice = next((c for c in turn2_user_msgs if "[^web_1]" in c), None)
+    assert notice is not None, "Expected a web-citation notice on the next turn"
+    assert "SNOW Q1" in notice
+    assert "https://snow.test/q1" in notice
 
 
 @pytest.mark.asyncio

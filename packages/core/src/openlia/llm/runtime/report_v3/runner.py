@@ -44,7 +44,7 @@ from .tools import (
     FIND_TOOLS_NAME,
     build_catalog,
 )
-from .tools.web_search import ingest_web_citations
+from .tools.web_search import format_web_citation_notice, ingest_web_citations
 from .workspace import RunWorkspace, WrittenSection
 
 log = logging.getLogger(__name__)
@@ -233,7 +233,7 @@ class Runner:
                 reasoning_effort=request.reasoning_effort,
             )
 
-            ingest_web_citations(response.citations, ledger)
+            web_citation_rewrites = ingest_web_citations(response.citations, ledger)
 
             assistant_message = Message(
                 role="assistant",
@@ -281,6 +281,15 @@ class Runner:
 
             if workspace.finalized:
                 return _finish(workspace, emitter, status="completed")
+
+            # Teach the model the web_N source_ids for the results this
+            # turn's native web search returned, so it cites [^web_N]
+            # instead of the provider's native citation markers (which
+            # don't resolve to the bibliography). Appended only when the
+            # loop continues — a finalized run has no next turn to cite on.
+            notice = format_web_citation_notice(response.citations, web_citation_rewrites)
+            if notice is not None:
+                messages.append(Message(role="user", content=notice))
 
         return _finish(
             workspace,

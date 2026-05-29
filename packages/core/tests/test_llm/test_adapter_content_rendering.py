@@ -254,6 +254,48 @@ def test_anthropic_renders_assistant_and_tool_messages_unchanged() -> None:
     assert isinstance(out[2]["content"], list)
 
 
+# ─── Adjacent user-turn coalescing (alternation requirement) ─────────────────
+
+
+def test_anthropic_coalesces_tool_result_then_injected_user_turn() -> None:
+    """A tool-result turn (renders as user) followed by an injected user
+    note must merge into one user turn — Anthropic rejects adjacent user
+    turns. Both pieces survive as blocks in a single turn."""
+    msgs = [
+        Message(role="user", content="go"),
+        Message(role="assistant", content="", tool_calls=()),
+        Message(role="tool", content='{"ok": true}', tool_call_id="t1"),
+        Message(role="user", content="web sources: [^web_1]"),
+    ]
+    out = render_anthropic_messages(msgs)
+    roles = [e["role"] for e in out]
+    # No two consecutive user turns.
+    assert not any(roles[i] == roles[i + 1] == "user" for i in range(len(roles) - 1))
+    # The merged turn holds both the tool_result and the injected note.
+    merged = out[-1]
+    assert merged["role"] == "user"
+    types = [b.get("type") for b in merged["content"]]
+    assert "tool_result" in types
+    assert any(
+        b.get("type") == "text" and "[^web_1]" in b.get("text", "") for b in merged["content"]
+    )
+
+
+def test_gemini_coalesces_adjacent_user_turns() -> None:
+    msgs = [
+        Message(role="assistant", content="searched"),
+        Message(role="tool", content='{"ok": true}', tool_call_id="t1"),
+        Message(role="user", content="web sources: [^web_1]"),
+    ]
+    out = render_gemini_contents(msgs)
+    roles = [e["role"] for e in out]
+    assert not any(roles[i] == roles[i + 1] == "user" for i in range(len(roles) - 1))
+    merged = out[-1]
+    assert merged["role"] == "user"
+    joined = " ".join(p.get("text", "") for p in merged["parts"])
+    assert "[^web_1]" in joined
+
+
 # ─── Inline-attachment banner: explicit delimiters + no-tool directive ───────
 #
 # Issue #99: a model treated `[Attached file: x.pdf]` as a path and called
