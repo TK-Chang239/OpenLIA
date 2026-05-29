@@ -40,4 +40,5 @@ from openlia_server.db.models import (  # noqa: F401
     er_v2_3_models,
     er_v2_3_run_state,
     report_v3,
+    report_eu,
 )
