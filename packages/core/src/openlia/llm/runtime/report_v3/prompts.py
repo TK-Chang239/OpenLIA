@@ -268,6 +268,7 @@ def build_revise_system_prompt(
         length_target=length_target,
         template_name=template.name,
         shape_description=template.shape_description,
+        instructions_block=_render_instructions_block(request.instructions),
         sections_block=sections_block,
         tools_block=tools_block,
         capability_index=capability_index,
@@ -295,7 +296,7 @@ unless your change requires updating dependent sections.
 # Template: {template_name}
 {shape_description}
 
-The base template's sections:
+{instructions_block}The base template's sections:
 
 {sections_block}
 
