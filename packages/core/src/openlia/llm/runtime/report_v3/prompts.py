@@ -138,8 +138,11 @@ suffice, proceed without it.
 Every numeric or factual claim must cite a tool result. Cite inline
 with Markdown footnote syntax: `[^source_id]` (e.g. `[^web_3]` or
 `[^eodhd_1]`). When a tool returns, its result tells you the assigned
-`source_id` — use that. Web search results assigned by the provider's
-native tool also get `web_N` ids you can cite the same way.
+`source_id` — use that. After each web search, a follow-up message
+lists the `[^web_N]` markers for the results it found; cite web facts
+with those markers. Do NOT use the provider's own citation format
+(e.g. `<cite index=...>` or `[^6-1]`) — only the `[^source_id]` markers
+the tools and web-search notices give you resolve in the bibliography.
 
 Unresolved citations cause `write_section` to reject. Fix the markers
 and re-emit. Charts are referenced as `{{chart:<chart_id>}}` and must
