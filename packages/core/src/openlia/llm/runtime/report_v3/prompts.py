@@ -10,7 +10,7 @@ Markdown footnote syntax.
 
 from __future__ import annotations
 
-from .schemas import Language, ReportLength, ReviseContext, RunRequest
+from .schemas import Language, ReportLength, ReviseContext, RunRequest, TemplateSpec
 from .tools.registry import ToolCatalog
 
 _LANGUAGE_LABELS: dict[Language, str] = {
@@ -32,21 +32,22 @@ def build_system_prompt(
     request: RunRequest,
     catalog: ToolCatalog,
 ) -> str:
-    """Compose the v3 system prompt for one run."""
+    """Compose the v3 system prompt for one run.
+
+    Two structural modes, decided by whether the template carries any
+    sections:
+      - templated: the section list is fixed; the model must write every
+        section id before ``finalize``.
+      - freeform (empty ``sections``): the model designs its own
+        sections, guided by the analyst instructions and the subject.
+
+    ``request.instructions`` (when present) is injected as an
+    authoritative ``# Analyst instructions`` block. In freeform mode the
+    instructions effectively define the report's shape.
+    """
     template = request.template
     language_label = _LANGUAGE_LABELS.get(request.language, request.language.value)
     length_target = _LENGTH_TARGETS.get(request.length, "moderate length")
-
-    section_lines: list[str] = []
-    for spec in template.sections:
-        hints = ", ".join(spec.methodology_hints) if spec.methodology_hints else "none"
-        section_lines.append(
-            f"  - id: {spec.id}\n"
-            f"    title: {spec.title}\n"
-            f"    intent: {spec.intent}\n"
-            f"    methodology_hints: {hints}"
-        )
-    sections_block = "\n".join(section_lines)
 
     tools_block = _render_tools_block(catalog)
     capability_index = _render_capability_index(catalog)
@@ -57,10 +58,60 @@ def build_system_prompt(
         length_target=length_target,
         template_name=template.name,
         shape_description=template.shape_description,
-        sections_block=sections_block,
+        instructions_block=_render_instructions_block(request.instructions),
+        structure_block=_render_structure_block(template),
         tools_block=tools_block,
         capability_index=capability_index,
     )
+
+
+def _render_instructions_block(instructions: str | None) -> str:
+    """The ``# Analyst instructions`` block, or empty when none given.
+
+    A trailing blank line keeps the surrounding template's spacing
+    intact when the block is omitted.
+    """
+    if not instructions or not instructions.strip():
+        return ""
+    return (
+        "# Analyst instructions\n\n"
+        "The user provided the methodology and guidance below. Treat it as "
+        "authoritative for how to approach this report — what to research and "
+        "emphasize, how to reason, tone, and (where it specifies one) the "
+        "report's structure.\n\n"
+        f"{instructions.strip()}\n\n"
+    )
+
+
+def _render_structure_block(template: TemplateSpec) -> str:
+    """Either the fixed section list (templated) or the freeform
+    directive (empty ``sections``)."""
+    if not template.sections:
+        return _FREEFORM_STRUCTURE_BLOCK
+    section_lines: list[str] = []
+    for spec in template.sections:
+        hints = ", ".join(spec.methodology_hints) if spec.methodology_hints else "none"
+        section_lines.append(
+            f"  - id: {spec.id}\n"
+            f"    title: {spec.title}\n"
+            f"    intent: {spec.intent}\n"
+            f"    methodology_hints: {hints}"
+        )
+    sections_block = "\n".join(section_lines)
+    return (
+        "The report has these sections. You MUST produce a `write_section` "
+        "call for every section id below before calling `finalize`.\n\n"
+        f"{sections_block}"
+    )
+
+
+_FREEFORM_STRUCTURE_BLOCK = """\
+No fixed section structure is imposed. Design the report's sections
+yourself — guided by the analyst instructions above (if any) and the
+subject. For each section call `write_section` with a short
+`lowercase_snake_case` section id and a human-readable `title`. Aim for
+a coherent, well-organized report; write at least one section before
+calling `finalize`."""
 
 
 def _render_tools_block(catalog: ToolCatalog) -> str:
@@ -102,10 +153,9 @@ charts where they add value.
 # Template: {template_name}
 {shape_description}
 
-The report has these sections. You MUST produce a `write_section` call
-for every section id below before calling `finalize`.
+{instructions_block}# Report structure
 
-{sections_block}
+{structure_block}
 
 # Tools
 
