@@ -33,6 +33,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from markdown_it import MarkdownIt
 from openlia.llm.runtime.report_v3 import ChartSpec, CoverSpec
+from openlia.llm.runtime.report_v3.rendering import strip_anthropic_citation_markup
 
 from openlia_server.db.models.report_v3 import (
     ReportV3,
@@ -64,9 +65,7 @@ def render_docx(
     _add_cover(doc, report, cover_spec)
 
     display_index_by_source_id = {
-        c.source_id: c.display_index
-        for c in citations
-        if c.display_index is not None
+        c.source_id: c.display_index for c in citations if c.display_index is not None
     }
     charts_by_id = {c.chart_id: c for c in charts}
 
@@ -123,9 +122,7 @@ def _parse_cover(raw: str | None) -> CoverSpec | None:
         return None
 
 
-def _add_cover(
-    doc: Document, report: ReportV3, cover: CoverSpec | None
-) -> None:
+def _add_cover(doc: Document, report: ReportV3, cover: CoverSpec | None) -> None:
     """Emit the cover hero block.
 
     Bare path (cover is None): centered title + eyebrow line, then a
@@ -291,7 +288,8 @@ def _prepare_markdown(
             chart_ids.append(cid)
         return ""
 
-    stripped = re.sub(r"\{\{chart:([a-z0-9_]+)\}\}", _take_chart, markdown)
+    cleaned = strip_anthropic_citation_markup(markdown)
+    stripped = re.sub(r"\{\{chart:([a-z0-9_]+)\}\}", _take_chart, cleaned)
 
     def _rewrite_citation(m: re.Match[str]) -> str:
         sid = m.group(1)
@@ -490,9 +488,7 @@ def _add_hyperlink(paragraph, text: str, url: str) -> None:
     underlying XML by hand. Falls back to plain text on errors."""
     try:
         part = paragraph.part
-        r_id = part.relate_to(
-            url, RELATIONSHIP_TYPE.HYPERLINK, is_external=True
-        )
+        r_id = part.relate_to(url, RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
         hyperlink = paragraph._p.makeelement(qn("w:hyperlink"), {qn("r:id"): r_id})
         new_run = paragraph._p.makeelement(qn("w:r"), {})
         rPr = paragraph._p.makeelement(qn("w:rPr"), {})
@@ -534,9 +530,7 @@ def _embed_chart(doc: Document, chart: ReportV3Chart) -> None:
             log.exception("chart %s failed to embed; emitting placeholder", chart.chart_id)
 
     placeholder = doc.add_paragraph()
-    placeholder_run = placeholder.add_run(
-        f"[chart placeholder: {chart.chart_type}]"
-    )
+    placeholder_run = placeholder.add_run(f"[chart placeholder: {chart.chart_type}]")
     placeholder_run.italic = True
     placeholder_run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
 
@@ -571,20 +565,36 @@ def _try_render_chart_png(chart: ReportV3Chart) -> bytes | None:
 # ---------------------------------------------------------------------------
 
 
-def _add_bibliography(
-    doc: Document, citations: list[ReportV3Citation]
-) -> None:
-    visible = [c for c in citations if c.display_index is not None]
-    if not visible:
+def _add_bibliography(doc: Document, citations: list[ReportV3Citation]) -> None:
+    """Render every persisted citation. Body-linked rows keep the
+    ``display_index`` the renderer assigned; the rest get sequential
+    numbers appended after the highest assigned one so the reader
+    always sees every source consulted, even when marker linkage
+    misfires (Anthropic native search emits non-source-id markers we
+    can't link back automatically)."""
+    if not citations:
         return
-    visible.sort(key=lambda c: c.display_index or 0)
+    indexed: list[tuple[int, ReportV3Citation]] = []
+    unindexed: list[ReportV3Citation] = []
+    max_index = 0
+    for c in citations:
+        if c.display_index is None:
+            unindexed.append(c)
+            continue
+        max_index = max(max_index, c.display_index)
+        indexed.append((c.display_index, c))
+    next_index = max_index + 1
+    for c in unindexed:
+        indexed.append((next_index, c))
+        next_index += 1
+    indexed.sort(key=lambda pair: pair[0])
     doc.add_heading("Sources", level=2)
-    for c in visible:
+    for idx, c in indexed:
         prov = _parse_provenance(c.provenance_json)
         url = prov.get("url") if isinstance(prov.get("url"), str) else None
         title = prov.get("title") if isinstance(prov.get("title"), str) else None
         para = doc.add_paragraph()
-        idx_run = para.add_run(f"[{c.display_index}] ")
+        idx_run = para.add_run(f"[{idx}] ")
         idx_run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
         if url:
             _add_hyperlink(para, title or url, url)
