@@ -204,7 +204,7 @@ export default function EquityResearchV3(): JSX.Element {
   }, [activeReportId]);
 
   const handleSubmit = useCallback(
-    async (payload: { ticker: string; prompt: string }) => {
+    async (payload: { ticker: string; prompt: string }, attachments?: File[]) => {
       const text = payload.prompt.trim();
       if (!text) {
         setStartError("Tell the engine what to research.");
@@ -213,6 +213,12 @@ export default function EquityResearchV3(): JSX.Element {
 
       // ----- Revision branch: there's an active completed report -----
       if (canRevise && activeReportId) {
+        if (attachments && attachments.length > 0) {
+          setStartError(
+            "Source files aren't supported on revisions yet — start a new report to attach documents.",
+          );
+          return;
+        }
         setStartError(null);
         setPrompt("");
         setRevisionInFlight(true);
@@ -269,7 +275,7 @@ export default function EquityResearchV3(): JSX.Element {
           reasoning_effort:
             settings.reasoningEffort === "off" ? null : settings.reasoningEffort,
         };
-        const response = await startV3RunAsync(body);
+        const response = await startV3RunAsync(body, attachments);
         setActiveReportId(response.report_id);
       } catch (err) {
         if (err instanceof ApiError && err.status === 503) {
