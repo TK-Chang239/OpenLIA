@@ -23,7 +23,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from ...types import Message, ToolCall, ToolSchema
+from ...types import Message, ToolCall
 from ..report_v2_3.research import (
     NullToolExecutor,
     ResearchTool,
@@ -40,14 +40,12 @@ from .ledger import CitationLedger
 from .prompts import build_revise_system_prompt, build_system_prompt
 from .schemas import ReviseContext, RunRequest, RunResult
 from .session import LLMSession
-from .workspace import WrittenSection
 from .tools import (
-    WEB_SEARCH_TOOL_NAME,
-    ToolCatalog,
+    FIND_TOOLS_NAME,
     build_catalog,
 )
 from .tools.web_search import ingest_web_citations
-from .workspace import RunWorkspace
+from .workspace import RunWorkspace, WrittenSection
 
 log = logging.getLogger(__name__)
 
@@ -199,13 +197,15 @@ class Runner:
             if revise is not None
             else build_system_prompt(request=request, catalog=catalog)
         )
-        tool_schemas = _catalog_to_tool_schemas(catalog)
         messages: list[Message] = [_initial_user_turn(request, revise=revise)]
 
         deadline = time.monotonic() + self.max_wall_time_seconds
-        tools_by_name = catalog.by_name()
 
         for turn in range(self.max_turns):
+            # Rebuild each turn so tools the model discovered via
+            # find_tools on a prior turn join the request + dispatch set.
+            tool_schemas = catalog.active_schemas()
+            tools_by_name = catalog.active_tools_by_name()
             if cancel_token.cancelled:
                 return _finish(
                     workspace,
@@ -273,6 +273,11 @@ class Runner:
                     call=call,
                     result_message=result_message,
                 )
+                # find_tools activates extended tools synchronously; refresh
+                # so a discovered tool called later in this same response
+                # (parallel tool calls) resolves instead of erroring.
+                if call.name == FIND_TOOLS_NAME:
+                    tools_by_name = catalog.active_tools_by_name()
 
             if workspace.finalized:
                 return _finish(workspace, emitter, status="completed")
@@ -288,9 +293,7 @@ class Runner:
         )
 
 
-def _initial_user_turn(
-    request: RunRequest, *, revise: ReviseContext | None = None
-) -> Message:
+def _initial_user_turn(request: RunRequest, *, revise: ReviseContext | None = None) -> Message:
     if revise is not None:
         return Message(
             role="user",
@@ -314,22 +317,6 @@ def _initial_user_turn(
     )
 
 
-def _catalog_to_tool_schemas(catalog: ToolCatalog) -> list[ToolSchema]:
-    """Convert dispatched-tool descriptors into LLMRequest tool schemas.
-
-    web_search is omitted — the adapter wires it via native_tools.
-    """
-    schemas: list[ToolSchema] = []
-    for tool in catalog.dispatched_tools:
-        d = tool.descriptor
-        if d.name == WEB_SEARCH_TOOL_NAME:
-            continue
-        schemas.append(
-            ToolSchema(name=d.name, description=d.description, parameters=d.parameters)
-        )
-    return schemas
-
-
 def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) -> Message:
     """Execute one tool call and produce the matching tool message.
 
@@ -343,7 +330,9 @@ def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) -> Mes
             {
                 "error": (
                     f"Unknown tool {call.name!r}. "
-                    f"Valid tools: {sorted(tools_by_name)}"
+                    f"Valid tools: {sorted(tools_by_name)}. "
+                    f"If you need a specialized tool, call {FIND_TOOLS_NAME!r} "
+                    f"first to discover and load it."
                 )
             }
         )
