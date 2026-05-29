@@ -39,6 +39,7 @@ from .schemas import RunRequest, RunResult
 from .session import LLMSession
 from .tools import build_catalog
 from .tools.web_search import format_web_citation_notice, ingest_web_citations
+from .transports import EuDataTransports
 from .workspace import RunWorkspace
 
 log = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ class Runner:
     """
 
     request: RunRequest
-    transports: EuDataTransports  # noqa: F821 — see EuDataTransports in package __init__
+    transports: EuDataTransports
     max_turns: int = 60
     # 30 min default: earnings updates with web search can take 20-30
     # turns at 30-90s each (web search + long-context latency compound).

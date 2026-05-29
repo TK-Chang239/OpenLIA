@@ -1,4 +1,4 @@
-"""In-flight run state for a v3 run.
+"""In-flight run state for an EU v2 run.
 
 A ``RunWorkspace`` holds what the model has produced so far —
 sections written, charts emitted, and the citation ledger. The
@@ -9,17 +9,10 @@ Separated from ``runner.py`` so output tools (``write_section``,
 ``emit_chart``, ``finalize``) can hold a reference without importing
 the loop.
 
-PR4 adds revise-mode awareness. When ``revision_mode=True``:
-  - prior sections are pre-loaded into ``sections`` so the model
-    references resolve and the rendered partial result includes
-    untouched prior content
-  - ``write_section`` accepts section_ids beyond the template
-    (revise can add new sections per the locked design)
-  - ``finalize`` accepts partial completion (revisions can touch
-    just one section)
-  - ``sections_written_this_run`` / ``charts_written_this_run``
-    track what the engine produced this revision so the persistence
-    layer can version-bump only those.
+EU v2 has no revision flow: every run is an original run. The
+``revision_mode`` field is retained at ``False`` only because the
+output tools (forked from v3) still read it as a guard; the engine
+never sets it to ``True``.
 """
 
 from __future__ import annotations
@@ -49,26 +42,23 @@ class RunWorkspace:
     sections: dict[str, WrittenSection] = field(default_factory=dict)
     charts: dict[str, ChartSpec] = field(default_factory=dict)
     finalized: bool = False
-    # Revise-mode toggles. Set by ``Runner.run`` when a ``revise``
-    # context is passed; default False keeps the original-run path
-    # behaviour identical.
+    # Always ``False`` for EU v2 (no revision flow). Retained only
+    # because the v3-forked output tools still read it as a guard;
+    # the engine never flips it.
     revision_mode: bool = False
     # Ordered list of section_ids the renderer / to_result should
     # emit. Pre-populated with template section ids in template order;
-    # revise-mode adds append new ids in the order they're first
-    # written. Original-run paths never mutate beyond the template
-    # set so this is effectively a no-op for them.
+    # ``note_section_written`` appends any genuinely new id in the
+    # order it is first written.
     section_order: list[str] = field(default_factory=list)
-    # The subset of ``sections`` / ``charts`` that this run wrote
-    # (vs. pre-loaded from a prior revision). The persistence layer
-    # reads these to know which entries need a new version row.
+    # The subset of ``sections`` / ``charts`` that this run wrote.
+    # Carried over from v3's persistence bookkeeping.
     sections_written_this_run: set[str] = field(default_factory=set)
     charts_written_this_run: set[str] = field(default_factory=set)
     # Cover hero content from the model's ``set_cover`` tool call.
     # None until the model emits one; last write wins if it calls
-    # ``set_cover`` more than once (or during a revision). The
-    # renderer surfaces this on the v1 ReportCover via the v3
-    # detail adapter.
+    # ``set_cover`` more than once. The renderer surfaces this on the
+    # v1 ReportCover via the detail adapter.
     cover: CoverSpec | None = None
     cover_written_this_run: bool = False
 
@@ -80,8 +70,8 @@ class RunWorkspace:
         return [section.id for section in self.template.sections]
 
     def missing_section_ids(self) -> list[str]:
-        # Revise mode: no required sections; the user picks what to
-        # touch, finalize accepts any partial.
+        # ``revision_mode`` is always False in EU v2, so this guard is
+        # inert; kept for parity with the shared output-tool contract.
         if self.revision_mode:
             return []
         return [sid for sid in self.required_section_ids() if sid not in self.sections]

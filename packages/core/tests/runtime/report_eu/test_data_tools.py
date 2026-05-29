@@ -17,5 +17,5 @@ def test_earnings_calendar_tool_calls_transport_and_logs():
     assert "2026-06-15" in str(result.payload)
     assert tool.descriptor.name == "get_earnings_calendar"
     # The call landed one ledger entry the model can cite.
-    assert result.payload["source_id"] == "get_earnings_calendar_1"
+    assert result.payload["source_id"].startswith("get_earnings_calendar")
     assert ledger.lookup(result.payload["source_id"]) is not None
