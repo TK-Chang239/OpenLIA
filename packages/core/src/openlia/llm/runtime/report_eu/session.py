@@ -1,14 +1,13 @@
-"""Provider session wrapper for the v3 engine.
+"""Provider session wrapper for the Earnings Update v2 engine.
 
-``LLMSession`` is the v3 facade over the existing ``LLMProvider``
+``LLMSession`` is the EU v2 facade over the existing ``LLMProvider``
 abstraction. It does three things:
 
 1. Resolves a ``Capabilities`` snapshot for the chosen provider/model
    via the existing ``capabilities_for`` registry.
-2. Enforces the v3 capability contract: the model MUST support native
-   web search. Providers that don't (Ollama, gpt-5.4-mini,
-   claude-haiku, gemini-flash-lite at the model level) are rejected
-   at construction with a clear error.
+2. EU v2 imposes no capability gate — any model the registry knows is
+   allowed; connectors are opt-in. (v3 required native web search; EU
+   v2 drops that because web search is just one toggleable connector.)
 3. On first ``generate()`` call, resolves credentials from env vars
    and builds the provider adapter via ``build_adapter``. Subsequent
    calls reuse the same adapter. Tests inject a fake adapter via
@@ -46,11 +45,13 @@ _REASONING_OVERHEAD: dict[ReasoningEffort, int] = {
 
 
 class CapabilityError(RuntimeError):
-    """The chosen provider/model does not meet v3's capability contract.
+    """A provider/model capability mismatch.
 
-    Fires when ``capabilities.web_search_native`` is False. v3 requires
-    native web search because the engine relies on the provider's
-    first-class web tool for research and citation attribution.
+    EU v2 imposes no capability gate at session construction — any model
+    the registry knows is allowed, since every connector (including web
+    search) is opt-in. This class is retained so dependent modules that
+    import it keep resolving; EU v2's ``LLMSession.create`` never raises
+    it.
     """
 
 
@@ -87,12 +88,11 @@ def _resolve_credentials(provider_kind: str) -> ProviderCredentials:
 
 @dataclass
 class LLMSession:
-    """A v3 session bound to a specific provider/model pair.
+    """An EU v2 session bound to a specific provider/model pair.
 
-    Construct via ``LLMSession.create()`` so the capability gate runs
-    before any tools are wired. The adapter is built lazily on first
-    ``generate()`` call to keep construction cheap and avoid requiring
-    API keys when the session is mocked in tests.
+    Construct via ``LLMSession.create()``. The adapter is built lazily
+    on first ``generate()`` call to keep construction cheap and avoid
+    requiring API keys when the session is mocked in tests.
     """
 
     provider_kind: str
@@ -108,27 +108,17 @@ class LLMSession:
         model: str,
         capability_override: dict | None = None,
     ) -> LLMSession:
-        """Resolve capabilities, run the gate, return a session.
+        """Resolve capabilities and return a session.
 
-        Raises ``CapabilityError`` if the model does not advertise
-        ``web_search_native``. Ollama is the canonical rejection — no
-        Ollama model currently has native web search — but the gate
-        also catches gpt-5.4-mini, claude-haiku, gemini-flash-lite,
-        and other hosted models that lack the capability.
+        EU v2 imposes no capability gate: any model the registry knows
+        is allowed, because web search is just one opt-in connector
+        rather than a required engine dependency.
         """
         capabilities = capabilities_for(
             provider_kind=provider_kind,
             model=model,
             override=capability_override,
         )
-        if not capabilities.web_search_native:
-            raise CapabilityError(
-                f"v3 requires a model with native web search. "
-                f"{provider_kind!r}/{model!r} does not advertise "
-                f"``web_search_native``. "
-                f"Pick a different model "
-                f"(e.g. gpt-5.4, claude-sonnet, gemini-3.1-pro)."
-            )
         return cls(
             provider_kind=provider_kind,
             model=model,
