@@ -128,6 +128,14 @@ class RunRequest(BaseModel):
     ``attachments`` are user-uploaded source documents (filings, decks)
     the runner materializes into multimodal content blocks on the first
     turn so the model can read them. Empty for runs with no uploads.
+
+    ``instructions`` is free-form analyst methodology the user attached
+    (extracted from an uploaded instruction profile). It is injected
+    verbatim into the system prompt as authoritative guidance — how to
+    approach the report, what to emphasize, tone, and (when no template
+    is selected) the report's structure. ``None`` when no profile was
+    chosen. Pairs with a freeform template (empty ``sections``) when the
+    user runs instructions-only.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -140,6 +148,7 @@ class RunRequest(BaseModel):
     model: str = Field(..., min_length=1)
     reasoning_effort: ReasoningEffort | None = None
     attachments: list[Attachment] = Field(default_factory=list)
+    instructions: str | None = None
 
 
 class PriorSection(BaseModel):
