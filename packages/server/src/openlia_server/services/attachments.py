@@ -126,6 +126,15 @@ def persist_attachments(
 # ─── Text extraction ─────────────────────────────────────────────────────────
 
 
+def extract_text(upload: FileUpload) -> str | None:
+    """Public wrapper: return extracted text for an upload, or None.
+
+    Used by callers (e.g. the v3 engine) that persist attachments
+    outside the ``chat_attachments`` table but still want the same
+    server-side extraction the chat path uses."""
+    return _maybe_extract(upload)[0]
+
+
 def _maybe_extract(upload: FileUpload) -> tuple[str | None, datetime | None]:
     """Return ``(text, timestamp)`` if extraction is applicable, else
     ``(None, None)``. Images and (intentionally) native PDFs are *not*

@@ -14,6 +14,7 @@ No live API calls. Real provider smoke is a manual reviewer step.
 from __future__ import annotations
 
 import pytest
+from openlia.llm.runtime.messages import Attachment
 from openlia.llm.runtime.report_v2_3.schemas import ReportType
 from openlia.llm.runtime.report_v2_3.templates.builtins import get_builtin
 from openlia.llm.runtime.report_v3 import (
@@ -31,7 +32,7 @@ from openlia.llm.runtime.report_v3.tools.web_search import (
     format_web_citation_notice,
     ingest_web_citations,
 )
-from openlia.llm.types import Citation, ReasoningEffort
+from openlia.llm.types import Capabilities, Citation, ReasoningEffort
 
 from ._fakes import (
     FakeLLMProvider,
@@ -652,3 +653,74 @@ async def test_runner_default_reasoning_effort_none_leaves_max_tokens_untouched(
     for captured in fake.captured_requests:
         assert captured.reasoning_effort is None
         assert captured.max_tokens == base_max
+
+
+# ---------------------------------------------------------------------------
+# User source-file attachments
+# ---------------------------------------------------------------------------
+
+
+def _request_with_attachments(attachments: list[Attachment]) -> RunRequest:
+    return RunRequest(
+        subject="RKLB.US",
+        template=get_builtin(ReportType.INITIATION),
+        language=Language.EN,
+        length=ReportLength.NORMAL,
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        attachments=attachments,
+    )
+
+
+def _full_write_script():
+    section_ids = [s.id for s in get_builtin(ReportType.INITIATION).sections]
+    script = [
+        script_tool_calls(("write_section", {"section_id": sid, "markdown": f"{sid} body."}))
+        for sid in section_ids
+    ]
+    script.append(script_tool_calls(("finalize", {})))
+    return script
+
+
+@pytest.mark.asyncio
+async def test_runner_materializes_text_attachment_into_first_turn(tmp_path):
+    """A user-uploaded text file rides on the first user turn as a content
+    block so the model can read it as primary evidence."""
+    f = tmp_path / "notes.txt"
+    f.write_text("SECRET MARKER 42")
+    att = Attachment(
+        id="a1",
+        filename="notes.txt",
+        mime_type="text/plain",
+        storage_path=str(f),
+        size_bytes=f.stat().st_size,
+    )
+    runner, session, fake = _runner_with_fake(_full_write_script())
+    result = await runner.run(_request_with_attachments([att]), session=session)
+    assert result.status == "completed"
+
+    first_user = fake.captured_requests[0].messages[0]
+    texts = [getattr(b, "text", "") for b in first_user.content_blocks]
+    assert any("SECRET MARKER 42" in t for t in texts)
+    # The prompt also flags that source documents were attached.
+    assert "attached source document" in first_user.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_runner_fails_clearly_on_image_attachment_without_vision():
+    """An image on a non-vision model has no viable path — the run fails
+    with a clear, user-actionable message instead of silently dropping it."""
+    att = Attachment(
+        id="img1",
+        filename="chart.png",
+        mime_type="image/png",
+        storage_path="/nonexistent.png",
+        size_bytes=10,
+    )
+    runner, session, _ = _runner_with_fake([])
+    session.capabilities = Capabilities(
+        web_search_native=True, vision=False, pdf_native=False
+    )
+    result = await runner.run(_request_with_attachments([att]), session=session)
+    assert result.status == "failed"
+    assert "Attachment cannot be used" in result.message

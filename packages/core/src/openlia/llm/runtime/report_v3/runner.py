@@ -24,6 +24,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ...types import Message, ToolCall
+from ..attachments import AttachmentNotSupportedError, materialize_for_model
+from ..messages import ContentBlock
 from ..report_v2_3.research import (
     NullToolExecutor,
     ResearchTool,
@@ -197,7 +199,19 @@ class Runner:
             if revise is not None
             else build_system_prompt(request=request, catalog=catalog)
         )
-        messages: list[Message] = [_initial_user_turn(request, revise=revise)]
+        try:
+            attachment_blocks = _materialize_attachments(request, session, emitter)
+        except AttachmentNotSupportedError as exc:
+            return _finish(
+                workspace,
+                emitter,
+                status="failed",
+                message=f"Attachment cannot be used: {exc}",
+            )
+
+        messages: list[Message] = [
+            _initial_user_turn(request, revise=revise, attachment_blocks=attachment_blocks)
+        ]
 
         deadline = time.monotonic() + self.max_wall_time_seconds
 
@@ -302,7 +316,40 @@ class Runner:
         )
 
 
-def _initial_user_turn(request: RunRequest, *, revise: ReviseContext | None = None) -> Message:
+def _materialize_attachments(
+    request: RunRequest,
+    session: LLMSession,
+    emitter: EventEmitter,
+) -> tuple[ContentBlock, ...]:
+    """Turn user-uploaded source documents into provider-neutral content
+    blocks for the first turn.
+
+    Multimodal-capable models receive native document/image blocks;
+    others fall back to server-extracted text. Raises
+    ``AttachmentNotSupportedError`` for hard-incompatible files (e.g. an
+    image on a non-vision model) so the caller can fail the run with a
+    clear message. Soft issues (skipped/truncated files) surface as
+    ``attachment.warning`` events."""
+    if not request.attachments:
+        return ()
+    caps = session.capabilities
+    budget = max(1, caps.max_context_tokens - caps.max_output_tokens - 4_000)
+    result = materialize_for_model(
+        request.attachments,
+        capabilities=caps,
+        available_token_budget=budget,
+    )
+    for warning in result.warnings:
+        emitter.emit("attachment.warning", {"message": warning})
+    return tuple(result.blocks)
+
+
+def _initial_user_turn(
+    request: RunRequest,
+    *,
+    revise: ReviseContext | None = None,
+    attachment_blocks: tuple[ContentBlock, ...] = (),
+) -> Message:
     if revise is not None:
         return Message(
             role="user",
@@ -314,7 +361,14 @@ def _initial_user_turn(request: RunRequest, *, revise: ReviseContext | None = No
                 f"for each section you change (and `finalize` when "
                 f"done)."
             ),
+            content_blocks=attachment_blocks,
         )
+    attachment_note = (
+        " The user attached source document(s) — read them and use them "
+        "as primary evidence, citing facts as usual."
+        if attachment_blocks
+        else ""
+    )
     return Message(
         role="user",
         content=(
@@ -322,7 +376,9 @@ def _initial_user_turn(request: RunRequest, *, revise: ReviseContext | None = No
             f"template described in the system prompt. Use the tools "
             f"provided to research, compute, chart, and write. Call "
             f"`finalize` only after every required section is written."
+            f"{attachment_note}"
         ),
+        content_blocks=attachment_blocks,
     )
 
 
