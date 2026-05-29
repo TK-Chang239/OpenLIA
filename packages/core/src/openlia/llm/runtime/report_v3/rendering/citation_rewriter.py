@@ -23,6 +23,29 @@ from dataclasses import dataclass
 
 CITATION_MARKER_RE = re.compile(r"\[\^([a-z0-9_]+)\]")
 
+# Anthropic's native web search returns citation references as
+# ``<cite index="X-Y">text</cite>`` wrappers and bare ``[^X-Y]``
+# markers, where X-Y is its internal chunk/segment index — not one of
+# our ledger source_ids. The runtime has no way to map those indices
+# back to specific ledger entries, so the rewriter strips them: cite
+# tags are unwrapped (text preserved), bare hyphenated markers are
+# dropped. The bibliography (which renders every ledger entry) is the
+# reader-visible signal that sources were consulted.
+_ANTHROPIC_CITE_TAG_RE = re.compile(r"<cite\b[^>]*>(.*?)</cite>", re.IGNORECASE | re.DOTALL)
+_ANTHROPIC_HYPHEN_MARKER_RE = re.compile(r"\[\^[0-9]+-[0-9]+\]")
+
+
+def strip_anthropic_citation_markup(markdown: str) -> str:
+    """Remove Anthropic native-search citation artifacts from section text.
+
+    Returns the markdown with ``<cite>`` wrappers unwrapped and bare
+    ``[^X-Y]`` (digit-hyphen-digit) markers stripped. Valid
+    ``[^source_id]`` markers are untouched so the existing rewriter
+    can resolve them normally.
+    """
+    unwrapped = _ANTHROPIC_CITE_TAG_RE.sub(lambda m: m.group(1), markdown)
+    return _ANTHROPIC_HYPHEN_MARKER_RE.sub("", unwrapped)
+
 
 @dataclass(frozen=True)
 class RewrittenSection:
@@ -87,28 +110,41 @@ def build_bibliography(
 ) -> list[BibliographyEntry]:
     """Turn persisted ``ReportV3Citation`` rows into ordered bibliography entries.
 
-    Skips rows with ``display_index is None`` — those source_ids were
-    logged but never actually cited in the body. Result is sorted by
-    display_index.
+    Every row is rendered. Rows whose body-marker linkage succeeded
+    (``display_index`` set by the renderer) keep their assigned index;
+    the rest get sequential indices appended after the highest assigned
+    one so the reader still sees every source the run consulted.
+    Result is sorted by display_index.
     """
-    entries: list[BibliographyEntry] = []
-    for row in citations:
+    rows = list(citations)
+    indexed: list[BibliographyEntry] = []
+    unindexed_rows: list = []
+    max_index = 0
+    for row in rows:
         display_index = getattr(row, "display_index", None)
         if display_index is None:
+            unindexed_rows.append(row)
             continue
-        provenance = _parse_provenance(row)
-        label = _label_for(row.tool_name, provenance, row.source_id)
-        url = _url_for(provenance)
-        entries.append(
-            BibliographyEntry(
-                display_index=display_index,
-                source_id=row.source_id,
-                label=label,
-                url=url,
-            )
-        )
-    entries.sort(key=lambda e: e.display_index)
-    return entries
+        max_index = max(max_index, display_index)
+        indexed.append(_to_entry(row, display_index))
+    next_index = max_index + 1
+    for row in unindexed_rows:
+        indexed.append(_to_entry(row, next_index))
+        next_index += 1
+    indexed.sort(key=lambda e: e.display_index)
+    return indexed
+
+
+def _to_entry(row, display_index: int) -> BibliographyEntry:
+    provenance = _parse_provenance(row)
+    label = _label_for(row.tool_name, provenance, row.source_id)
+    url = _url_for(provenance)
+    return BibliographyEntry(
+        display_index=display_index,
+        source_id=row.source_id,
+        label=label,
+        url=url,
+    )
 
 
 # ---------------------------------------------------------------------------
