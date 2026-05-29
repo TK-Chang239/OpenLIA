@@ -12,10 +12,14 @@ import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from openlia_server.routes.departments.equity_research_v3 import (
-    _build_download_filename,
-    _slugify_filename_component,
-    _template_label,
+from openlia_server.services.v3_filename import (
+    build_download_filename as _build_download_filename,
+)
+from openlia_server.services.v3_filename import (
+    slugify_filename_component as _slugify_filename_component,
+)
+from openlia_server.services.v3_filename import (
+    template_label as _template_label,
 )
 
 
@@ -37,16 +41,12 @@ def _row(
 
 def test_builtin_template_uses_friendly_label():
     row = _row(template_id="initiation_default")
-    assert _build_download_filename(row=row, ext="pdf") == (
-        "RKLB.US_Initiation_2026-05-28.pdf"
-    )
+    assert _build_download_filename(row=row, ext="pdf") == ("RKLB.US_Initiation_2026-05-28.pdf")
 
 
 def test_update_template_label():
     row = _row(template_id="update_default")
-    assert _build_download_filename(row=row, ext="docx") == (
-        "RKLB.US_Update_2026-05-28.docx"
-    )
+    assert _build_download_filename(row=row, ext="docx") == ("RKLB.US_Update_2026-05-28.docx")
 
 
 def test_sector_research_label():

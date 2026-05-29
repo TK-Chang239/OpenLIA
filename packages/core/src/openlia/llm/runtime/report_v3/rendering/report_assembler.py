@@ -30,6 +30,7 @@ from .citation_rewriter import (
     BibliographyEntry,
     build_bibliography,
     rewrite_section_markdown,
+    strip_anthropic_citation_markup,
 )
 
 CHART_REF_RE = re.compile(r"\{\{chart:([a-z0-9_]+)\}\}")
@@ -66,10 +67,11 @@ def assemble_html(
 
     rewritten_sections = []
     for section in sections:
+        cleaned = strip_anthropic_citation_markup(section.markdown)
         rewritten = rewrite_section_markdown(
             section_id=section.section_id,
             title=section.title,
-            markdown=section.markdown,
+            markdown=cleaned,
             display_index_by_source_id=display_index_by_source_id,
         )
         substituted = _substitute_chart_refs(rewritten.markdown, chart_data_urls, charts)
@@ -143,7 +145,7 @@ def _substitute_chart_refs(
             "\n\n"
             f'<figure class="v3-chart">'
             f'<img alt="{_escape_attr(title)}" src="{data_url}" />'
-            f'<figcaption>{_escape_text(title)}</figcaption>'
+            f"<figcaption>{_escape_text(title)}</figcaption>"
             f"</figure>\n\n"
         )
 
@@ -176,9 +178,9 @@ def _assemble(
         f'<header class="v3-cover">'
         f"<h1>{_escape_text(report.subject)}</h1>"
         f'<p class="v3-cover-meta">'
-        f'Template: {_escape_text(report.template_id)} &middot; '
-        f'Language: {_escape_text(report.language)} &middot; '
-        f'Generated: {now.strftime("%Y-%m-%d %H:%M UTC")}'
+        f"Template: {_escape_text(report.template_id)} &middot; "
+        f"Language: {_escape_text(report.language)} &middot; "
+        f"Generated: {now.strftime('%Y-%m-%d %H:%M UTC')}"
         f"</p>"
         f"</header>"
     )
@@ -193,7 +195,7 @@ def _assemble(
 <body>
 {cover_html}
 <main class="v3-body">
-{''.join(section_blocks)}
+{"".join(section_blocks)}
 </main>
 {bib_html}
 </body>
@@ -263,12 +265,7 @@ def _markdown_renderer():
 def _escape_text(s: str | None) -> str:
     if s is None:
         return ""
-    return (
-        str(s)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _escape_attr(s: str | None) -> str:
