@@ -109,7 +109,7 @@ def sync_user_watchlist(
                     created_at=now,
                 )
                 db.add(row)
-                db.commit()
+                db.flush()
                 touched += 1
 
             elif existing.status not in _UNTOUCHABLE:
@@ -119,9 +119,10 @@ def sync_user_watchlist(
                 existing.eps_estimate = eps_estimate
                 existing.revenue_estimate = revenue_estimate
                 existing.synced_at = now
-                db.commit()
+                db.flush()
                 touched += 1
 
             # status in {"reported", "skipped"} → leave untouched
 
+    db.commit()
     return touched
