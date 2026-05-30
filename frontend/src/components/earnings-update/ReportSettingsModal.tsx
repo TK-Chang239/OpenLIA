@@ -1,82 +1,117 @@
-import { useMemo, useState } from "react";
+/**
+ * ReportSettingsModal — per-user Earnings Update v2 settings.
+ *
+ * Replaces the v1 section-toggle / custom-section editor. The v2 engine
+ * is configured once per user (no per-run override): model, template,
+ * data connectors, report length, language, and (Anthropic-only)
+ * reasoning effort. Keeps the v1 modal chrome — Radix dialog, header,
+ * scrollable body, footer Save/Cancel — for visual continuity.
+ */
+import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { Trash2, X } from "lucide-react";
 
-import {
-  CustomSection,
-  EuConfig,
-  ReportLength,
-} from "../../api/earnings-update";
-import {
-  DEFAULT_EU_SECTIONS,
-  EU_SECTION_CATALOG,
-} from "../../lib/earnings-update/section-catalog";
+import type { EuSettings, ReasoningEffort, ReportLength } from "../../api/earnings-update";
+import { useEuTemplates } from "../../hooks/useEuTemplates";
 
-import { CustomSectionRow } from "./CustomSectionRow";
+import { EuModelPicker } from "./EuModelPicker";
+import { EuTemplateUploadModal } from "./EuTemplateUploadModal";
 
 interface Props {
-  open: boolean;
-  config: EuConfig;
+  settings: EuSettings;
+  onSave: (next: EuSettings) => Promise<unknown>;
   onClose: () => void;
-  onSave: (next: EuConfig) => Promise<void>;
 }
 
 const LENGTH_IDS: readonly ReportLength[] = ["concise", "normal", "elaborative"];
+const LENGTH_LABELS: Record<ReportLength, string> = {
+  concise: "Concise",
+  normal: "Normal",
+  elaborative: "Elaborative",
+};
 
-function randomId(): string {
-  return `custom_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
+const REASONING_OPTIONS: readonly { value: ReasoningEffort; label: string }[] = [
+  { value: null, label: "Default" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+function sectionTitle(text: string) {
+  return (
+    <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
+      {text}
+    </h3>
+  );
 }
 
-export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
-  const { t } = useTranslation();
-  const [length, setLength] = useState<ReportLength>(config.report_length);
-  const [enabled, setEnabled] = useState<Set<string>>(
-    new Set(config.enabled_section_ids),
+function Toggle({
+  on,
+  onClick,
+  testId,
+  label,
+}: {
+  on: boolean;
+  onClick: () => void;
+  testId: string;
+  label: string;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 px-4 py-3.5 cursor-pointer hover:bg-[--color-surface-hover] transition-colors">
+      <span className="text-[13.5px] font-medium text-[--color-text-primary]">
+        {label}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        data-testid={testId}
+        onClick={onClick}
+        className={[
+          "relative w-10 h-6 rounded-full flex-shrink-0 transition-colors",
+          on ? "bg-[--color-accent-primary]" : "bg-[--color-border-subtle]",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-[left]",
+            on ? "left-5" : "left-1",
+          ].join(" ")}
+        />
+      </button>
+    </label>
   );
-  const [customs, setCustoms] = useState<CustomSection[]>(
-    config.custom_sections,
-  );
+}
+
+export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
+  const [draft, setDraft] = useState<EuSettings>(settings);
   const [saving, setSaving] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const { templates, upload, remove } = useEuTemplates();
 
-  const defaultRows = useMemo(
-    () =>
-      DEFAULT_EU_SECTIONS.map((id) => ({
-        id,
-        title: EU_SECTION_CATALOG[id].title,
-        description: EU_SECTION_CATALOG[id].description,
-      })),
-    [],
-  );
+  // Built-in templates first, then user templates by name.
+  const sortedTemplates = [...templates].sort((a, b) => {
+    if (a.is_builtin !== b.is_builtin) return a.is_builtin ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  const activeTemplate = templates.find((t) => t.id === draft.template_id);
 
-  function toggle(id: string) {
-    setEnabled((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  async function handleUpload(name: string, markdown: string): Promise<void> {
+    const created = await upload(name, markdown);
+    setDraft((d) => ({ ...d, template_id: created.id }));
+    setUploadOpen(false);
   }
 
-  function addCustom() {
-    setCustoms((prev) => [
-      ...prev,
-      { id: randomId(), title: "", description: "" },
-    ]);
+  async function handleDeleteTemplate() {
+    if (!activeTemplate || activeTemplate.is_builtin) return;
+    await remove(activeTemplate.id);
+    setDraft((d) => ({ ...d, template_id: "eu_default" }));
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const payload: EuConfig = {
-        report_length: length,
-        enabled_section_ids: [
-          ...DEFAULT_EU_SECTIONS.filter((id) => enabled.has(id)),
-          ...customs.map((c) => c.id),
-        ],
-        custom_sections: customs.filter((c) => c.title.trim()),
-      };
-      await onSave(payload);
+      await onSave(draft);
       onClose();
     } finally {
       setSaving(false);
@@ -84,7 +119,7 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={(v) => (!v ? onClose() : null)}>
+    <Dialog.Root open onOpenChange={(v) => (!v ? onClose() : null)}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] max-h-[85vh] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[12px] shadow-lg flex flex-col overflow-hidden">
@@ -92,19 +127,19 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
             <div>
               <Dialog.Title asChild>
                 <h2 className="text-[15px] font-semibold text-[--color-text-primary] m-0">
-                  {t("earnings.settings_modal.title")}
+                  Earnings Update settings
                 </h2>
               </Dialog.Title>
               <Dialog.Description asChild>
                 <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-[--color-text-tertiary] m-0">
-                  {t("earnings.settings_modal.subtitle")}
+                  Model, template &amp; data sources
                 </p>
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
-                aria-label={t("earnings.settings_modal.close_aria")}
+                aria-label="Close settings"
                 className="text-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
               >
                 <X size={16} />
@@ -113,20 +148,121 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
           </header>
 
           <div className="flex-1 overflow-y-auto px-6 py-5">
+            {/* Model */}
             <section className="mb-7">
-              <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
-                {t("earnings.settings_modal.length_title")}
-              </h3>
+              {sectionTitle("Model")}
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
-                {t("earnings.settings_modal.length_hint")}
+                The model used to write every Earnings Update report.
               </p>
+              <EuModelPicker
+                onChange={(sel) =>
+                  sel &&
+                  setDraft((d) => ({
+                    ...d,
+                    provider_kind: sel.provider_kind,
+                    model: sel.model,
+                  }))
+                }
+              />
+            </section>
+
+            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+
+            {/* Template */}
+            <section className="mb-7">
+              {sectionTitle("Template")}
+              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+                The report skeleton. Upload your own to customize structure.
+              </p>
+              <div className="flex items-center gap-2">
+                <select
+                  value={draft.template_id}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, template_id: e.target.value }))
+                  }
+                  data-testid="eu-v2-template-select"
+                  className="flex-1 h-9 rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
+                >
+                  {sortedTemplates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                      {tpl.is_builtin ? "" : " (custom)"}
+                    </option>
+                  ))}
+                </select>
+                {activeTemplate && !activeTemplate.is_builtin ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteTemplate()}
+                    aria-label="Delete template"
+                    data-testid="eu-v2-template-delete"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[--color-border-subtle] text-[--color-text-secondary] hover:text-[--color-feedback-danger] hover:border-[--color-feedback-danger] transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setUploadOpen(true)}
+                  data-testid="eu-v2-template-upload-open"
+                  className="inline-flex items-center h-9 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px] whitespace-nowrap"
+                >
+                  Upload template
+                </button>
+              </div>
+            </section>
+
+            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+
+            {/* Connectors */}
+            <section className="mb-7">
+              {sectionTitle("Data sources")}
+              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+                Tools the engine may call while researching.
+              </p>
+              <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden divide-y divide-[--color-border-subtle]">
+                <Toggle
+                  on={draft.financial_enabled}
+                  onClick={() =>
+                    setDraft((d) => ({ ...d, financial_enabled: !d.financial_enabled }))
+                  }
+                  testId="eu-v2-connector-financial"
+                  label="Financial data (fundamentals, prices)"
+                />
+                <Toggle
+                  on={draft.calendar_enabled}
+                  onClick={() =>
+                    setDraft((d) => ({ ...d, calendar_enabled: !d.calendar_enabled }))
+                  }
+                  testId="eu-v2-connector-calendar"
+                  label="Earnings calendar"
+                />
+                <Toggle
+                  on={draft.web_search_enabled}
+                  onClick={() =>
+                    setDraft((d) => ({
+                      ...d,
+                      web_search_enabled: !d.web_search_enabled,
+                    }))
+                  }
+                  testId="eu-v2-connector-web_search"
+                  label="Web search"
+                />
+              </div>
+            </section>
+
+            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+
+            {/* Length */}
+            <section className="mb-7">
+              {sectionTitle("Length")}
               <div
                 role="radiogroup"
-                aria-label={t("earnings.settings_modal.length_aria")}
-                className="inline-flex gap-1 p-1 bg-[--color-surface-hover] rounded-lg"
+                aria-label="Report length"
+                className="inline-flex gap-1 p-1 bg-[--color-surface-hover] rounded-lg mt-2"
               >
                 {LENGTH_IDS.map((id) => {
-                  const active = length === id;
+                  const active = draft.length === id;
                   return (
                     <button
                       key={id}
@@ -134,7 +270,7 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
                       role="radio"
                       aria-checked={active}
                       aria-label={id}
-                      onClick={() => setLength(id)}
+                      onClick={() => setDraft((d) => ({ ...d, length: id }))}
                       className={[
                         "px-3.5 py-1.5 rounded-md text-[13px] transition-all duration-[--duration-fast]",
                         active
@@ -142,7 +278,7 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
                           : "text-[--color-text-secondary] hover:text-[--color-text-primary]",
                       ].join(" ")}
                     >
-                      {t(`earnings.settings_modal.length_${id}`)}
+                      {LENGTH_LABELS[id]}
                     </button>
                   );
                 })}
@@ -151,103 +287,51 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
 
             <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
 
-            <section className="mb-7">
-              <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
-                {t("earnings.settings_modal.sections_title")}
-              </h3>
-              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
-                {t("earnings.settings_modal.sections_hint")}
-              </p>
-              <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden">
-                {defaultRows.map((row, idx) => {
-                  const on = enabled.has(row.id);
-                  return (
-                    <label
-                      key={row.id}
-                      className={[
-                        "flex items-center justify-between gap-4 px-4 py-3.5 cursor-pointer hover:bg-[--color-surface-hover] transition-colors",
-                        idx < defaultRows.length - 1
-                          ? "border-b border-[--color-border-subtle]"
-                          : "",
-                      ].join(" ")}
-                    >
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="text-[13.5px] font-medium text-[--color-text-primary]">
-                          {row.title}
-                        </span>
-                        <span className="text-[12px] text-[--color-text-secondary] leading-[1.4]">
-                          {row.description}
-                        </span>
-                      </div>
-                      <span
-                        role="switch"
-                        aria-checked={on}
-                        className={[
-                          "relative w-10 h-6 rounded-full flex-shrink-0 transition-colors",
-                          on
-                            ? "bg-[--color-accent-primary]"
-                            : "bg-[--color-border-subtle]",
-                        ].join(" ")}
-                      >
-                        <span
-                          className={[
-                            "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-[left]",
-                            on ? "left-5" : "left-1",
-                          ].join(" ")}
-                        />
-                      </span>
-                      <input
-                        type="checkbox"
-                        aria-label={row.title}
-                        checked={on}
-                        onChange={() => toggle(row.id)}
-                        className="sr-only"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+            {/* Language */}
+            <section className={draft.provider_kind === "anthropic" ? "mb-7" : "mb-2"}>
+              {sectionTitle("Language")}
+              <select
+                value={draft.language}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, language: e.target.value }))
+                }
+                data-testid="eu-v2-language-select"
+                className="mt-2 h-9 w-[200px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
+              >
+                <option value="en">English</option>
+                <option value="zh-Hant">繁體中文</option>
+              </select>
             </section>
 
-            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
-
-            <section className="mb-2">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-[15px] font-semibold text-[--color-text-primary]">
-                  {t("earnings.settings_modal.custom_title")}
-                </h3>
-                <button
-                  type="button"
-                  onClick={addCustom}
-                  className="inline-flex items-center h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px]"
-                >
-                  {t("earnings.settings_modal.custom_button")}
-                </button>
-              </div>
-              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
-                {t("earnings.settings_modal.custom_hint")}
-              </p>
-              {customs.length === 0 ? (
-                <div className="border border-dashed border-[--color-border-subtle] rounded-md px-4 py-6 text-center text-[12.5px] text-[--color-text-tertiary]">
-                  {t("earnings.settings_modal.custom_empty")}
-                </div>
-              ) : (
-                customs.map((c, idx) => (
-                  <CustomSectionRow
-                    key={c.id}
-                    value={c}
-                    onChange={(next) =>
-                      setCustoms((prev) =>
-                        prev.map((x, i) => (i === idx ? next : x)),
-                      )
+            {/* Reasoning effort — Anthropic only */}
+            {draft.provider_kind === "anthropic" ? (
+              <>
+                <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+                <section className="mb-2">
+                  {sectionTitle("Reasoning effort")}
+                  <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-2">
+                    Higher effort yields deeper analysis at greater cost.
+                  </p>
+                  <select
+                    value={draft.reasoning_effort ?? ""}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        reasoning_effort: (e.target.value || null) as ReasoningEffort,
+                      }))
                     }
-                    onRemove={() =>
-                      setCustoms((prev) => prev.filter((_, i) => i !== idx))
-                    }
-                  />
-                ))
-              )}
-            </section>
+                    data-testid="eu-v2-reasoning-select"
+                    className="h-9 w-[200px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
+                  >
+                    {REASONING_OPTIONS.map((opt) => (
+                      <option key={opt.label} value={opt.value ?? ""}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </section>
+              </>
+            ) : null}
           </div>
 
           <footer className="flex items-center justify-end gap-2 px-5 h-14 border-t border-[--color-border-subtle] flex-shrink-0">
@@ -256,21 +340,26 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
               onClick={onClose}
               className="inline-flex items-center h-9 px-4 rounded-md border border-[--color-border-subtle] bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:border-[--color-border-strong] transition-colors text-[13px] font-medium"
             >
-              {t("earnings.settings_modal.cancel")}
+              Cancel
             </button>
             <button
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
+              data-testid="eu-v2-settings-save"
               className="inline-flex items-center h-9 px-5 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] disabled:opacity-50 transition-colors"
             >
-              {saving
-                ? t("earnings.settings_modal.saving")
-                : t("earnings.settings_modal.save")}
+              {saving ? "Saving…" : "Save"}
             </button>
           </footer>
         </Dialog.Content>
       </Dialog.Portal>
+
+      <EuTemplateUploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUpload={handleUpload}
+      />
     </Dialog.Root>
   );
 }
