@@ -1,14 +1,18 @@
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { WatchlistEntry } from "../../api/earnings-update";
+import type {
+  EuScheduleEntry,
+  WatchlistEntry,
+} from "../../api/earnings-update";
 
 interface Props {
   entry: WatchlistEntry;
+  nextRelease?: EuScheduleEntry;
   onRemove: (id: string) => void;
 }
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
@@ -17,7 +21,7 @@ function formatDate(iso: string | null): string {
   });
 }
 
-function isPast(iso: string | null): boolean {
+function isPast(iso: string | null | undefined): boolean {
   if (!iso) return false;
   const d = new Date(iso);
   const today = new Date();
@@ -25,9 +29,11 @@ function isPast(iso: string | null): boolean {
   return d < today;
 }
 
-export function WatchlistCard({ entry, onRemove }: Props) {
+export function WatchlistCard({ entry, nextRelease, onRemove }: Props) {
   const { t } = useTranslation();
-  const overdue = isPast(entry.next_earnings_date);
+  const fiscalDate = nextRelease?.fiscal_date ?? null;
+  const timing = nextRelease?.release_timing ?? null;
+  const overdue = isPast(fiscalDate);
   return (
     <div
       role="group"
@@ -60,22 +66,22 @@ export function WatchlistCard({ entry, onRemove }: Props) {
         {entry.company_name}
       </div>
       <div className="text-sm font-medium text-[--color-text-primary] mt-1">
-        {formatDate(entry.next_earnings_date)}
+        {fiscalDate ? formatDate(fiscalDate) : t("earnings.watchlist_card.no_upcoming_date")}
       </div>
       {overdue ? (
         <span className="text-xs rounded-full px-2 py-0.5 bg-[--color-surface-hover] text-[--color-text-tertiary]">
           {t("earnings.watchlist_card.date_passed")}
         </span>
-      ) : entry.release_timing ? (
+      ) : timing ? (
         <span
           className={[
             "text-xs rounded-full px-2 py-0.5 w-fit",
-            entry.release_timing === "pre_market"
+            timing === "pre_market"
               ? "bg-[--color-info]/10 text-[--color-info]"
               : "bg-[--color-warning]/10 text-[--color-warning]",
           ].join(" ")}
         >
-          {entry.release_timing === "pre_market"
+          {timing === "pre_market"
             ? t("earnings.watchlist_card.pre_market")
             : t("earnings.watchlist_card.post_market")}
         </span>
