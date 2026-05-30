@@ -1,209 +1,194 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as client from "../client";
 import {
-  addWatchlistEntry,
-  createSchedule,
-  deleteSchedule,
-  fetchConfig,
-  fetchRecentReports,
-  fetchSchedules,
   fetchWatchlist,
-  removeWatchlistEntry,
-  reportStreamUrl,
-  updateConfig,
-  updateSchedule,
-  type EuConfig,
+  addWatchlistEntry,
+  syncWatchlist,
+  fetchSettings,
+  updateSettings,
+  fetchTemplates,
+  fetchSchedule,
+  startRun,
+  fetchRuns,
+  getRun,
+  deleteRun,
+  cancelRun,
+  runEventsUrl,
+  EU_TERMINAL_EVENT_TYPES,
 } from "../earnings-update";
 
-function okJson(body: unknown, status = 200) {
-  return {
-    ok: true,
-    status,
-    headers: { get: () => "application/json" },
-    json: async () => body,
-  } as unknown as Response;
+afterEach(() => { vi.restoreAllMocks(); });
+
+function mockJson(value: unknown) {
+  return vi.spyOn(client, "fetchJson").mockResolvedValue(value as never);
 }
 
-function ok204() {
-  return {
-    ok: true,
-    status: 204,
-    headers: { get: () => "" },
-    json: async () => null,
-  } as unknown as Response;
-}
-
-describe("earnings-update api client", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("fetchWatchlist GETs /watchlist", async () => {
-    const body = { entries: [] };
-    const fetchMock = vi.fn().mockResolvedValue(okJson(body));
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await fetchWatchlist();
-    expect(result).toEqual(body);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/watchlist");
-    expect(init.credentials).toBe("include");
+describe("earnings-update v2 client", () => {
+  it("fetchWatchlist hits v2 watchlist", async () => {
+    const spy = mockJson({ entries: [] });
+    await fetchWatchlist();
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/watchlist",
+    );
   });
 
   it("addWatchlistEntry POSTs ticker", async () => {
-    const body = {
-      id: "x",
-      ticker: "AAPL",
-      company_name: "Apple Inc.",
-      next_earnings_date: "2026-04-25",
-      release_timing: "post_market",
-    };
-    const fetchMock = vi.fn().mockResolvedValue(okJson(body, 201));
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await addWatchlistEntry("AAPL");
-    expect(result.ticker).toBe("AAPL");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/watchlist");
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ ticker: "AAPL" });
-  });
-
-  it("removeWatchlistEntry DELETEs the entry id", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(ok204());
-    vi.stubGlobal("fetch", fetchMock);
-    await removeWatchlistEntry("xyz");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/watchlist/xyz");
-    expect(init.method).toBe("DELETE");
-  });
-
-  it("fetchConfig GETs /config", async () => {
-    const body: EuConfig = {
-      report_length: "normal",
-      enabled_section_ids: ["quick_take"],
-      custom_sections: [],
-    };
-    const fetchMock = vi.fn().mockResolvedValue(okJson(body));
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await fetchConfig();
-    expect(result).toEqual(body);
-    const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/config");
-  });
-
-  it("updateConfig PUTs the full body", async () => {
-    const body: EuConfig = {
-      report_length: "concise",
-      enabled_section_ids: [],
-      custom_sections: [],
-    };
-    const fetchMock = vi.fn().mockResolvedValue(okJson(body));
-    vi.stubGlobal("fetch", fetchMock);
-    await updateConfig({
-      report_length: "concise",
-      enabled_section_ids: ["quick_take"],
-      custom_sections: [],
+    const spy = mockJson({
+      id: "1",
+      ticker: "MSFT.US",
+      company_name: null,
+      created_at: "",
     });
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/config");
-    expect(init.method).toBe("PUT");
-    const sent = JSON.parse(init.body as string);
-    expect(sent.enabled_section_ids).toEqual(["quick_take"]);
+    await addWatchlistEntry("MSFT.US");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/watchlist",
+      { method: "POST", json: { ticker: "MSFT.US" } },
+    );
   });
 
-  it("fetchSchedules GETs /schedules and wraps the list", async () => {
-    const row = {
-      id: "s1",
-      user_id: "u1",
-      time: "06:00",
-      timezone: "America/New_York",
-      days_of_week: [0, 1],
-      label: "a",
-      is_enabled: true,
-      created_at: "2026-04-20T00:00:00Z",
-      last_run_at: null,
-    };
-    const fetchMock = vi.fn().mockResolvedValue(okJson([row]));
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await fetchSchedules();
-    expect(result.schedules).toHaveLength(1);
-    expect(result.schedules[0].id).toBe("s1");
-    const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/schedules");
+  it("syncWatchlist POSTs to /watchlist/sync", async () => {
+    const spy = mockJson({ synced: 2 });
+    const r = await syncWatchlist();
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/watchlist/sync",
+      { method: "POST" },
+    );
+    expect(r.synced).toBe(2);
   });
 
-  it("createSchedule POSTs", async () => {
-    const row = {
-      id: "s1",
-      user_id: "u1",
-      time: "06:00",
-      timezone: "America/New_York",
-      days_of_week: [1],
-      label: "a",
-      is_enabled: true,
-      created_at: "2026-04-20T00:00:00Z",
-      last_run_at: null,
+  it("updateSettings PUTs settings", async () => {
+    const settings = {
+      provider_kind: "anthropic",
+      model: "claude-sonnet-4-6",
+      template_id: "eu_default",
+      language: "en",
+      length: "normal" as const,
+      reasoning_effort: null,
+      financial_enabled: true,
+      calendar_enabled: true,
+      web_search_enabled: false,
     };
-    const fetchMock = vi.fn().mockResolvedValue(okJson(row, 201));
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await createSchedule({
-      time: "06:00",
-      timezone: "America/New_York",
-      days_of_week: [1],
-      label: "a",
-      is_enabled: true,
+    const spy = mockJson(settings);
+    await updateSettings(settings);
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/settings",
+      { method: "PUT", json: settings },
+    );
+  });
+
+  it("fetchSettings GETs settings", async () => {
+    const spy = mockJson({
+      provider_kind: "anthropic",
+      model: "claude-sonnet-4-6",
+      template_id: "eu_default",
+      language: "en",
+      length: "normal",
+      reasoning_effort: null,
+      financial_enabled: true,
+      calendar_enabled: true,
+      web_search_enabled: false,
     });
-    expect(result.id).toBe("s1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/schedules");
-    expect(init.method).toBe("POST");
+    await fetchSettings();
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/settings",
+    );
   });
 
-  it("updateSchedule PATCHes the schedule id", async () => {
-    const row = {
-      id: "s1",
-      user_id: "u1",
-      time: "07:00",
-      timezone: "America/New_York",
-      days_of_week: [1],
-      label: "b",
-      is_enabled: true,
-      created_at: "2026-04-20T00:00:00Z",
-      last_run_at: null,
-    };
-    const fetchMock = vi.fn().mockResolvedValue(okJson(row));
-    vi.stubGlobal("fetch", fetchMock);
-    await updateSchedule("s1", {
-      time: "07:00",
-      timezone: "America/New_York",
-      days_of_week: [1],
-      label: "b",
-      is_enabled: true,
+  it("fetchTemplates GETs templates", async () => {
+    const spy = mockJson({ templates: [] });
+    await fetchTemplates();
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/templates",
+    );
+  });
+
+  it("fetchSchedule GETs schedule", async () => {
+    const spy = mockJson({ schedule: [] });
+    await fetchSchedule();
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/schedule",
+    );
+  });
+
+  it("startRun returns report_id", async () => {
+    mockJson({ report_id: "r1" });
+    const r = await startRun({ ticker: "AAPL.US" });
+    expect(r.report_id).toBe("r1");
+  });
+
+  it("fetchRuns passes status filter", async () => {
+    const spy = mockJson([]);
+    await fetchRuns("completed");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/runs?status=completed",
+    );
+  });
+
+  it("fetchRuns without filter omits query string", async () => {
+    const spy = mockJson([]);
+    await fetchRuns();
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/runs",
+    );
+  });
+
+  it("getRun fetches run detail by id", async () => {
+    const spy = mockJson({
+      report: {
+        report_id: "r1",
+        ticker: "AAPL.US",
+        subject: "AAPL.US Q3",
+        template_id: "eu_default",
+        trigger_kind: "on_demand",
+        fiscal_date: null,
+        language: "en",
+        length: "normal",
+        status: "completed",
+        created_at: "",
+        completed_at: null,
+        reasoning_effort: null,
+      },
+      error_message: null,
+      sections: [],
+      charts: [],
+      citations: [],
+      cover: null,
     });
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/schedules/s1");
-    expect(init.method).toBe("PATCH");
+    await getRun("r1");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/runs/r1",
+    );
   });
 
-  it("deleteSchedule DELETEs", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okJson({ deleted: "s1" }));
-    vi.stubGlobal("fetch", fetchMock);
-    await deleteSchedule("s1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/schedules/s1");
-    expect(init.method).toBe("DELETE");
+  it("deleteRun DELETEs by id", async () => {
+    const spy = mockJson(null);
+    await deleteRun("r1");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/runs/r1",
+      { method: "DELETE" },
+    );
   });
 
-  it("fetchRecentReports GETs /reports with limit", async () => {
-    const body = { reports: [] };
-    const fetchMock = vi.fn().mockResolvedValue(okJson(body));
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await fetchRecentReports(7);
-    expect(result).toEqual(body);
-    const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/departments/earnings-update/reports?limit=7");
+  it("runEventsUrl builds the SSE path", () => {
+    expect(runEventsUrl("r1")).toBe(
+      "/api/departments/earnings-update/v2/runs/r1/events",
+    );
   });
 
-  it("reportStreamUrl returns the POST endpoint path", () => {
-    expect(reportStreamUrl()).toBe("/api/departments/earnings-update/report");
+  it("cancelRun POSTs cancel", async () => {
+    const spy = mockJson({ cancelled: true });
+    await cancelRun("r1");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/runs/r1/cancel",
+      { method: "POST" },
+    );
+  });
+
+  it("terminal event set covers run.completed/failed/cancelled/snapshot", () => {
+    expect(EU_TERMINAL_EVENT_TYPES.has("run.completed")).toBe(true);
+    expect(EU_TERMINAL_EVENT_TYPES.has("run.failed")).toBe(true);
+    expect(EU_TERMINAL_EVENT_TYPES.has("run.cancelled")).toBe(true);
+    expect(EU_TERMINAL_EVENT_TYPES.has("run.snapshot")).toBe(true);
+    expect(EU_TERMINAL_EVENT_TYPES.has("section.written")).toBe(false);
   });
 });
