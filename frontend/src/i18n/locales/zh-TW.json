@@ -758,7 +758,8 @@
       "remove_aria": "移除 {{ticker}}",
       "date_passed": "日期已過",
       "pre_market": "盤前",
-      "post_market": "盤後"
+      "post_market": "盤後",
+      "no_upcoming_date": "尚無預定日期"
     },
     "watchlist_row": {
       "heading": "觀察名單",
@@ -800,7 +801,10 @@
       "rev_label": "營收",
       "eps_label": "EPS",
       "up_next_est_eps": "預估 EPS",
-      "up_next_rev": "營收"
+      "up_next_rev": "營收",
+      "up_next_pre_market": "盤前",
+      "up_next_post_market": "盤後",
+      "up_next_scheduled": "排程於 {{when}}"
     }
   },
   "macro": {
