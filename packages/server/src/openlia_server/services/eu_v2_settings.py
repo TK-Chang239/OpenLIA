@@ -31,6 +31,7 @@ class EuSettingsDTO:
     financial_enabled: bool
     calendar_enabled: bool
     web_search_enabled: bool
+    instructions_id: str | None
 
 
 def _row_to_dto(row: EuV2Settings) -> EuSettingsDTO:
@@ -45,6 +46,7 @@ def _row_to_dto(row: EuV2Settings) -> EuSettingsDTO:
         financial_enabled=row.financial_enabled,
         calendar_enabled=row.calendar_enabled,
         web_search_enabled=row.web_search_enabled,
+        instructions_id=row.instructions_id,
     )
 
 
@@ -63,6 +65,7 @@ def get_settings(db: Session, *, user_id: str) -> EuSettingsDTO:
             financial_enabled=True,
             calendar_enabled=True,
             web_search_enabled=False,
+            instructions_id=None,
         )
     return _row_to_dto(row)
 
@@ -80,6 +83,7 @@ def update_settings(
     financial_enabled: bool,
     calendar_enabled: bool,
     web_search_enabled: bool,
+    instructions_id: str | None = None,
 ) -> EuSettingsDTO:
     """Upsert the user's settings row and return the resulting DTO.
 
@@ -107,6 +111,7 @@ def update_settings(
             financial_enabled=financial_enabled,
             calendar_enabled=calendar_enabled,
             web_search_enabled=web_search_enabled,
+            instructions_id=instructions_id,
             created_at=now,
             updated_at=now,
         )
@@ -121,6 +126,7 @@ def update_settings(
         row.financial_enabled = financial_enabled
         row.calendar_enabled = calendar_enabled
         row.web_search_enabled = web_search_enabled
+        row.instructions_id = instructions_id
         row.updated_at = now
 
     db.commit()
