@@ -483,13 +483,23 @@ def _make_lifespan(
             mr_cache_store_lifespan = MRCacheStoreImpl()
             report_store_impl = ReportStoreImpl()
 
-            from openlia_server.services.eu_v2_scheduler_impl import (
-                EuV2CalendarSyncerImpl,
-                EuV2DispatcherImpl,
-            )
+            # EU v2 scheduler jobs are additive behind the engine gate:
+            # when EARNINGS_ENGINE_VERSION != v2, leave the syncer/dispatcher
+            # unset so build_scheduler_service skips registering the
+            # EU_V2_SYNC / EU_V2_DISPATCH executors and cadences entirely
+            # (mirrors the routes' per-request 503 gate).
+            from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 
-            eu_v2_syncer = EuV2CalendarSyncerImpl()
-            eu_v2_dispatcher = EuV2DispatcherImpl(session_factory=_sm)
+            eu_v2_syncer = None
+            eu_v2_dispatcher = None
+            if eu_v2_enabled():
+                from openlia_server.services.eu_v2_scheduler_impl import (
+                    EuV2CalendarSyncerImpl,
+                    EuV2DispatcherImpl,
+                )
+
+                eu_v2_syncer = EuV2CalendarSyncerImpl()
+                eu_v2_dispatcher = EuV2DispatcherImpl(session_factory=_sm)
 
             async with adapter:
                 scheduler_svc = build_scheduler_service(
