@@ -269,3 +269,38 @@ def test_run_start_handler_is_async():
     assert any(
         inspect.iscoroutinefunction(getattr(mod, n, None)) for n in dir(mod) if "start" in n.lower()
     )
+
+
+def test_data_sources_503_when_disabled(client_eu_v2_disabled):
+    r = client_eu_v2_disabled.get(f"{_BASE}/data-sources")
+    assert r.status_code == 503
+
+
+def test_data_sources_financial_unavailable_without_eodhd(client_eu_v2, monkeypatch):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    r = client_eu_v2.get(f"{_BASE}/data-sources")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["financial"]["available"] is False
+    assert body["financial"]["unavailable_reason"] == "eodhd_unconfigured"
+    assert body["earnings_calendar"]["available"] is False
+    assert body["other_connectors"] == []
+
+
+def test_data_sources_financial_available_with_env(client_eu_v2, monkeypatch):
+    monkeypatch.setenv("EODHD_API_KEY", "k")
+    r = client_eu_v2.get(f"{_BASE}/data-sources")
+    body = r.json()
+    assert body["financial"]["available"] is True
+    assert body["financial"]["provider_label"] == "EODHD"
+
+
+def test_data_sources_web_search_query_override(client_eu_v2, monkeypatch):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    r = client_eu_v2.get(
+        f"{_BASE}/data-sources",
+        params={"provider_kind": "anthropic", "model": "claude-sonnet-4-6"},
+    )
+    body = r.json()
+    assert body["web_search"]["available"] is True
+    assert body["web_search"]["provider_label"] == "claude-sonnet-4-6"
