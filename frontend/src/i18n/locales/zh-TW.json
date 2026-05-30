@@ -777,7 +777,22 @@
       "reasoning_hint": "強度越高，分析越深入，成本也越高。",
       "reasoning_default": "預設",
       "reasoning_medium": "中",
-      "reasoning_high": "高"
+      "reasoning_high": "高",
+      "instructions_title": "指示",
+      "instructions_hint": "分析師撰寫時依循的選用方法論設定檔。",
+      "instructions_none": "無",
+      "instructions_custom_suffix": "（自訂）",
+      "instructions_upload": "上傳指示",
+      "instructions_delete_aria": "刪除指示設定檔",
+      "instructions_delete_confirm": "確定刪除此指示設定檔？",
+      "instructions_untitled": "未命名指示",
+      "instructions_upload_title": "上傳指示",
+      "instructions_upload_close_aria": "關閉",
+      "instructions_upload_file_label": "檔案（.pdf、.docx、.md、.txt）",
+      "instructions_upload_choose_file": "選擇檔案",
+      "instructions_upload_name_label": "顯示名稱",
+      "instructions_upload_preview": "儲存時伺服器會擷取文件內容，並作為分析師指示提供給模型。",
+      "instructions_upload_unsupported": "不支援的檔案類型：{{filename}}。請使用 .pdf、.docx、.md 或 .txt。"
     },
     "schedule_manager": {
       "heading": "掃描排程",
