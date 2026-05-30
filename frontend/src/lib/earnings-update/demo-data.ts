@@ -1,7 +1,13 @@
-import type {
-  RecentReport,
-  WatchlistEntry,
-} from "../../api/earnings-update";
+import type { WatchlistEntry } from "../../api/earnings-update";
+
+// Temporary v1 shape kept for demo-data only; removed from the live API.
+interface RecentReport {
+  id: string;
+  title: string;
+  subject: string;
+  report_type: string;
+  created_at: string;
+}
 
 export function isDemoMode(): boolean {
   if (typeof window === "undefined") return false;
@@ -79,55 +85,13 @@ export function getDemoReports(): RecentReport[] {
 
 export function getDemoWatchlist(): WatchlistEntry[] {
   return [
-    {
-      id: "demo-w-aapl",
-      ticker: "AAPL",
-      company_name: "Apple Inc.",
-      next_earnings_date: null,
-      release_timing: "post_market",
-    },
-    {
-      id: "demo-w-msft",
-      ticker: "MSFT",
-      company_name: "Microsoft Corporation",
-      next_earnings_date: null,
-      release_timing: "post_market",
-    },
-    {
-      id: "demo-w-nvda",
-      ticker: "NVDA",
-      company_name: "NVIDIA Corporation",
-      next_earnings_date: "2026-05-21",
-      release_timing: "post_market",
-    },
-    {
-      id: "demo-w-googl",
-      ticker: "GOOGL",
-      company_name: "Alphabet Inc.",
-      next_earnings_date: null,
-      release_timing: "post_market",
-    },
-    {
-      id: "demo-w-tsla",
-      ticker: "TSLA",
-      company_name: "Tesla, Inc.",
-      next_earnings_date: null,
-      release_timing: "post_market",
-    },
-    {
-      id: "demo-w-amzn",
-      ticker: "AMZN",
-      company_name: "Amazon.com, Inc.",
-      next_earnings_date: "2026-05-08",
-      release_timing: "post_market",
-    },
-    {
-      id: "demo-w-xom",
-      ticker: "XOM",
-      company_name: "Exxon Mobil Corporation",
-      next_earnings_date: "2026-05-08",
-      release_timing: "pre_market",
-    },
+    { id: "demo-w-aapl", ticker: "AAPL", company_name: "Apple Inc.", created_at: "" },
+    { id: "demo-w-msft", ticker: "MSFT", company_name: "Microsoft Corporation", created_at: "" },
+    { id: "demo-w-nvda", ticker: "NVDA", company_name: "NVIDIA Corporation", created_at: "" },
+    { id: "demo-w-googl", ticker: "GOOGL", company_name: "Alphabet Inc.", created_at: "" },
+    { id: "demo-w-tsla", ticker: "TSLA", company_name: "Tesla, Inc.", created_at: "" },
+    { id: "demo-w-amzn", ticker: "AMZN", company_name: "Amazon.com, Inc.", created_at: "" },
+    { id: "demo-w-xom", ticker: "XOM", company_name: "Exxon Mobil Corporation", created_at: "" },
   ];
 }
 
