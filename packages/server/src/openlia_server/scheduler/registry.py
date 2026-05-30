@@ -19,6 +19,8 @@ class JobType(StrEnum):
     GRAPH_EXTRACTION = "graph_extraction"
     SYSTEM_MAINTENANCE = "system_maintenance"
     PORTFOLIO_PRICE_REFRESH = "portfolio_price_refresh"
+    EU_V2_SYNC = "eu_v2_sync"
+    EU_V2_DISPATCH = "eu_v2_dispatch"
 
 
 class JobStatus(StrEnum):
@@ -37,6 +39,8 @@ class NotificationType(StrEnum):
 
 MAINTENANCE_JOB_KEY = "system_maintenance"
 PORTFOLIO_PRICE_REFRESH_KEY = "portfolio_price_refresh"
+EU_V2_SYNC_KEY = "eu_v2_sync"
+EU_V2_DISPATCH_KEY = "eu_v2_dispatch"
 
 
 _DEPARTMENT_BY_JOB: dict[JobType, str] = {
@@ -46,6 +50,8 @@ _DEPARTMENT_BY_JOB: dict[JobType, str] = {
     JobType.RS_SNAPSHOT: "retail_sentiment",
     JobType.GRAPH_EXTRACTION: "secretary",
     JobType.PORTFOLIO_PRICE_REFRESH: "portfolio",
+    JobType.EU_V2_SYNC: "earnings_update_v2",
+    JobType.EU_V2_DISPATCH: "earnings_update_v2",
 }
 
 
@@ -66,6 +72,10 @@ def job_key(
     if job_type is JobType.PORTFOLIO_PRICE_REFRESH:
         # Global job — no per-user keying.
         return PORTFOLIO_PRICE_REFRESH_KEY
+    if job_type is JobType.EU_V2_SYNC:
+        return EU_V2_SYNC_KEY
+    if job_type is JobType.EU_V2_DISPATCH:
+        return EU_V2_DISPATCH_KEY
     if not user_id:
         raise ValueError(f"user_id required for job_type={job_type.value}")
     base = f"{job_type.value}:{user_id}"
@@ -81,6 +91,10 @@ def parse_job_key(key: str) -> tuple[JobType, str | None]:
         return (JobType.SYSTEM_MAINTENANCE, None)
     if key == PORTFOLIO_PRICE_REFRESH_KEY:
         return (JobType.PORTFOLIO_PRICE_REFRESH, None)
+    if key == EU_V2_SYNC_KEY:
+        return (JobType.EU_V2_SYNC, None)
+    if key == EU_V2_DISPATCH_KEY:
+        return (JobType.EU_V2_DISPATCH, None)
     prefix, _, rest = key.partition(":")
     try:
         job_type = JobType(prefix)
