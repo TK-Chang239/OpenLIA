@@ -15,6 +15,7 @@ import logging
 import os
 from typing import Any
 
+from openlia.connectors.types import ConnectorStatus
 from openlia.llm.runtime.report_eu import EuDataTransports
 from sqlalchemy.orm import Session
 
@@ -89,7 +90,7 @@ def resolve_eodhd_api_key(db: Session) -> str | None:
     from openlia_server.services import connectors_service
 
     for connector in connectors_service.list_connectors(db):
-        if connector.provider_id == "eodhd" and connector.status == "validated":
+        if connector.provider_id == "eodhd" and connector.status == ConnectorStatus.VALIDATED.value:
             key = (connector.secrets or {}).get("EODHD_API_KEY")
             if key:
                 return key
