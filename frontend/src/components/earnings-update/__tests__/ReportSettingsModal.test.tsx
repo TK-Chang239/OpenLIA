@@ -38,6 +38,7 @@ function mockDataSources(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   mockDataSources();
+  vi.spyOn(euApi, "listEuInstructions").mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -49,6 +50,7 @@ function renderModal(onSave = vi.fn().mockResolvedValue(base)) {
     { id: "m1", provider_kind: "anthropic", model_ref: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6", is_enabled: true } as never,
   ]);
   vi.spyOn(euApi, "fetchTemplates").mockResolvedValue({ templates: [{ id: "eu_default", name: "Earnings Update (Default)", is_builtin: true, created_at: "", updated_at: "" }] });
+  vi.spyOn(euApi, "listEuInstructions").mockResolvedValue([]);
   return { onSave, ...render(<ReportSettingsModal settings={base} onSave={onSave} onClose={() => {}} />) };
 }
 

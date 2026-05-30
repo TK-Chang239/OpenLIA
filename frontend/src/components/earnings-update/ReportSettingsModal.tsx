@@ -7,20 +7,26 @@
  * reasoning effort. Keeps the v1 modal chrome — Radix dialog, header,
  * scrollable body, footer Save/Cancel — for visual continuity.
  */
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
   DataSourceSlot,
+  EuInstructionsSummary,
   EuSettings,
   ReasoningEffort,
   ReportLength,
 } from "../../api/earnings-update";
+import {
+  deleteEuInstructions,
+  listEuInstructions,
+} from "../../api/earnings-update";
 import { useEuDataSources } from "../../hooks/useEuDataSources";
 import { useEuTemplates } from "../../hooks/useEuTemplates";
 
+import { EuInstructionsUploadModal } from "./EuInstructionsUploadModal";
 import { EuModelPicker } from "./EuModelPicker";
 import { EuTemplateUploadModal } from "./EuTemplateUploadModal";
 
@@ -96,8 +102,18 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<EuSettings>(settings);
   const [saving, setSaving] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [instructions, setInstructions] = useState<EuInstructionsSummary[]>([]);
   const { templates, upload, remove } = useEuTemplates();
   const { dataSources } = useEuDataSources(draft.provider_kind, draft.model);
+
+  const refreshInstructions = useCallback(async () => {
+    setInstructions(await listEuInstructions());
+  }, []);
+
+  useEffect(() => {
+    void refreshInstructions();
+  }, [refreshInstructions]);
 
   const LENGTH_LABELS: Record<ReportLength, string> = {
     concise: t("earnings.settings_modal.length_concise"),
@@ -118,6 +134,33 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
   });
   const activeTemplate = templates.find((tpl) => tpl.id === draft.template_id);
 
+  // Built-in instruction profiles first, then user profiles by name.
+  const sortedInstructions = [...instructions].sort((a, b) => {
+    if (a.is_builtin !== b.is_builtin) return a.is_builtin ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  const activeInstructions = instructions.find(
+    (ins) => ins.id === draft.instructions_id,
+  );
+
+  async function handleInstructionsSaved(
+    profile: EuInstructionsSummary,
+  ): Promise<void> {
+    await refreshInstructions();
+    setDraft((d) => ({ ...d, instructions_id: profile.id }));
+    setInstructionsOpen(false);
+  }
+
+  async function handleDeleteInstructions(): Promise<void> {
+    if (!activeInstructions || activeInstructions.is_builtin) return;
+    if (!window.confirm(t("earnings.settings_modal.instructions_delete_confirm"))) {
+      return;
+    }
+    await deleteEuInstructions(activeInstructions.id);
+    await refreshInstructions();
+    setDraft((d) => ({ ...d, instructions_id: null }));
+  }
+
   async function handleUpload(name: string, markdown: string): Promise<void> {
     const created = await upload(name, markdown);
     setDraft((d) => ({ ...d, template_id: created.id }));
@@ -135,6 +178,7 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
     try {
       const sanitized: EuSettings = {
         ...draft,
+        instructions_id: draft.instructions_id ?? null,
         financial_enabled: draft.financial_enabled && !!dataSources?.financial.available,
         calendar_enabled:
           draft.calendar_enabled && !!dataSources?.earnings_calendar.available,
@@ -284,6 +328,60 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
                   className="inline-flex items-center h-9 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px] whitespace-nowrap"
                 >
                   {t("earnings.settings_modal.template_upload")}
+                </button>
+              </div>
+            </section>
+
+            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+
+            {/* Instructions */}
+            <section className="mb-7">
+              {sectionTitle(t("earnings.settings_modal.instructions_title"))}
+              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+                {t("earnings.settings_modal.instructions_hint")}
+              </p>
+              <div className="flex items-center gap-2">
+                <select
+                  value={draft.instructions_id ?? ""}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      instructions_id: e.target.value || null,
+                    }))
+                  }
+                  data-testid="eu-v2-instructions-select"
+                  className="flex-1 h-9 rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
+                >
+                  <option value="">
+                    {t("earnings.settings_modal.instructions_none")}
+                  </option>
+                  {sortedInstructions.map((ins) => (
+                    <option key={ins.id} value={ins.id}>
+                      {ins.name}
+                      {ins.is_builtin
+                        ? ""
+                        : t("earnings.settings_modal.instructions_custom_suffix")}
+                    </option>
+                  ))}
+                </select>
+                {activeInstructions && !activeInstructions.is_builtin ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteInstructions()}
+                    aria-label={t("earnings.settings_modal.instructions_delete_aria")}
+                    data-testid="eu-v2-instructions-delete"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[--color-border-subtle] text-[--color-text-secondary] hover:text-[--color-feedback-danger] hover:border-[--color-feedback-danger] transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setInstructionsOpen(true)}
+                  data-testid="eu-v2-instructions-upload-open"
+                  className="inline-flex items-center h-9 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px] whitespace-nowrap"
+                >
+                  {t("earnings.settings_modal.instructions_upload")}
                 </button>
               </div>
             </section>
@@ -458,6 +556,12 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         onUpload={handleUpload}
+      />
+
+      <EuInstructionsUploadModal
+        open={instructionsOpen}
+        onClose={() => setInstructionsOpen(false)}
+        onSaved={(profile) => void handleInstructionsSaved(profile)}
       />
     </Dialog.Root>
   );
