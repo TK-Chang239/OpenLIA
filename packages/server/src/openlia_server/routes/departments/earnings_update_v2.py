@@ -59,7 +59,10 @@ from openlia_server.services import eu_v2_run_service as run_svc
 from openlia_server.services import eu_v2_settings as settings_svc
 from openlia_server.services import eu_v2_template_service as templates_svc
 from openlia_server.services import eu_v2_watchlist as watchlist_svc
-from openlia_server.services.eu_v2_wiring import build_eu_v2_transports
+from openlia_server.services.eu_v2_wiring import (
+    build_eu_v2_transports,
+    resolve_eodhd_api_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -374,9 +377,9 @@ async def _sse_stream(
             yield _sse_frame(item.type, item.payload)
 
 
-def _resolve_eu_transports():
-    """Env-wired EODHD bundle, or ``None`` when EODHD is not configured."""
-    return build_eu_v2_transports()
+def _resolve_eu_transports(db: DBSession):
+    """EODHD bundle resolved from env or an installed connector, or None when unconfigured."""
+    return build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +547,7 @@ def build_earnings_update_v2_router(
         # Best-effort: pull the new ticker's forward calendar so the
         # schedule view fills in without waiting for the weekly sync. A
         # sync failure (no EODHD key, network) must never fail the add.
-        transports = _resolve_eu_transports()
+        transports = _resolve_eu_transports(db)
         if transports is not None:
             try:
                 calendar_sync.sync_user_watchlist(
@@ -588,7 +591,7 @@ def build_earnings_update_v2_router(
     ) -> SyncResultOut:
         if not eu_v2_enabled():
             raise _engine_disabled()
-        transports = _resolve_eu_transports()
+        transports = _resolve_eu_transports(db)
         if transports is None:
             # EODHD not configured — no data source to sync against. A
             # clean {synced: 0} keeps the UI flow simple (mirrors the
@@ -750,7 +753,7 @@ def build_earnings_update_v2_router(
             cancel_registry=cancel_registry,
             session_factory=db_session_factory,
             trigger_kind="on_demand",
-            transports=_resolve_eu_transports(),
+            transports=_resolve_eu_transports(db),
         )
         db.commit()
         return RunStartOut(report_id=report_id)
