@@ -126,3 +126,28 @@ def sync_user_watchlist(
 
     db.commit()
     return touched
+
+
+def sync_all_watchlists(
+    db: Session,
+    *,
+    earnings_calendar: EarningsCalendar,
+    now: datetime,
+) -> int:
+    """Sync every user that has at least one EU v2 watchlist entry.
+
+    Iterates the distinct ``user_id`` values in ``eu_v2_watchlist`` and
+    calls ``sync_user_watchlist`` for each, summing the per-user touched
+    counts. Returns the total number of pending rows inserted or updated.
+    """
+    user_ids = [row[0] for row in db.query(EuV2WatchlistEntry.user_id).distinct().all()]
+
+    total = 0
+    for user_id in user_ids:
+        total += sync_user_watchlist(
+            db,
+            user_id=user_id,
+            earnings_calendar=earnings_calendar,
+            now=now,
+        )
+    return total
