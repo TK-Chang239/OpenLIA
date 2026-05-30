@@ -1,9 +1,59 @@
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../api/earnings-update";
+import * as settingsApi from "../../api/settings";
+import * as viewer from "../../components/viewer/FileViewerContext";
 import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
 import EarningsUpdate from "./EarningsUpdate";
+
+const baseSettings: api.EuSettings = {
+  provider_kind: "anthropic",
+  model: "claude-sonnet-4-6",
+  template_id: "eu_default",
+  language: "en",
+  length: "normal",
+  reasoning_effort: null,
+  financial_enabled: true,
+  calendar_enabled: true,
+  web_search_enabled: false,
+};
+
+function makeRun(over: Partial<api.RunSummary>): api.RunSummary {
+  return {
+    report_id: "r1",
+    ticker: "AAPL",
+    subject: "Apple beats on Services",
+    template_id: "eu_default",
+    trigger_kind: "on_demand",
+    fiscal_date: null,
+    language: "en",
+    length: "normal",
+    status: "completed",
+    created_at: new Date().toISOString(),
+    completed_at: null,
+    reasoning_effort: null,
+    ...over,
+  };
+}
+
+function makeSchedule(
+  over: Partial<api.EuScheduleEntry>,
+): api.EuScheduleEntry {
+  return {
+    id: "s1",
+    ticker: "MSFT.US",
+    fiscal_date: "2099-06-15",
+    release_timing: "post_market",
+    eps_estimate: null,
+    revenue_estimate: null,
+    scheduled_run_at: "2099-06-15T23:00:00Z",
+    status: "pending",
+    attempts: 0,
+    report_id: null,
+    ...over,
+  };
+}
 
 function renderPage() {
   return render(
@@ -13,16 +63,15 @@ function renderPage() {
   );
 }
 
-describe("EarningsUpdatePage", () => {
+describe("EarningsUpdatePage (v2)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(api, "fetchWatchlist").mockResolvedValue({ entries: [] });
-    vi.spyOn(api, "fetchRecentReports").mockResolvedValue({ reports: [] });
-    vi.spyOn(api, "fetchConfig").mockResolvedValue({
-      report_length: "normal",
-      enabled_section_ids: [],
-      custom_sections: [],
-    });
+    vi.spyOn(api, "fetchRuns").mockResolvedValue([]);
+    vi.spyOn(api, "fetchSettings").mockResolvedValue(baseSettings);
+    vi.spyOn(api, "fetchSchedule").mockResolvedValue({ schedule: [] });
+    vi.spyOn(api, "fetchTemplates").mockResolvedValue({ templates: [] });
+    vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([]);
   });
 
   it("renders topbar with Coverage and Settings buttons", async () => {
@@ -35,114 +84,58 @@ describe("EarningsUpdatePage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows full-page empty state when watchlist + reports are empty", async () => {
+  it("shows full-page empty state when watchlist + runs are empty", async () => {
     renderPage();
     expect(await screen.findByTestId("eu-empty-page")).toBeInTheDocument();
   });
 
-  it("opens Coverage modal from topbar button", async () => {
+  it("renders the feed when runs exist", async () => {
+    vi.spyOn(api, "fetchRuns").mockResolvedValue([makeRun({})]);
     renderPage();
-    fireEvent.click(
-      await screen.findByRole("button", { name: /^coverage$/i }),
-    );
-    expect(
-      await screen.findByRole("dialog", { name: /coverage/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("renders feed sections when reports exist", async () => {
-    vi.spyOn(api, "fetchRecentReports").mockResolvedValue({
-      reports: [
-        {
-          id: "r1",
-          title: "Apple beats on Services",
-          subject: "AAPL",
-          report_type: "earnings_analysis",
-          created_at: new Date().toISOString(),
-        },
-      ],
-    });
-    renderPage();
-    expect(await screen.findByText(/Today's/i)).toBeInTheDocument();
-    expect(screen.getByText("Earlier this week")).toBeInTheDocument();
     expect(
       await screen.findByText(/Apple beats on Services/i),
     ).toBeInTheDocument();
+    expect(screen.getByText("Earlier this week")).toBeInTheDocument();
   });
 
-  it("opens on-demand modal from filter strip Ad-hoc button", async () => {
-    vi.spyOn(api, "fetchRecentReports").mockResolvedValue({
-      reports: [
-        {
-          id: "r1",
-          title: "Existing report",
-          subject: "AAPL",
-          report_type: "earnings_analysis",
-          created_at: new Date().toISOString(),
-        },
-      ],
+  it("renders schedule rows in the Up Next section", async () => {
+    vi.spyOn(api, "fetchRuns").mockResolvedValue([makeRun({})]);
+    vi.spyOn(api, "fetchSchedule").mockResolvedValue({
+      schedule: [makeSchedule({ ticker: "MSFT.US" })],
     });
     renderPage();
-    fireEvent.click(
-      await screen.findByRole("button", { name: /generate ad-hoc report/i }),
+    expect(await screen.findByText(/MSFT.US/)).toBeInTheDocument();
+  });
+
+  it("opens a report via fileViewer with the eu_v2_report source and report_id", async () => {
+    const openSpy = vi.fn();
+    vi.spyOn(viewer, "useFileViewer").mockReturnValue({
+      current: null,
+      lastTrigger: null,
+      open: openSpy,
+      close: vi.fn(),
+    } as unknown as ReturnType<typeof viewer.useFileViewer>);
+    vi.spyOn(api, "fetchRuns").mockResolvedValue([
+      makeRun({ report_id: "rX", ticker: "AAPL", subject: "Apple beats" }),
+    ]);
+    renderPage();
+    const open = await screen.findByText(/open update/i);
+    fireEvent.click(open);
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "report",
+        source: { kind: "eu_v2_report", reportId: "rX" },
+      }),
     );
+  });
+
+  it("shows the disabled banner when the engine returns 503", async () => {
+    vi.spyOn(api, "fetchRuns").mockRejectedValue(new Error("503 disabled"));
+    vi.spyOn(api, "fetchSettings").mockRejectedValue(new Error("503 disabled"));
+    renderPage();
     expect(
-      await screen.findByText(/On-Demand Earnings Update/),
+      await screen.findByTestId("eu-v2-disabled-banner"),
     ).toBeInTheDocument();
-  });
-
-  it("shows live big-card while on-demand stream is active", async () => {
-    vi.spyOn(api, "fetchRecentReports").mockResolvedValue({
-      reports: [
-        {
-          id: "seed",
-          title: "Seed",
-          subject: "MSFT",
-          report_type: "earnings_analysis",
-          created_at: new Date().toISOString(),
-        },
-      ],
-    });
-    let resolveStream: (
-      v: { report_id: string; title: string },
-    ) => void = () => {};
-    const startSpy = vi
-      .spyOn(api, "startOnDemandReport")
-      .mockImplementation(
-        () =>
-          new Promise<{ report_id: string; title: string }>((resolve) => {
-            resolveStream = resolve;
-          }),
-      );
-    renderPage();
-    fireEvent.click(
-      await screen.findByRole("button", { name: /generate ad-hoc report/i }),
-    );
-    fireEvent.change(
-      await screen.findByPlaceholderText(/ticker symbol/i),
-      { target: { value: "AAPL" } },
-    );
-    fireEvent.click(screen.getByRole("button", { name: /generate report/i }));
-    expect(await screen.findByTestId("eu-big-card")).toBeInTheDocument();
-    await act(async () => {
-      resolveStream({ report_id: "r1", title: "AAPL Earnings" });
-    });
-    await waitFor(() =>
-      expect(screen.getByText(/AAPL Earnings/i)).toBeInTheDocument(),
-    );
-    expect(startSpy).toHaveBeenCalledWith({ ticker: "AAPL" });
-  });
-
-  it("renders error banner with retry when fetch fails", async () => {
-    vi.spyOn(api, "fetchWatchlist").mockRejectedValue(new Error("boom"));
-    renderPage();
-    const banner = await screen.findByRole("alert");
-    expect(banner.textContent).toMatch(/Failed to load earnings data/i);
-
-    const fetchSpy = vi.spyOn(api, "fetchWatchlist").mockResolvedValue({
-      entries: [],
-    });
-    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
   });
 });

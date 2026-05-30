@@ -9,7 +9,7 @@ const base: api.EuSettings = {
   financial_enabled: true, calendar_enabled: true, web_search_enabled: false,
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe("useEuSettings", () => {
   it("loads settings then saves", async () => {

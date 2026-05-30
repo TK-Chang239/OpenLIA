@@ -1,12 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Briefcase, Settings as SettingsIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import {
-  deleteReport,
-  startOnDemandReport,
-  type RecentReport,
-} from "../../api/earnings-update";
+import { deleteRun, type RunSummary } from "../../api/earnings-update";
 import { CoverageModal } from "../../components/earnings-update/CoverageModal";
 import { EUCabinetView } from "../../components/earnings-update/EUCabinetView";
 import { OnDemandReportModal } from "../../components/earnings-update/OnDemandReportModal";
@@ -27,28 +23,21 @@ import {
   type FeedFilter,
 } from "../../components/earnings-update/feed/feedHelpers";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
-import { useEuConfig } from "../../hooks/useEuConfig";
-import { useEuReports } from "../../hooks/useEuReports";
+import { useEuRuns } from "../../hooks/useEuRuns";
+import { useEuRunStream } from "../../hooks/useEuRunStream";
+import { useEuSchedule } from "../../hooks/useEuSchedule";
+import { useEuSettings } from "../../hooks/useEuSettings";
 import { useEuWatchlist } from "../../hooks/useEuWatchlist";
-import {
-  DEMO_REPORT_META,
-  getDemoHeroStats,
-  getDemoUpNext,
-  isDemoMode,
-} from "../../lib/earnings-update/demo-data";
 
 interface LiveCard {
   ticker: string;
-  status: "streaming" | "complete";
-  reportId: string | null;
-  title: string;
+  reportId: string;
 }
 
-function findReport(
-  reports: RecentReport[],
-  reportId: string,
-): RecentReport | undefined {
-  return reports.find((r) => r.id === reportId);
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function findRun(runs: RunSummary[], reportId: string): RunSummary | undefined {
+  return runs.find((r) => r.report_id === reportId);
 }
 
 function Skeleton({ className = "" }: { className?: string }) {
@@ -71,81 +60,100 @@ export default function EarningsUpdate() {
     refresh: refreshWatchlist,
   } = useEuWatchlist();
   const {
-    reports,
-    refresh: refreshReports,
-    loading: reportsLoading,
-    error: reportsError,
-  } = useEuReports(30);
-  const { config, save: saveConfig } = useEuConfig();
+    runs,
+    refresh: refreshRuns,
+    loading: runsLoading,
+    error: runsError,
+    disabled: runsDisabled,
+  } = useEuRuns();
+  const { settings, save: saveSettings, disabled: settingsDisabled } =
+    useEuSettings();
+  const { schedule } = useEuSchedule();
 
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [cabinetOpen, setCabinetOpen] = useState(false);
   const [onDemandOpen, setOnDemandOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [liveCard, setLiveCard] = useState<LiveCard | null>(null);
+  const [live, setLive] = useState<LiveCard | null>(null);
   const [filter, setFilter] = useState<FeedFilter>("all");
   const [search, setSearch] = useState("");
 
   const fv = useFileViewer();
+  const stream = useEuRunStream(live?.reportId ?? null);
 
   const openReport = useCallback(
-    (id: string, fallback?: RecentReport) => {
-      const match = fallback ?? findReport(reports, id);
+    (reportId: string) => {
+      const match = findRun(runs, reportId);
       fv.open({
-        filename: match?.title ?? "Earnings Update",
+        filename: match?.subject ?? "Earnings Update",
         kind: "report",
-        metadata: match?.subject ? `EU • ${match.subject}` : "Earnings Update",
-        source: { kind: "report", reportId: id },
+        metadata: match ? `EU v2 · ${match.ticker}` : "Earnings Update",
+        source: { kind: "eu_v2_report", reportId },
       });
     },
-    [fv, reports],
+    [fv, runs],
   );
 
   const removeReport = useCallback(
-    async (id: string) => {
-      await deleteReport(id);
-      await refreshReports();
+    async (reportId: string) => {
+      await deleteRun(reportId);
+      await refreshRuns();
     },
-    [refreshReports],
+    [refreshRuns],
   );
 
   const retryFetch = useCallback(() => {
     void refreshWatchlist();
-    void refreshReports();
-  }, [refreshWatchlist, refreshReports]);
+    void refreshRuns();
+  }, [refreshWatchlist, refreshRuns]);
+
+  // When a live run completes, refresh the feed so the finished report
+  // appears in the regular list, then keep the live card linkable.
+  useEffect(() => {
+    if (stream.status === "completed") {
+      void refreshRuns();
+    }
+  }, [stream.status, refreshRuns]);
 
   const filtered = useMemo(
-    () => applyFilter(reports, filter, { watchlist: entries, search }),
-    [reports, filter, entries, search],
+    () => applyFilter(runs, filter, { watchlist: entries, search }),
+    [runs, filter, entries, search],
   );
 
   const groups = useMemo(() => groupReports(filtered), [filtered]);
 
   const todayReports = useMemo(
     () =>
-      liveCard?.status === "complete" && liveCard.reportId
-        ? groups.today.filter((r) => r.id !== liveCard.reportId)
-        : groups.today,
-    [groups.today, liveCard],
+      live ? groups.today.filter((r) => r.report_id !== live.reportId) : groups.today,
+    [groups.today, live],
   );
 
-  const demo = isDemoMode();
-  const heroToday = !liveCard && todayReports.length > 0 ? todayReports[0] : null;
+  const heroToday = !live && todayReports.length > 0 ? todayReports[0] : null;
   const restToday = heroToday ? todayReports.slice(1) : todayReports;
-  const heroMeta = heroToday ? DEMO_REPORT_META[heroToday.id] : undefined;
-  const upNext = demo ? getDemoUpNext() : [];
-  const stats = demo ? getDemoHeroStats() : null;
 
-  const hasError = Boolean(watchlistError || reportsError);
-  const initialLoading = watchlistLoading || reportsLoading;
+  const upNext = useMemo(
+    () => schedule.filter((s) => s.status === "pending"),
+    [schedule],
+  );
+
+  const reportsThisWeek = useMemo(() => {
+    const now = Date.now();
+    return runs.filter((r) => {
+      const ts = new Date(r.created_at).getTime();
+      return !Number.isNaN(ts) && now - ts < WEEK_MS;
+    }).length;
+  }, [runs]);
+
+  const disabled = runsDisabled || settingsDisabled;
+  const hasError = Boolean(watchlistError || runsError);
+  const initialLoading = watchlistLoading || runsLoading;
   const allEmpty =
     !initialLoading &&
     !hasError &&
+    !disabled &&
     entries.length === 0 &&
-    reports.length === 0 &&
-    !liveCard;
-
-  const reportsThisWeek = stats?.reportsThisWeek ?? (reports.length === 0 ? null : reports.length);
+    runs.length === 0 &&
+    !live;
 
   function formatHeroStamp(iso: string): string {
     const d = new Date(iso);
@@ -160,6 +168,11 @@ export default function EarningsUpdate() {
       .replace(/^0/, "");
     return `${date} · ${time} ET`;
   }
+
+  const liveTitle =
+    stream.status === "completed"
+      ? t("earnings.report_ready")
+      : t("earnings.generating_report", { ticker: live?.ticker ?? "" });
 
   return (
     <div className="flex flex-col h-full">
@@ -187,6 +200,16 @@ export default function EarningsUpdate() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1200px] mx-auto px-8 pt-7 pb-16">
+          {disabled ? (
+            <div
+              data-testid="eu-v2-disabled-banner"
+              className="mb-4 flex items-center gap-3 border border-[--color-border-subtle] rounded-[--radius-md] px-4 py-2.5 text-sm text-[--color-text-secondary] bg-[--color-surface-hover]"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[--color-feedback-warning] flex-shrink-0" />
+              {t("earnings.disabled_banner")}
+            </div>
+          ) : null}
+
           {hasError ? (
             <div
               role="alert"
@@ -233,11 +256,11 @@ export default function EarningsUpdate() {
             <>
               <div className="animate-feed-fade-up">
                 <EuHero
-                  reportsThisWeek={reportsThisWeek}
-                  beats={stats?.beats ?? null}
-                  misses={stats?.misses ?? null}
-                  avgSurprise={stats?.avgSurprise ?? null}
-                  avgLatency={stats?.avgLatency ?? null}
+                  reportsThisWeek={runs.length === 0 ? null : reportsThisWeek}
+                  beats={null}
+                  misses={null}
+                  avgSurprise={null}
+                  avgLatency={null}
                   watchlistEmpty={entries.length === 0}
                 />
               </div>
@@ -258,57 +281,54 @@ export default function EarningsUpdate() {
                 className="animate-feed-fade-up"
                 style={{ animationDelay: "160ms" }}
               >
-              <EuFeedSection
-                label={t("earnings.today")}
-                count={todayReports.length + (liveCard ? 1 : 0)}
-              >
-                {liveCard ? (
-                  <div className="mb-2">
-                    <EuBigCard
-                      ticker={liveCard.ticker}
-                      title={liveCard.title}
-                      status={liveCard.status}
-                      reportId={liveCard.reportId}
-                      onOpen={(id) => openReport(id)}
-                    />
-                  </div>
-                ) : null}
-                {!liveCard && heroToday ? (
-                  <div className="mb-2">
-                    <EuBigCard
-                      ticker={heroToday.subject ?? ""}
-                      title={heroToday.title}
-                      subtitle={heroMeta?.summary}
-                      stamp={formatHeroStamp(heroToday.created_at)}
-                      status="complete"
-                      reportId={heroToday.id}
-                      onOpen={(id) => openReport(id)}
-                      meta={heroMeta}
-                    />
-                  </div>
-                ) : null}
-                {todayReports.length === 0 && !liveCard ? (
-                  <EuSectionEmpty
-                    message={
-                      filter === "all"
-                        ? t("earnings.no_prints_today")
-                        : t("earnings.no_matching_prints_today")
-                    }
-                  />
-                ) : null}
-                {restToday.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {restToday.map((r) => (
-                      <EuReportRow
-                        key={r.id}
-                        report={r}
-                        onOpen={(id) => openReport(id)}
-                        meta={DEMO_REPORT_META[r.id]}
+                <EuFeedSection
+                  label={t("earnings.today")}
+                  count={todayReports.length + (live ? 1 : 0)}
+                >
+                  {live ? (
+                    <div className="mb-2">
+                      <EuBigCard
+                        ticker={live.ticker}
+                        title={liveTitle}
+                        status={stream.status === "completed" ? "complete" : "streaming"}
+                        reportId={stream.status === "completed" ? live.reportId : null}
+                        onOpen={openReport}
                       />
-                    ))}
-                  </div>
-                ) : null}
-              </EuFeedSection>
+                    </div>
+                  ) : null}
+                  {heroToday ? (
+                    <div className="mb-2">
+                      <EuBigCard
+                        ticker={heroToday.ticker}
+                        title={heroToday.subject}
+                        stamp={formatHeroStamp(heroToday.created_at)}
+                        status="complete"
+                        reportId={heroToday.report_id}
+                        onOpen={openReport}
+                      />
+                    </div>
+                  ) : null}
+                  {todayReports.length === 0 && !live ? (
+                    <EuSectionEmpty
+                      message={
+                        filter === "all"
+                          ? t("earnings.no_prints_today")
+                          : t("earnings.no_matching_prints_today")
+                      }
+                    />
+                  ) : null}
+                  {restToday.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      {restToday.map((r) => (
+                        <EuReportRow
+                          key={r.report_id}
+                          report={r}
+                          onOpen={openReport}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </EuFeedSection>
               </div>
 
               <div
@@ -320,11 +340,13 @@ export default function EarningsUpdate() {
                   count={upNext.length}
                 >
                   {upNext.length === 0 ? (
-                    <EuSectionEmpty message={t("earnings.calendar_wiring_pending")} />
+                    <EuSectionEmpty
+                      message={t("earnings.no_upcoming_earnings")}
+                    />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       {upNext.map((u) => (
-                        <EuUpNextCard key={u.id} item={u} />
+                        <EuUpNextCard key={u.id} entry={u} />
                       ))}
                     </div>
                   )}
@@ -351,10 +373,9 @@ export default function EarningsUpdate() {
                     <div className="flex flex-col gap-2">
                       {groups.earlierThisWeek.map((r) => (
                         <EuReportRow
-                          key={r.id}
+                          key={r.report_id}
                           report={r}
-                          onOpen={(id) => openReport(id)}
-                          meta={DEMO_REPORT_META[r.id]}
+                          onOpen={openReport}
                         />
                       ))}
                     </div>
@@ -362,7 +383,7 @@ export default function EarningsUpdate() {
                 </EuFeedSection>
               </div>
 
-              {reports.length > 0 ? (
+              {runs.length > 0 ? (
                 <div className="mt-7 flex justify-center">
                   <button
                     type="button"
@@ -382,8 +403,8 @@ export default function EarningsUpdate() {
         open={coverageOpen}
         entries={entries}
         onClose={() => setCoverageOpen(false)}
-        onAdd={async (t) => {
-          await add(t);
+        onAdd={async (ticker) => {
+          await add(ticker);
         }}
         onRemove={async (id) => {
           await remove(id);
@@ -392,50 +413,29 @@ export default function EarningsUpdate() {
 
       <OnDemandReportModal
         open={onDemandOpen}
+        watchlist={entries}
         onClose={() => setOnDemandOpen(false)}
-        entries={entries}
-        startReport={async (payload) => {
-          setLiveCard({
-            ticker: payload.ticker,
-            status: "streaming",
-            reportId: null,
-            title: t("earnings.generating_report", { ticker: payload.ticker }),
-          });
-          try {
-            return await startOnDemandReport(payload);
-          } catch (err) {
-            setLiveCard(null);
-            throw err;
-          }
-        }}
-        onReportReady={(r) => {
-          setLiveCard({
-            ticker: liveCard?.ticker ?? "",
-            status: "complete",
-            reportId: r.report_id,
-            title: r.title,
-          });
-          void refreshReports();
+        onStarted={(reportId, ticker) => {
+          setLive({ reportId, ticker });
         }}
       />
+
       {cabinetOpen ? (
         <EUCabinetView
-          reports={reports}
+          reports={runs}
           onBack={() => setCabinetOpen(false)}
-          onOpenReport={(id) => openReport(id)}
+          onOpenReport={openReport}
           onRemove={async (id) => {
             await removeReport(id);
           }}
         />
       ) : null}
-      {settingsOpen && config ? (
+
+      {settingsOpen && settings ? (
         <ReportSettingsModal
-          open
-          config={config}
+          settings={settings}
           onClose={() => setSettingsOpen(false)}
-          onSave={async (next) => {
-            await saveConfig(next);
-          }}
+          onSave={saveSettings}
         />
       ) : null}
     </div>

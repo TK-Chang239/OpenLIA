@@ -1,21 +1,45 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { EuScheduleEntry } from "../../../api/earnings-update";
 import { WatchlistCard } from "../WatchlistCard";
 
-// Use a far-future date so the timing badge always renders regardless of
-// the test runner's wall clock.
 const baseEntry = {
   id: "1",
   ticker: "AAPL",
   company_name: "Apple Inc.",
-  next_earnings_date: "2099-12-31",
-  release_timing: "post_market" as const,
+  created_at: "2026-01-01T00:00:00Z",
 };
 
+// Use a far-future fiscal date so the timing badge always renders
+// regardless of the test runner's wall clock.
+function release(
+  overrides: Partial<EuScheduleEntry> = {},
+): EuScheduleEntry {
+  return {
+    id: "s1",
+    ticker: "AAPL",
+    fiscal_date: "2099-12-31",
+    release_timing: "post_market",
+    eps_estimate: null,
+    revenue_estimate: null,
+    scheduled_run_at: "2099-12-31T23:00:00Z",
+    status: "pending",
+    attempts: 0,
+    report_id: null,
+    ...overrides,
+  };
+}
+
 describe("WatchlistCard", () => {
-  it("renders ticker, company, date, timing badge", () => {
-    render(<WatchlistCard entry={baseEntry} onRemove={() => {}} />);
+  it("renders ticker, company, date, timing badge from nextRelease", () => {
+    render(
+      <WatchlistCard
+        entry={baseEntry}
+        nextRelease={release()}
+        onRemove={() => {}}
+      />,
+    );
     expect(screen.getByText("AAPL")).toBeInTheDocument();
     expect(screen.getByText("Apple Inc.")).toBeInTheDocument();
     expect(screen.getByText(/Dec 31/)).toBeInTheDocument();
@@ -23,7 +47,13 @@ describe("WatchlistCard", () => {
   });
 
   it("post-market badge uses warning color classes", () => {
-    render(<WatchlistCard entry={baseEntry} onRemove={() => {}} />);
+    render(
+      <WatchlistCard
+        entry={baseEntry}
+        nextRelease={release()}
+        onRemove={() => {}}
+      />,
+    );
     const badge = screen.getByText(/Post-Market/i);
     expect(badge.className).toContain("--color-warning");
   });
@@ -31,7 +61,8 @@ describe("WatchlistCard", () => {
   it("pre-market badge uses info color classes", () => {
     render(
       <WatchlistCard
-        entry={{ ...baseEntry, release_timing: "pre_market" }}
+        entry={baseEntry}
+        nextRelease={release({ release_timing: "pre_market" })}
         onRemove={() => {}}
       />,
     );
@@ -40,10 +71,10 @@ describe("WatchlistCard", () => {
   });
 
   it("renders Date passed state with error border when date is in the past", () => {
-    const overdueDate = "2026-04-22";
     const { container } = render(
       <WatchlistCard
-        entry={{ ...baseEntry, next_earnings_date: overdueDate }}
+        entry={baseEntry}
+        nextRelease={release({ fiscal_date: "2026-04-22" })}
         onRemove={() => {}}
       />,
     );
@@ -59,13 +90,8 @@ describe("WatchlistCard", () => {
     expect(onRemove).toHaveBeenCalledWith("1");
   });
 
-  it("renders N/A when no earnings date cached", () => {
-    render(
-      <WatchlistCard
-        entry={{ ...baseEntry, next_earnings_date: null, release_timing: null }}
-        onRemove={() => {}}
-      />,
-    );
-    expect(screen.getByText(/—|N\/A|Pending/i)).toBeInTheDocument();
+  it("shows the neutral no-upcoming-date label when no nextRelease", () => {
+    render(<WatchlistCard entry={baseEntry} onRemove={() => {}} />);
+    expect(screen.getByText(/No upcoming date/i)).toBeInTheDocument();
   });
 });

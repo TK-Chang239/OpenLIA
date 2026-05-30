@@ -654,6 +654,9 @@
     "earlier_this_week": "本週稍早",
     "calendar_wiring_pending": "財報行事曆連線設定中",
     "generating_report": "{{ticker}} 財報更新生成中...",
+    "no_upcoming_earnings": "目前沒有排定的財報",
+    "report_ready": "報告已就緒",
+    "disabled_banner": "財報更新 v2 已停用。請設定 EARNINGS_ENGINE_VERSION=v2 以啟用。",
     "schedule_modal": {
       "edit_title": "編輯排程",
       "add_title": "新增排程",

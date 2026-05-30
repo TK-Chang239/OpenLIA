@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { RecentReport } from "../../api/earnings-update";
+import { RunSummary } from "../../api/earnings-update";
 import { ConfirmDialog } from "../primitives/ConfirmDialog";
 
 import { ReportRowItem } from "./ReportRowItem";
 
 interface Props {
-  reports: RecentReport[];
+  reports: RunSummary[];
   onBack: () => void;
   onOpenReport: (id: string) => void;
   onRemove: (id: string) => Promise<void>;
@@ -56,19 +56,19 @@ export function EUCabinetView({
     const needle = q.trim().toLowerCase();
     const tickerFilter = ticker.trim().toUpperCase();
     return reports.filter((r) => {
-      if (tickerFilter && (r.subject ?? "").toUpperCase() !== tickerFilter) {
+      if (tickerFilter && (r.ticker ?? "").toUpperCase() !== tickerFilter) {
         return false;
       }
       if (!needle) return true;
       return (
-        (r.subject ?? "").toLowerCase().includes(needle) ||
-        r.title.toLowerCase().includes(needle)
+        (r.ticker ?? "").toLowerCase().includes(needle) ||
+        r.subject.toLowerCase().includes(needle)
       );
     });
   }, [q, ticker, reports]);
 
   const groups = useMemo(() => {
-    const acc: Record<string, RecentReport[]> = {};
+    const acc: Record<string, RunSummary[]> = {};
     for (const r of filtered) {
       const k = monthKey(r.created_at);
       (acc[k] ??= []).push(r);
@@ -123,7 +123,7 @@ export function EUCabinetView({
           </h3>
           {items.map((r) => (
             <ReportRowItem
-              key={r.id}
+              key={r.report_id}
               report={r}
               onOpen={onOpenReport}
               showExtras

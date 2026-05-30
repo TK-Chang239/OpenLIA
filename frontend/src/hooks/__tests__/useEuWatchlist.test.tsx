@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "../../api/earnings-update";
 import { useEuWatchlist } from "../useEuWatchlist";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe("useEuWatchlist (v2)", () => {
   it("loads, adds, and removes entries", async () => {
