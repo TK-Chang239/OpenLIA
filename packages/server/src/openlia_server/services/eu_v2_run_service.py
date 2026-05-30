@@ -91,6 +91,16 @@ def build_run_request(
     """
     del trigger_kind  # persisted on the row, not part of the engine request
     settings = eu_v2_settings.get_settings(db, user_id=user_id)
+    instructions_text: str | None = None
+    if settings.instructions_id:
+        from openlia_server.services import eu_v2_instructions_service
+
+        try:
+            instructions_text = eu_v2_instructions_service.resolve_instructions(
+                db=db, user_id=user_id, instructions_id=settings.instructions_id
+            )
+        except eu_v2_instructions_service.InstructionsNotFoundError:
+            instructions_text = None
     template = eu_v2_template_service.resolve_template(
         db, user_id=user_id, template_id=settings.template_id
     )
@@ -127,6 +137,7 @@ def build_run_request(
         ),
         enabled_connectors=connectors,
         trigger_context=trigger_context,
+        instructions=instructions_text,
     )
 
 

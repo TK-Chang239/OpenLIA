@@ -131,6 +131,71 @@ def test_build_run_request_subject_falls_back_to_ticker(db_session_with_seed):
     assert req.reasoning_effort.value == "high"
 
 
+def test_build_run_request_resolves_selected_instructions(db_session_with_seed):
+    from openlia_server.services import eu_v2_instructions_service
+
+    profile = eu_v2_instructions_service.create_instructions_from_upload(
+        db=db_session_with_seed,
+        user_id="u-1",
+        name="My methodology",
+        body_text="Lead with the surprise. Quantify everything.",
+    )
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=False,
+        calendar_enabled=False,
+        web_search_enabled=False,
+        instructions_id=profile.id,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.instructions == "Lead with the surprise. Quantify everything."
+
+
+def test_build_run_request_instructions_none_when_unset(db_session_with_seed):
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=False,
+        calendar_enabled=False,
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.instructions is None
+
+
 def _fake_session() -> tuple[LLMSession, FakeLLMProvider]:
     """A real LLMSession with a scripted fake adapter attached.
 
