@@ -12,7 +12,13 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { EuSettings, ReasoningEffort, ReportLength } from "../../api/earnings-update";
+import type {
+  DataSourceSlot,
+  EuSettings,
+  ReasoningEffort,
+  ReportLength,
+} from "../../api/earnings-update";
+import { useEuDataSources } from "../../hooks/useEuDataSources";
 import { useEuTemplates } from "../../hooks/useEuTemplates";
 
 import { EuModelPicker } from "./EuModelPicker";
@@ -41,14 +47,23 @@ function Toggle({
   onClick,
   testId,
   label,
+  disabled = false,
 }: {
   on: boolean;
   onClick: () => void;
   testId: string;
   label: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center justify-between gap-4 px-4 py-3.5 cursor-pointer hover:bg-[--color-surface-hover] transition-colors">
+    <label
+      className={[
+        "flex items-center justify-between gap-4 px-4 py-3.5 transition-colors",
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : "cursor-pointer hover:bg-[--color-surface-hover]",
+      ].join(" ")}
+    >
       <span className="text-[13.5px] font-medium text-[--color-text-primary]">
         {label}
       </span>
@@ -58,16 +73,17 @@ function Toggle({
         aria-checked={on}
         aria-label={label}
         data-testid={testId}
-        onClick={onClick}
+        disabled={disabled}
+        onClick={disabled ? undefined : onClick}
         className={[
           "relative w-10 h-6 rounded-full flex-shrink-0 transition-colors",
-          on ? "bg-[--color-accent-primary]" : "bg-[--color-border-subtle]",
+          on && !disabled ? "bg-[--color-accent-primary]" : "bg-[--color-border-subtle]",
         ].join(" ")}
       >
         <span
           className={[
             "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-[left]",
-            on ? "left-5" : "left-1",
+            on && !disabled ? "left-5" : "left-1",
           ].join(" ")}
         />
       </button>
@@ -81,6 +97,7 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const { templates, upload, remove } = useEuTemplates();
+  const { dataSources } = useEuDataSources(draft.provider_kind, draft.model);
 
   const LENGTH_LABELS: Record<ReportLength, string> = {
     concise: t("earnings.settings_modal.length_concise"),
@@ -116,11 +133,62 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
   async function handleSave() {
     setSaving(true);
     try {
-      await onSave(draft);
+      const sanitized: EuSettings = {
+        ...draft,
+        financial_enabled: draft.financial_enabled && !!dataSources?.financial.available,
+        calendar_enabled:
+          draft.calendar_enabled && !!dataSources?.earnings_calendar.available,
+        web_search_enabled: draft.web_search_enabled && !!dataSources?.web_search.available,
+      };
+      await onSave(sanitized);
       onClose();
     } finally {
       setSaving(false);
     }
+  }
+
+  function slotLabel(
+    base: string,
+    slot: DataSourceSlot | undefined,
+    isWebSearch: boolean,
+  ): string {
+    if (!slot?.available || !slot.provider_label) return base;
+    const provider = isWebSearch
+      ? t("earnings.settings_modal.ds_via", { provider: slot.provider_label })
+      : slot.provider_label;
+    return `${base} · ${provider}`;
+  }
+
+  function reasonText(slot: DataSourceSlot | undefined): string | null {
+    if (!slot || slot.available || !slot.unavailable_reason) return null;
+    return t(`earnings.settings_modal.ds_reason_${slot.unavailable_reason}`);
+  }
+
+  function renderSlot(
+    base: string,
+    slot: DataSourceSlot | undefined,
+    enabled: boolean,
+    onToggle: () => void,
+    testId: string,
+    isWebSearch = false,
+  ) {
+    const reason = reasonText(slot);
+    return (
+      <div key={testId}>
+        <Toggle
+          on={enabled && !!slot?.available}
+          onClick={onToggle}
+          testId={testId}
+          label={slotLabel(base, slot, isWebSearch)}
+          disabled={!slot?.available}
+        />
+        {reason ? (
+          <p className="px-4 pb-3 -mt-1 text-[12px] text-[--color-text-tertiary] leading-[1.4]">
+            {reason}
+          </p>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -225,35 +293,58 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
                 {t("earnings.settings_modal.connectors_hint")}
               </p>
-              <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden divide-y divide-[--color-border-subtle]">
-                <Toggle
-                  on={draft.financial_enabled}
-                  onClick={() =>
-                    setDraft((d) => ({ ...d, financial_enabled: !d.financial_enabled }))
-                  }
-                  testId="eu-v2-connector-financial"
-                  label={t("earnings.settings_modal.connector_financial")}
-                />
-                <Toggle
-                  on={draft.calendar_enabled}
-                  onClick={() =>
-                    setDraft((d) => ({ ...d, calendar_enabled: !d.calendar_enabled }))
-                  }
-                  testId="eu-v2-connector-calendar"
-                  label={t("earnings.settings_modal.connector_calendar")}
-                />
-                <Toggle
-                  on={draft.web_search_enabled}
-                  onClick={() =>
-                    setDraft((d) => ({
-                      ...d,
-                      web_search_enabled: !d.web_search_enabled,
-                    }))
-                  }
-                  testId="eu-v2-connector-web_search"
-                  label={t("earnings.settings_modal.connector_web_search")}
-                />
-              </div>
+              {dataSources &&
+              !dataSources.financial.available &&
+              !dataSources.earnings_calendar.available &&
+              !dataSources.web_search.available ? (
+                <p
+                  data-testid="eu-v2-data-sources-empty"
+                  className="text-[13px] text-[--color-text-tertiary] leading-[1.5] border border-[--color-border-subtle] rounded-lg px-4 py-3"
+                >
+                  {t("earnings.settings_modal.ds_empty")}
+                </p>
+              ) : (
+                <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden divide-y divide-[--color-border-subtle]">
+                  {renderSlot(
+                    t("earnings.settings_modal.connector_financial"),
+                    dataSources?.financial,
+                    draft.financial_enabled,
+                    () =>
+                      setDraft((d) => ({ ...d, financial_enabled: !d.financial_enabled })),
+                    "eu-v2-connector-financial",
+                  )}
+                  {renderSlot(
+                    t("earnings.settings_modal.connector_calendar"),
+                    dataSources?.earnings_calendar,
+                    draft.calendar_enabled,
+                    () =>
+                      setDraft((d) => ({ ...d, calendar_enabled: !d.calendar_enabled })),
+                    "eu-v2-connector-calendar",
+                  )}
+                  {renderSlot(
+                    t("earnings.settings_modal.connector_web_search"),
+                    dataSources?.web_search,
+                    draft.web_search_enabled,
+                    () =>
+                      setDraft((d) => ({
+                        ...d,
+                        web_search_enabled: !d.web_search_enabled,
+                      })),
+                    "eu-v2-connector-web_search",
+                    true,
+                  )}
+                </div>
+              )}
+              {dataSources && dataSources.other_connectors.length > 0 ? (
+                <p
+                  data-testid="eu-v2-data-sources-other"
+                  className="mt-3 text-[12px] text-[--color-text-tertiary] leading-[1.5]"
+                >
+                  {t("earnings.settings_modal.ds_other_configured", {
+                    names: dataSources.other_connectors.map((c) => c.display_name).join(", "),
+                  })}
+                </p>
+              ) : null}
             </section>
 
             <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
