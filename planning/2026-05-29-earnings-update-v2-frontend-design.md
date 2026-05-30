@@ -163,3 +163,24 @@ Vitest, mirroring existing EU + v3 frontend tests:
 - No backend changes (render endpoints stay deferred; browser Print → PDF covers export).
 - Completion notifications.
 - Any redesign of the visual language — this is a wiring + controls adaptation, not a restyle.
+
+---
+
+## As-built notes (divergences from this spec, recorded per coding standard #9)
+
+Implemented on branch `feat/earnings-update-v2-frontend`. Status: all 15 plan tasks landed; `tsc --noEmit` clean, 115 EU-related tests green across 26 files, production build succeeds. Backend untouched.
+
+Divergences discovered against the real codebase:
+
+- **`RunSummary` primary key is `report_id`, not `id`** (backend `RunSummaryOut` maps `row.id` → `report_id`). All page wiring (open/delete/keys) uses `run.report_id`. The plan's illustrative `run.id` references are stale.
+- **API field shapes** were aligned to the backend `*Out` models: added `fiscal_date`/`language`/`length`/`completed_at`/`reasoning_effort` to `RunSummary`; `CoverMetric` typed (`label/value/change/tone`); chart field is `spec` (backend serializes `spec_json` → `spec`); citation field is `provenance`. `GET /runs` returns a bare array.
+- **`FileSource` exhaustiveness**: adding `eu_v2_report` also required a guard in `sourceUrl.ts` (exhaustive switch), beyond the plan's listed files.
+- **Demo mode removed**: the v1 `isDemoMode()` returned `true` in every real browser, so `useEuWatchlist` never hit the API. The demo gate was dropped and `src/lib/earnings-update/demo-data.ts` deleted (no importers after the rewire). `demo-reports.ts` (used by `api/reports.ts`) is unrelated and untouched.
+- **Orphan v1 hook** `src/hooks/useEuSchedules.ts` (plural, cron) was deleted — not in the plan's deletion list but required for a clean typecheck.
+- **`byTicker` filters to `status === "pending"`** so a past reported/skipped run can't shadow the upcoming date.
+- **Watchlist next-release join** is surfaced in `CoverageModal` (where the watchlist lives on this page), not on a standalone watchlist row — the page renders the watchlist via that modal.
+- **`EuTemplateUploadModal`** props were adapted from v3's `onSaved(template)` to an injected `onUpload(name, markdown)` so it routes to `useEuTemplates().upload`; the v3 source-doc-blob fields were dropped.
+- **Feed demo-only stats dropped**: `EuReportRow`/`EuBigCard` lost the demo verdict/revenue/EPS-surprise columns (they came from a removed `DEMO_REPORT_META`; no real backend field supplies them). The stats hero shows reports-this-week + pending-scheduled, per spec §8.
+- **i18n inconsistency (open follow-up)**: the rewritten `ReportSettingsModal` uses inline English labels (matching the cloned v3-style components like `EuModelPicker`), whereas the rest of the page and the new card components use `t()` keys (en + zh-TW were added for the Up Next / watchlist cards). If full bilingual parity on the settings modal is wanted, re-introducing `t()` keys there is a small follow-up.
+
+Strict-tsc note: Vitest `afterEach(() => vi.restoreAllMocks())` must use a block body (`() => { ... }`) — the bare arrow returns `VitestUtils`, which the project's strict `tsc` rejects.
