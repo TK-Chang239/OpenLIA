@@ -31,7 +31,17 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response, StreamingResponse
 from openlia.llm.runtime.report_eu import (
     CancelToken,
@@ -55,10 +65,16 @@ from openlia_server.middleware.auth import build_require_auth
 from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 from openlia_server.services import eu_v2_calendar_sync as calendar_sync
 from openlia_server.services import eu_v2_data_sources
+from openlia_server.services import eu_v2_instructions_service as instructions_svc
 from openlia_server.services import eu_v2_run_service as run_svc
 from openlia_server.services import eu_v2_settings as settings_svc
 from openlia_server.services import eu_v2_template_service as templates_svc
 from openlia_server.services import eu_v2_watchlist as watchlist_svc
+from openlia_server.services.attachments import (
+    FileUpload,
+    extract_text,
+    validate_uploads,
+)
 from openlia_server.services.eu_v2_wiring import (
     build_eu_v2_transports,
     resolve_eodhd_api_key,
@@ -82,6 +98,15 @@ class SettingsOut(BaseModel):
     financial_enabled: bool
     calendar_enabled: bool
     web_search_enabled: bool
+    instructions_id: str | None
+
+
+class InstructionsOut(BaseModel):
+    id: str
+    name: str
+    is_builtin: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 class DataSourceSlotOut(BaseModel):
@@ -112,6 +137,7 @@ class SettingsUpdateIn(BaseModel):
     financial_enabled: bool
     calendar_enabled: bool
     web_search_enabled: bool
+    instructions_id: str | None = None
 
 
 class WatchlistEntryOut(BaseModel):
@@ -439,6 +465,7 @@ def build_earnings_update_v2_router(
             financial_enabled=dto.financial_enabled,
             calendar_enabled=dto.calendar_enabled,
             web_search_enabled=dto.web_search_enabled,
+            instructions_id=dto.instructions_id,
         )
 
     @router.get("/data-sources", response_model=DataSourcesOut)
@@ -484,6 +511,7 @@ def build_earnings_update_v2_router(
                 financial_enabled=payload.financial_enabled,
                 calendar_enabled=payload.calendar_enabled,
                 web_search_enabled=payload.web_search_enabled,
+                instructions_id=payload.instructions_id,
             )
         except ValueError as exc:
             raise HTTPException(
@@ -499,6 +527,7 @@ def build_earnings_update_v2_router(
             financial_enabled=dto.financial_enabled,
             calendar_enabled=dto.calendar_enabled,
             web_search_enabled=dto.web_search_enabled,
+            instructions_id=dto.instructions_id,
         )
 
     # ----- Watchlist -----
@@ -669,6 +698,92 @@ def build_earnings_update_v2_router(
         try:
             templates_svc.soft_delete_template(db=db, user_id=user.id, template_id=template_id)
         except templates_svc.TemplateNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # ----- Instructions -----
+
+    @router.get("/instructions", response_model=list[InstructionsOut])
+    def list_instructions(
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> list[InstructionsOut]:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        rows = instructions_svc.list_instructions(db=db, user_id=user.id)
+        return [
+            InstructionsOut(
+                id=r.id,
+                name=r.name,
+                is_builtin=r.is_builtin,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    @router.post(
+        "/instructions",
+        status_code=status.HTTP_201_CREATED,
+        response_model=InstructionsOut,
+    )
+    async def upload_instructions(
+        name: str = Form(..., min_length=1, max_length=256),
+        file: UploadFile = File(...),
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> InstructionsOut:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        content = await file.read()
+        upload = FileUpload(
+            filename=file.filename or "unnamed",
+            mime_type=file.content_type or "application/octet-stream",
+            content=content,
+        )
+        errors = validate_uploads([upload])
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"errors": [{"filename": e.filename, "reason": e.reason} for e in errors]},
+            )
+        try:
+            row = instructions_svc.create_instructions_from_upload(
+                db=db,
+                user_id=user.id,
+                name=name,
+                body_text=extract_text(upload) or "",
+                source_doc_blob=content,
+                source_doc_mime=upload.mime_type,
+            )
+        except instructions_svc.InstructionsValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        db.commit()
+        return InstructionsOut(
+            id=row.id,
+            name=row.name,
+            is_builtin=row.is_builtin,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @router.delete(
+        "/instructions/{instructions_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def delete_instructions(
+        instructions_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        try:
+            instructions_svc.soft_delete_instructions(
+                db=db, user_id=user.id, instructions_id=instructions_id
+            )
+        except instructions_svc.InstructionsNotFoundError as exc:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
