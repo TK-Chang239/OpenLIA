@@ -14,8 +14,12 @@ class FakeEventSource {
   close() { this.readyState = 2; }
 }
 
+const originalEventSource = (globalThis as unknown as { EventSource: unknown }).EventSource;
 beforeEach(() => { (globalThis as unknown as { EventSource: unknown }).EventSource = FakeEventSource as unknown; });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  (globalThis as unknown as { EventSource: unknown }).EventSource = originalEventSource;
+  vi.restoreAllMocks();
+});
 
 describe("useEuRunStream", () => {
   it("counts sections and resolves to completed on run.completed", () => {
