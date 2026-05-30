@@ -25,6 +25,7 @@ export function useEuSchedule() {
   const byTicker = useMemo(() => {
     const m = new Map<string, EuScheduleEntry>();
     for (const row of schedule) {
+      if (row.status !== "pending") continue;
       const cur = m.get(row.ticker);
       if (!cur || row.scheduled_run_at < cur.scheduled_run_at) m.set(row.ticker, row);
     }
