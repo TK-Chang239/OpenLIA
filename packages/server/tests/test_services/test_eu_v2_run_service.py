@@ -223,6 +223,105 @@ async def test_start_run_async_completes_and_persists(db_session_with_seed, db_s
         assert len(sections) == 8
 
 
+def test_build_run_request_gates_financial_off_without_eodhd(monkeypatch, db_session_with_seed):
+    from openlia_server.db.models.auth import User
+    from openlia_server.services import eu_v2_run_service, eu_v2_settings
+
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    now = datetime.now(UTC)
+    if db_session_with_seed.get(User, "local") is None:
+        db_session_with_seed.add(
+            User(
+                id="local",
+                email="local@openlia.local",
+                display_name="Local",
+                password_hash=None,
+                is_admin=True,
+                is_disabled=False,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db_session_with_seed.flush()
+    eu_v2_settings.update_settings(
+        db_session_with_seed,
+        user_id="local",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=True,
+        calendar_enabled=True,
+        web_search_enabled=True,
+    )
+    req = eu_v2_run_service.build_run_request(
+        db_session_with_seed,
+        user_id="local",
+        ticker="AAPL.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.enabled_connectors.financial is False
+    assert req.enabled_connectors.earnings_calendar is False
+    assert req.enabled_connectors.web_search is True
+
+
+def test_build_run_request_gates_web_search_off_for_incapable_model(
+    monkeypatch, db_session_with_seed
+):
+    from openlia_server.db.models.auth import User
+    from openlia_server.services import eu_v2_run_service, eu_v2_settings
+
+    monkeypatch.setenv("EODHD_API_KEY", "k")
+    now = datetime.now(UTC)
+    if db_session_with_seed.get(User, "local") is None:
+        db_session_with_seed.add(
+            User(
+                id="local",
+                email="local@openlia.local",
+                display_name="Local",
+                password_hash=None,
+                is_admin=True,
+                is_disabled=False,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        db_session_with_seed.flush()
+    eu_v2_settings.update_settings(
+        db_session_with_seed,
+        user_id="local",
+        provider_kind="anthropic",
+        model="claude-haiku-4-5-20251001",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=True,
+        calendar_enabled=True,
+        web_search_enabled=True,
+    )
+    req = eu_v2_run_service.build_run_request(
+        db_session_with_seed,
+        user_id="local",
+        ticker="AAPL.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.enabled_connectors.financial is True
+    assert req.enabled_connectors.web_search is False
+
+
 def test_cleanup_orphaned_running_rows(db_session):
     """Stuck 'running' rows flipped to 'failed'; completed rows untouched."""
     now = datetime.now(UTC)
