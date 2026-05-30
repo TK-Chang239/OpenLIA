@@ -17,6 +17,7 @@ const baseSettings: api.EuSettings = {
   financial_enabled: true,
   calendar_enabled: true,
   web_search_enabled: false,
+  instructions_id: null,
 };
 
 function makeRun(over: Partial<api.RunSummary>): api.RunSummary {

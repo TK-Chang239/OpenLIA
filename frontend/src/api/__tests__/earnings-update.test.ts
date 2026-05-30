@@ -67,6 +67,7 @@ describe("earnings-update v2 client", () => {
       financial_enabled: true,
       calendar_enabled: true,
       web_search_enabled: false,
+      instructions_id: null,
     };
     const spy = mockJson(settings);
     await updateSettings(settings);
@@ -87,6 +88,7 @@ describe("earnings-update v2 client", () => {
       financial_enabled: true,
       calendar_enabled: true,
       web_search_enabled: false,
+      instructions_id: null,
     });
     await fetchSettings();
     expect(spy).toHaveBeenCalledWith(
