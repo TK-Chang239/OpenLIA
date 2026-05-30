@@ -68,7 +68,7 @@ export default function EarningsUpdate() {
   } = useEuRuns();
   const { settings, save: saveSettings, disabled: settingsDisabled } =
     useEuSettings();
-  const { schedule } = useEuSchedule();
+  const { schedule, byTicker } = useEuSchedule();
 
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [cabinetOpen, setCabinetOpen] = useState(false);
@@ -409,6 +409,7 @@ export default function EarningsUpdate() {
         onRemove={async (id) => {
           await remove(id);
         }}
+        nextReleaseByTicker={byTicker}
       />
 
       <OnDemandReportModal
