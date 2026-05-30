@@ -42,10 +42,23 @@ def test_bundle_when_key_set(monkeypatch):
 
 
 def test_resolve_eodhd_api_key_prefers_env(monkeypatch, db_session):
+    from openlia_server.db.models.connectors import Connector
     from openlia_server.services.eu_v2_wiring import resolve_eodhd_api_key
 
     monkeypatch.setenv("EODHD_API_KEY", "env-key")
-    assert resolve_eodhd_api_key(db_session) == "env-key"
+    db_session.add(
+        Connector(
+            id="c-eodhd",
+            provider_id="eodhd",
+            source="built_in",
+            category="financial",
+            launch={},
+            secrets={"EODHD_API_KEY": "db-key"},
+            status="validated",
+        )
+    )
+    db_session.commit()
+    assert resolve_eodhd_api_key(db_session) == "env-key"  # env wins over connector
 
 
 def test_resolve_eodhd_api_key_falls_back_to_validated_connector(monkeypatch, db_session):
