@@ -19,6 +19,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 @pytest.fixture
 def engine():
+    import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
+
     eng = create_engine("sqlite:///:memory:", future=True)
     Base.metadata.create_all(eng)
     try:

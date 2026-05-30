@@ -21,6 +21,8 @@ def test_job_types_match_spec() -> None:
         "graph_extraction",
         "system_maintenance",
         "portfolio_price_refresh",
+        "eu_v2_sync",
+        "eu_v2_dispatch",
     }
 
 
