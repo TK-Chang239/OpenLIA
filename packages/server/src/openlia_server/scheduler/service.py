@@ -29,6 +29,8 @@ from openlia_server.scheduler.recovery import (
     should_catch_up,
 )
 from openlia_server.scheduler.registry import (
+    EU_V2_DISPATCH_KEY,
+    EU_V2_SYNC_KEY,
     MAINTENANCE_JOB_KEY,
     PORTFOLIO_PRICE_REFRESH_KEY,
     JobType,
@@ -85,6 +87,7 @@ class SchedulerService:
 
         await self._register_maintenance_job()
         await self._register_portfolio_price_refresh_job()
+        await self._register_eu_v2_jobs()
 
         with self.session_factory() as session:
             enabled_user_ids = {
@@ -423,6 +426,38 @@ class SchedulerService:
                 max_instances=1,
                 coalesce=True,
             )
+
+    async def _register_eu_v2_jobs(self) -> None:
+        # Earnings Update v2 trigger pipeline. Both are global (all-users)
+        # jobs. Each is registered only when its executor is wired (i.e. the
+        # syncer/dispatcher was supplied to build_scheduler_service).
+        if JobType.EU_V2_SYNC in self.executors:
+            # Weekly watchlist calendar sync: Mondays 06:00 UTC.
+            await self.scheduler.add_schedule(
+                self._run_job,
+                CronTrigger(day_of_week="mon", hour=6, minute=0, timezone=UTC),
+                id=EU_V2_SYNC_KEY,
+                args=(JobType.EU_V2_SYNC, None, None),
+                misfire_grace_time=self.settings.misfire_grace_seconds,
+                max_instances=1,
+                coalesce=True,
+            )
+        else:
+            log.info("EU v2 sync executor not configured; skipping schedule")
+
+        if JobType.EU_V2_DISPATCH in self.executors:
+            # Hourly dispatch sweep: fire every due scheduled earnings run.
+            await self.scheduler.add_schedule(
+                self._run_job,
+                CronTrigger(minute=0, timezone=UTC),
+                id=EU_V2_DISPATCH_KEY,
+                args=(JobType.EU_V2_DISPATCH, None, None),
+                misfire_grace_time=self.settings.misfire_grace_seconds,
+                max_instances=1,
+                coalesce=True,
+            )
+        else:
+            log.info("EU v2 dispatch executor not configured; skipping schedule")
 
     async def _maybe_backfill(
         self,
