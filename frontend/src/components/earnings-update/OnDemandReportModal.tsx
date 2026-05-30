@@ -1,59 +1,46 @@
-import { useMemo, useState } from "react";
+/**
+ * OnDemandReportModal — kick off an Earnings Update v2 run for any ticker.
+ *
+ * Accepts a free-text ticker (watchlist tickers are offered as datalist
+ * suggestions, but any ticker is allowed). Starting a run only POSTs to
+ * ``/v2/runs/start`` and hands the new ``report_id`` back to the page,
+ * which owns the live-streaming card. The run uses the user's saved
+ * model & template — there is no per-run override here.
+ */
+import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { CheckCircle } from "lucide-react";
-import { useTranslation } from "react-i18next";
 
-import type { WatchlistEntry } from "../../api/earnings-update";
+import { startRun, type WatchlistEntry } from "../../api/earnings-update";
 
 interface Props {
   open: boolean;
+  watchlist: WatchlistEntry[];
   onClose: () => void;
-  onReportReady: (result: { report_id: string; title: string }) => void;
-  startReport: (payload: {
-    ticker: string;
-  }) => Promise<{ report_id: string; title: string }>;
-  entries?: WatchlistEntry[];
-}
-
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  onStarted: (reportId: string, ticker: string) => void;
 }
 
 export function OnDemandReportModal({
   open,
+  watchlist,
   onClose,
-  onReportReady,
-  startReport,
-  entries,
+  onStarted,
 }: Props) {
-  const { t } = useTranslation();
   const [ticker, setTicker] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const trimmed = ticker.trim().toUpperCase();
-  const matchedEntry = useMemo(() => {
-    if (!entries || !trimmed) return null;
-    return entries.find((e) => e.ticker.toUpperCase() === trimmed) ?? null;
-  }, [entries, trimmed]);
 
-  async function handleGenerate() {
+  async function handleStart() {
     setErr(null);
     setSubmitting(true);
     try {
-      const result = await startReport({
-        ticker: trimmed,
-      });
-      onReportReady(result);
+      const { report_id } = await startRun({ ticker: trimmed });
+      onStarted(report_id, trimmed);
+      setTicker("");
       onClose();
     } catch (e) {
-      setErr((e as Error).message ?? t("earnings.on_demand_modal.failed"));
+      setErr((e as Error).message ?? "Failed to start report");
     } finally {
       setSubmitting(false);
     }
@@ -65,38 +52,29 @@ export function OnDemandReportModal({
         <Dialog.Overlay className="fixed inset-0 bg-black/40" />
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] max-w-[480px] bg-[--color-bg-elevated] rounded-[--radius-lg] p-6 shadow-lg">
           <Dialog.Title className="text-lg font-semibold mb-1">
-            {t("earnings.on_demand_modal.title")}
+            On-demand earnings report
           </Dialog.Title>
           <Dialog.Description className="text-sm text-[--color-text-secondary] mb-4">
-            {t("earnings.on_demand_modal.description")}
+            Enter any ticker to generate an Earnings Update report now.
           </Dialog.Description>
           <input
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
-            placeholder={t("earnings.on_demand_modal.ticker_placeholder")}
+            list="eu-v2-ondemand-watchlist"
+            placeholder="Ticker (e.g. AAPL.US)"
+            data-testid="eu-v2-ondemand-ticker"
             className="w-full bg-[--color-bg-base] border border-[--color-border-subtle] rounded-[--radius-sm] px-3 h-9 text-sm text-[--color-text-primary]"
           />
-          {matchedEntry ? (
-            <div
-              data-testid="selected-company"
-              className="mt-2 flex items-center gap-2 text-sm text-[--color-text-primary]"
-            >
-              <CheckCircle
-                size={16}
-                className="text-[--color-feedback-success]"
-                aria-hidden
-              />
-              <span className="font-semibold">{matchedEntry.ticker}</span>
-              <span className="text-[--color-text-secondary]">
-                — {matchedEntry.company_name}
-              </span>
-              <span className="text-[--color-text-tertiary] ml-auto">
-                {t("earnings.on_demand_modal.last_earnings", {
-                  date: formatDate(matchedEntry.next_earnings_date),
-                })}
-              </span>
-            </div>
-          ) : null}
+          <datalist id="eu-v2-ondemand-watchlist">
+            {watchlist.map((e) => (
+              <option key={e.id} value={e.ticker}>
+                {e.company_name ?? e.ticker}
+              </option>
+            ))}
+          </datalist>
+          <p className="text-xs text-[--color-text-tertiary] mt-2">
+            Uses your saved model &amp; template — change in Settings.
+          </p>
           {err ? (
             <p className="text-xs text-[--color-feedback-error] mt-2">{err}</p>
           ) : null}
@@ -106,17 +84,16 @@ export function OnDemandReportModal({
               onClick={onClose}
               className="text-sm text-[--color-text-secondary] px-3 h-8 rounded-[--radius-md]"
             >
-              {t("earnings.on_demand_modal.cancel")}
+              Cancel
             </button>
             <button
               type="button"
               disabled={!trimmed || submitting}
-              onClick={() => void handleGenerate()}
+              onClick={() => void handleStart()}
+              data-testid="eu-v2-ondemand-start"
               className="text-sm bg-[--color-accent-primary] text-white px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover] disabled:opacity-50"
             >
-              {submitting
-                ? t("earnings.on_demand_modal.generating")
-                : t("earnings.on_demand_modal.generate")}
+              {submitting ? "Starting…" : "Generate report"}
             </button>
           </div>
         </Dialog.Content>
