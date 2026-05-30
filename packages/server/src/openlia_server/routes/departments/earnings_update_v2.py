@@ -54,11 +54,15 @@ from openlia_server.db.models.report_eu import (
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 from openlia_server.services import eu_v2_calendar_sync as calendar_sync
+from openlia_server.services import eu_v2_data_sources
 from openlia_server.services import eu_v2_run_service as run_svc
 from openlia_server.services import eu_v2_settings as settings_svc
 from openlia_server.services import eu_v2_template_service as templates_svc
 from openlia_server.services import eu_v2_watchlist as watchlist_svc
-from openlia_server.services.eu_v2_wiring import build_eu_v2_transports
+from openlia_server.services.eu_v2_wiring import (
+    build_eu_v2_transports,
+    resolve_eodhd_api_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +82,24 @@ class SettingsOut(BaseModel):
     financial_enabled: bool
     calendar_enabled: bool
     web_search_enabled: bool
+
+
+class DataSourceSlotOut(BaseModel):
+    available: bool
+    provider_label: str | None
+    unavailable_reason: str | None
+
+
+class OtherConnectorOut(BaseModel):
+    display_name: str
+    category: str
+
+
+class DataSourcesOut(BaseModel):
+    financial: DataSourceSlotOut
+    earnings_calendar: DataSourceSlotOut
+    web_search: DataSourceSlotOut
+    other_connectors: list[OtherConnectorOut]
 
 
 class SettingsUpdateIn(BaseModel):
@@ -226,6 +248,14 @@ class CancelOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _slot_out(slot: eu_v2_data_sources.DataSourceSlot) -> DataSourceSlotOut:
+    return DataSourceSlotOut(
+        available=slot.available,
+        provider_label=slot.provider_label,
+        unavailable_reason=slot.unavailable_reason,
+    )
+
+
 def _summary(row: ReportEu) -> RunSummaryOut:
     return RunSummaryOut(
         report_id=row.id,
@@ -347,9 +377,9 @@ async def _sse_stream(
             yield _sse_frame(item.type, item.payload)
 
 
-def _resolve_eu_transports():
-    """Env-wired EODHD bundle, or ``None`` when EODHD is not configured."""
-    return build_eu_v2_transports()
+def _resolve_eu_transports(db: DBSession):
+    """EODHD bundle resolved from env or an installed connector, or None when unconfigured."""
+    return build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +439,28 @@ def build_earnings_update_v2_router(
             financial_enabled=dto.financial_enabled,
             calendar_enabled=dto.calendar_enabled,
             web_search_enabled=dto.web_search_enabled,
+        )
+
+    @router.get("/data-sources", response_model=DataSourcesOut)
+    def get_data_sources(
+        provider_kind: str | None = Query(default=None),
+        model: str | None = Query(default=None),
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> DataSourcesOut:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        ds = eu_v2_data_sources.compute_data_sources(
+            db, user_id=user.id, provider_kind=provider_kind, model=model
+        )
+        return DataSourcesOut(
+            financial=_slot_out(ds.financial),
+            earnings_calendar=_slot_out(ds.earnings_calendar),
+            web_search=_slot_out(ds.web_search),
+            other_connectors=[
+                OtherConnectorOut(display_name=c.display_name, category=c.category)
+                for c in ds.other_connectors
+            ],
         )
 
     @router.put("/settings", response_model=SettingsOut)
@@ -495,7 +547,7 @@ def build_earnings_update_v2_router(
         # Best-effort: pull the new ticker's forward calendar so the
         # schedule view fills in without waiting for the weekly sync. A
         # sync failure (no EODHD key, network) must never fail the add.
-        transports = _resolve_eu_transports()
+        transports = _resolve_eu_transports(db)
         if transports is not None:
             try:
                 calendar_sync.sync_user_watchlist(
@@ -539,7 +591,7 @@ def build_earnings_update_v2_router(
     ) -> SyncResultOut:
         if not eu_v2_enabled():
             raise _engine_disabled()
-        transports = _resolve_eu_transports()
+        transports = _resolve_eu_transports(db)
         if transports is None:
             # EODHD not configured — no data source to sync against. A
             # clean {synced: 0} keeps the UI flow simple (mirrors the
@@ -701,7 +753,7 @@ def build_earnings_update_v2_router(
             cancel_registry=cancel_registry,
             session_factory=db_session_factory,
             trigger_kind="on_demand",
-            transports=_resolve_eu_transports(),
+            transports=_resolve_eu_transports(db),
         )
         db.commit()
         return RunStartOut(report_id=report_id)

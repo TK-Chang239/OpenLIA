@@ -32,6 +32,32 @@ export interface EuSettings {
   web_search_enabled: boolean;
 }
 
+export interface DataSourceSlot {
+  available: boolean;
+  provider_label: string | null;
+  unavailable_reason: string | null;
+}
+export interface OtherConnector {
+  display_name: string;
+  category: string;
+}
+export interface DataSourcesInfo {
+  financial: DataSourceSlot;
+  earnings_calendar: DataSourceSlot;
+  web_search: DataSourceSlot;
+  other_connectors: OtherConnector[];
+}
+
+export const getEuDataSources = (
+  params?: { provider_kind?: string; model?: string },
+): Promise<DataSourcesInfo> => {
+  const q = new URLSearchParams();
+  if (params?.provider_kind) q.set("provider_kind", params.provider_kind);
+  if (params?.model) q.set("model", params.model);
+  const qs = q.toString();
+  return fetchJson<DataSourcesInfo>(`${BASE}/data-sources${qs ? `?${qs}` : ""}`);
+};
+
 // Backend TemplateOut includes updated_at; included here for completeness.
 export interface EuTemplate {
   id: string;
