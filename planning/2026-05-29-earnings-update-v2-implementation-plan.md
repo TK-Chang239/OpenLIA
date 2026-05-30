@@ -1925,3 +1925,29 @@ gh pr create --title "feat(earnings-update): v2 backend (forked engine, connecto
 - Spec §12 deferred items (notifications) → not implemented; left for a follow-up, consistent with the spec marking them deferred.
 
 Open follow-ups (not blocking this plan): completion notification reuse of `user_notifications`; PDF/DOCX render endpoints (Task 16 lists html/pdf/docx — if the v3 render services are not trivially reusable, ship html only in this plan and defer pdf/docx).
+
+---
+
+## As-built notes (divergences from this plan, recorded per coding standard #9)
+
+Backend implemented on branch `feat/earnings-update-v2-backend`. Status: all 23 tasks landed; full EU v2 suite green (78 dedicated tests + end-to-end smoke through the scheduler dispatcher). Frontend remains a separate later phase.
+
+Divergences discovered against the real codebase while implementing:
+
+- **`SectionSpec` fields** are `id` / `intent` (+ optional `methodology_hints`), not `section_id`. The illustrative plan snippets using `section_id` were adapted throughout (`default_template.py`, prompts, tests).
+- **`TemplateSpec.sections`** has `min_length=1`; schema tests use a real section, not an empty list.
+- **Tool invocation** uses `ResearchTool.execute(args) -> ToolResult`, and `RunWorkspace(template, ledger, subject)` — the plan's `tool.run({...})` / `RunWorkspace(template_section_ids=...)` were illustrative.
+- **Runner shape**: `Runner` is a dataclass holding `request` + `transports`; `run(*, session, emitter, cancel_token)` is keyword-only (no positional `request` on `run`). Tests drive a real `FakeLLMProvider` (copied to `report_eu/tests/_fakes.py`) attached via `LLMSession.create(...).attach_adapter(fake)`.
+- **`EuDataTransports`** lives in its own module `report_eu/transports.py` (not `__init__.py`) to avoid a circular import and a latent `get_type_hints` `NameError` on the runner dataclass.
+- **`db/models/__init__.py` must stay the Plan-1a-only surface.** EU v2 models register via `register_all.py` (the real metadata path used by Alembic / `create_all`), NOT via the package `__init__`. The plan's Task 8 instruction to "add to `__init__.py` exports" was wrong relative to repo convention and broke `test_models_init_surface`; reverted.
+- **Scheduler executors** subclass the real `BaseExecutor` and implement `async _do_work(*, user_id, schedule_id, run_id, cancel_token)`; global EU v2 jobs run with `user_id=None`. The plan's `execute(job_key=...)` shape does not exist.
+- **Default cadences** registered in `scheduler/service.py::_register_eu_v2_jobs` (EU_V2_SYNC weekly Mon 06:00 UTC, EU_V2_DISPATCH hourly), each gated on its executor being present.
+- **Run service** `start_run_async` mirrors v3's actual shape (positional `db` + keyword `session_factory`, optional `session`/`transports` injection seams). Added `cleanup_orphaned_running_rows` (wired into app startup next to v3's) and `cancel_run`.
+- **`eu_v2_earnings_schedule.report_id`** is intentionally a plain nullable column with NO foreign key, so deleting a report does not cascade-null or delete the schedule audit row.
+- **Scheduler gate (added beyond the plan)**: `app.py` constructs the syncer/dispatcher only when `eu_v2_enabled()`, so the EU v2 cron jobs are not registered when `EARNINGS_ENGINE_VERSION \!= v2` — matching the routes' per-request 503 gate and §9's additive-behind-the-gate promise.
+- **Render endpoints deferred**: `GET /runs/{id}/html|pdf|docx` were NOT implemented — the v3 render service is bound to the `report_v3_*` tables and reuse exceeded a thin adapter. Follow-up.
+- **Connector toggling** is per-run derived from per-user settings (no discovery/`find_tools`, no valuation/extended tools — those were pruned from the fork). Catalog = output tools (always) + financial data + earnings calendar + native web search, each gated.
+
+Out of scope / not done this phase: frontend page; completion notifications; PDF/DOCX/HTML render endpoints; pruning the inert `revision_mode` residue carried over from the v3 fork (kept because `output_tools.py` still references it).
+
+Note: 6 DB-hygiene/migration tests (`test_alembic_autogenerate_is_clean`, `test_baseline_upgrade/downgrade`, `test_mb_migration` downgrade, `test_er_user_configs_migration` downgrade, `test_resolver_redesign_schema`) fail on `main` already (a pre-existing SQLite batch-downgrade issue) and are unaffected by this branch.
