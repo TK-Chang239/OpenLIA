@@ -13,10 +13,17 @@ _EU_V2_TABLES = {
     "report_eu_citations",
     "report_eu_tool_call_log",
     "report_eu_templates",
+    "report_eu_instructions",
     "eu_v2_watchlist",
     "eu_v2_earnings_schedule",
     "eu_v2_settings",
 }
+
+# Last revision before the EU v2 stack. Downgrading here reverts every EU
+# migration (tables + later additions like instructions), so the drop test
+# stays correct as EU migrations accrue — a fixed ``-1`` only reverts the
+# newest one.
+_PRE_EU_REVISION = "c1e3a7d9f2b4"
 
 
 def _alembic_config(db_path: str) -> Config:
@@ -60,7 +67,7 @@ def test_migration_downgrade_drops_tables(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{db}")
     cfg = _alembic_config(str(db))
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, _PRE_EU_REVISION)
 
     engine = create_engine(f"sqlite:///{db}")
     names = set(inspect(engine).get_table_names())
