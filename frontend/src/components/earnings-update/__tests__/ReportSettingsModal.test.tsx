@@ -1,78 +1,38 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as settingsApi from "../../../api/settings";
+import * as euApi from "../../../api/earnings-update";
 import { ReportSettingsModal } from "../ReportSettingsModal";
 
-const baseConfig = {
-  report_length: "normal" as const,
-  enabled_section_ids: ["quick_take", "key_financials"],
-  custom_sections: [],
+const base: euApi.EuSettings = {
+  provider_kind: "anthropic", model: "claude-sonnet-4-6", template_id: "eu_default",
+  language: "en", length: "normal", reasoning_effort: null,
+  financial_enabled: true, calendar_enabled: true, web_search_enabled: false,
 };
 
-describe("ReportSettingsModal", () => {
-  it("renders all 8 section toggles", () => {
-    render(
-      <ReportSettingsModal
-        open
-        config={baseConfig}
-        onClose={() => {}}
-        onSave={async () => {}}
-      />,
-    );
-    expect(screen.getAllByRole("checkbox").length).toBeGreaterThanOrEqual(8);
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("ReportSettingsModal (v2)", () => {
+  it("renders connector toggles and saves changes", async () => {
+    vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([
+      { id: "m1", provider_kind: "anthropic", model_ref: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6", is_enabled: true } as never,
+    ]);
+    vi.spyOn(euApi, "fetchTemplates").mockResolvedValue({ templates: [{ id: "eu_default", name: "Earnings Update (Default)", is_builtin: true, created_at: "", updated_at: "" }] });
+    const onSave = vi.fn().mockResolvedValue(base);
+    render(<ReportSettingsModal settings={base} onSave={onSave} onClose={() => {}} />);
+    // toggle web search on
+    const webSearch = await screen.findByTestId("eu-v2-connector-web_search");
+    fireEvent.click(webSearch);
+    fireEvent.click(screen.getByTestId("eu-v2-settings-save"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ web_search_enabled: true })));
   });
 
-  it("toggles include/exclude a section", () => {
-    render(
-      <ReportSettingsModal
-        open
-        config={baseConfig}
-        onClose={() => {}}
-        onSave={async () => {}}
-      />,
-    );
-    const box = screen.getByLabelText(/Quick Take/i) as HTMLInputElement;
-    expect(box.checked).toBe(true);
-    fireEvent.click(box);
-    expect(box.checked).toBe(false);
-  });
-
-  it("saves with new selections and length", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ReportSettingsModal
-        open
-        config={baseConfig}
-        onClose={() => {}}
-        onSave={onSave}
-      />,
-    );
-    fireEvent.click(screen.getByLabelText(/elaborative/i));
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
-    await waitFor(() => expect(onSave).toHaveBeenCalled());
-    const payload = onSave.mock.calls[0][0];
-    expect(payload.report_length).toBe("elaborative");
-  });
-
-  it("adds a custom section", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ReportSettingsModal
-        open
-        config={baseConfig}
-        onClose={() => {}}
-        onSave={onSave}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /\+ custom section/i }));
-    const rows = screen.getAllByPlaceholderText(/section title/i);
-    fireEvent.change(rows[rows.length - 1], {
-      target: { value: "Model update" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
-    await waitFor(() => expect(onSave).toHaveBeenCalled());
-    expect(onSave.mock.calls[0][0].custom_sections[0].title).toBe(
-      "Model update",
-    );
+  it("does not render section toggles or custom sections", () => {
+    vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([]);
+    vi.spyOn(euApi, "fetchTemplates").mockResolvedValue({ templates: [] });
+    render(<ReportSettingsModal settings={base} onSave={vi.fn()} onClose={() => {}} />);
+    expect(screen.queryByText(/custom section/i)).toBeNull();
   });
 });
