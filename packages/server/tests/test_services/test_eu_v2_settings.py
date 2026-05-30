@@ -30,3 +30,27 @@ def test_update_persists_and_returns(db_session):
     again = get_settings(db_session, user_id="u-1")
     assert again.financial_enabled is False
     assert again.reasoning_effort == "medium"
+
+
+def test_instructions_id_defaults_to_none_without_row(db_session):
+    dto = get_settings(db_session, user_id="u-1")
+    assert dto.instructions_id is None
+
+
+def test_update_persists_instructions_id(db_session):
+    update_settings(
+        db_session,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=True,
+        calendar_enabled=True,
+        web_search_enabled=False,
+        instructions_id="abc123",
+    )
+    again = get_settings(db_session, user_id="u-1")
+    assert again.instructions_id == "abc123"
