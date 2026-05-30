@@ -51,9 +51,27 @@ def build_system_prompt(request: RunRequest) -> str:
         length_target=length_target,
         template_name=template.name,
         shape_description=template.shape_description,
+        instructions_block=_render_instructions_block(request.instructions),
         trigger_block=_render_trigger_block(request.trigger_context),
         structure_block=_render_structure_block(template),
         connectors_block=_render_connectors_block(request.enabled_connectors),
+    )
+
+
+def _render_instructions_block(instructions: str | None) -> str:
+    """The analyst-instructions block, or empty when none provided.
+
+    Ends with two newlines so spacing collapses cleanly when absent.
+    """
+    if not instructions or not instructions.strip():
+        return ""
+    return (
+        "# Analyst instructions\n\n"
+        "The user provided the methodology and guidance below. Treat it as "
+        "authoritative for how to approach this report — what to research and "
+        "emphasize, how to reason, tone, which tools/endpoints to favor, and "
+        "(where it specifies one) the report's structure.\n\n"
+        f"{instructions.strip()}\n\n"
     )
 
 
@@ -174,7 +192,7 @@ template (below).
 # Template: {template_name}
 {shape_description}
 
-{trigger_block}# Report structure
+{instructions_block}{trigger_block}# Report structure
 
 {structure_block}
 
