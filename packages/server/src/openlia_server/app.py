@@ -381,9 +381,7 @@ def _make_lifespan(
         with _v3_sweep_sf() as _v3_sweep_db:
             _v3_swept = _v3_cleanup(db=_v3_sweep_db)
         if _v3_swept:
-            log.info(
-                "startup sweep: marked %d orphaned v3 run(s) as failed", _v3_swept
-            )
+            log.info("startup sweep: marked %d orphaned v3 run(s) as failed", _v3_swept)
 
         from openlia_server.services.eu_v2_run_service import (
             cleanup_orphaned_running_rows as _eu_v2_cleanup,
@@ -392,9 +390,7 @@ def _make_lifespan(
         with _v3_sweep_sf() as _eu_v2_sweep_db:
             _eu_v2_swept = _eu_v2_cleanup(db=_eu_v2_sweep_db)
         if _eu_v2_swept:
-            log.info(
-                "startup sweep: marked %d orphaned eu_v2 run(s) as failed", _eu_v2_swept
-            )
+            log.info("startup sweep: marked %d orphaned eu_v2 run(s) as failed", _eu_v2_swept)
 
         from openlia_server.routes.reports import _resolve_frontend_dist
         from openlia_server.services.render_base_url import (
@@ -487,6 +483,14 @@ def _make_lifespan(
             mr_cache_store_lifespan = MRCacheStoreImpl()
             report_store_impl = ReportStoreImpl()
 
+            from openlia_server.services.eu_v2_scheduler_impl import (
+                EuV2CalendarSyncerImpl,
+                EuV2DispatcherImpl,
+            )
+
+            eu_v2_syncer = EuV2CalendarSyncerImpl()
+            eu_v2_dispatcher = EuV2DispatcherImpl(session_factory=_sm)
+
             async with adapter:
                 scheduler_svc = build_scheduler_service(
                     session_factory=_sm,
@@ -507,6 +511,8 @@ def _make_lifespan(
                     financial_adapter_provider=lambda: getattr(
                         app.state, "financial_adapter", None
                     ),
+                    eu_v2_syncer=eu_v2_syncer,
+                    eu_v2_dispatcher=eu_v2_dispatcher,
                 )
                 # Phase 10: scheduler skip-on-disabled. Reads the live cache
                 # off app.state at fire time so invalidation-driven recomputes
