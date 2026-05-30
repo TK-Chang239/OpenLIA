@@ -369,6 +369,25 @@ def _assign_display_indexes(result: RunResult) -> dict[str, int]:
     return {sid: i + 1 for i, sid in enumerate(order)}
 
 
+def cleanup_orphaned_running_rows(
+    *,
+    db: DBSession,
+    reason: str = "server restart - run did not complete",
+) -> int:
+    """Flip any report_eu rows stuck in 'running' (from a crash) to 'failed'. Call at startup."""
+    from sqlalchemy import update
+
+    now = datetime.now(UTC)
+    stmt = (
+        update(ReportEu)
+        .where(ReportEu.status == "running")
+        .values(status="failed", error_message=reason, completed_at=now)
+    )
+    result = db.execute(stmt)
+    db.commit()
+    return result.rowcount or 0
+
+
 def _null_transports() -> EuDataTransports:
     """A loud transport bundle for when EODHD is not configured.
 
@@ -402,6 +421,7 @@ def _resolve_transports(transports: EuDataTransports | None) -> EuDataTransports
 __all__ = [
     "build_run_request",
     "cancel_run",
+    "cleanup_orphaned_running_rows",
     "persist_result",
     "start_run_async",
 ]

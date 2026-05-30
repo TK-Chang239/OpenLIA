@@ -88,9 +88,9 @@ def update_settings(
     if length not in _VALID_LENGTHS:
         raise ValueError(f"length must be one of {sorted(_VALID_LENGTHS)!r}, got {length!r}")
     if reasoning_effort not in _VALID_EFFORTS:
+        valid_display = [*sorted(repr(e) for e in _VALID_EFFORTS if e is not None), "None"]
         raise ValueError(
-            f"reasoning_effort must be one of {sorted(str(e) for e in _VALID_EFFORTS)!r},"
-            f" got {reasoning_effort!r}"
+            f"reasoning_effort must be one of {valid_display}, got {reasoning_effort!r}"
         )
 
     now = datetime.now(UTC)

@@ -220,4 +220,63 @@ async def test_start_run_async_completes_and_persists(db_session_with_seed, db_s
         sections = list(
             check.scalars(select(ReportEuSection).where(ReportEuSection.report_id == report_id))
         )
-        assert len(sections) >= 1
+        assert len(sections) == 8
+
+
+def test_cleanup_orphaned_running_rows(db_session):
+    """Stuck 'running' rows flipped to 'failed'; completed rows untouched."""
+    now = datetime.now(UTC)
+
+    running_row = ReportEu(
+        id="r-running",
+        user_id="u-1",
+        subject="AAPL earnings",
+        ticker="AAPL",
+        trigger_kind="on_demand",
+        fiscal_date=None,
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        status="running",
+        error_message=None,
+        created_at=now,
+        completed_at=None,
+        cover_json=None,
+        reasoning_effort=None,
+    )
+    completed_row = ReportEu(
+        id="r-completed",
+        user_id="u-1",
+        subject="MSFT earnings",
+        ticker="MSFT",
+        trigger_kind="on_demand",
+        fiscal_date=None,
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        status="completed",
+        error_message=None,
+        created_at=now,
+        completed_at=now,
+        cover_json=None,
+        reasoning_effort=None,
+    )
+    db_session.add(running_row)
+    db_session.add(completed_row)
+    db_session.commit()
+
+    count = svc.cleanup_orphaned_running_rows(db=db_session)
+
+    assert count == 1
+    db_session.expire_all()
+    fixed = db_session.get(ReportEu, "r-running")
+    assert fixed.status == "failed"
+    assert fixed.error_message == "server restart - run did not complete"
+    assert fixed.completed_at is not None
+
+    untouched = db_session.get(ReportEu, "r-completed")
+    assert untouched.status == "completed"

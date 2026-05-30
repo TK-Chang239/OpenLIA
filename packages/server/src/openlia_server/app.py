@@ -380,6 +380,17 @@ def _make_lifespan(
                 "startup sweep: marked %d orphaned v3 run(s) as failed", _v3_swept
             )
 
+        from openlia_server.services.eu_v2_run_service import (
+            cleanup_orphaned_running_rows as _eu_v2_cleanup,
+        )
+
+        with _v3_sweep_sf() as _eu_v2_sweep_db:
+            _eu_v2_swept = _eu_v2_cleanup(db=_eu_v2_sweep_db)
+        if _eu_v2_swept:
+            log.info(
+                "startup sweep: marked %d orphaned eu_v2 run(s) as failed", _eu_v2_swept
+            )
+
         from openlia_server.routes.reports import _resolve_frontend_dist
         from openlia_server.services.render_base_url import (
             RenderBaseUrlResolver,

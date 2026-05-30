@@ -22,8 +22,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from openlia.llm.runtime.report_eu import TemplateSpec
 from openlia.llm.runtime.report_v2_3.templates.spec import SectionSpec
-from openlia.llm.runtime.report_v3 import TemplateSpec
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
