@@ -54,6 +54,7 @@ from openlia_server.db.models.report_eu import (
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 from openlia_server.services import eu_v2_calendar_sync as calendar_sync
+from openlia_server.services import eu_v2_data_sources
 from openlia_server.services import eu_v2_run_service as run_svc
 from openlia_server.services import eu_v2_settings as settings_svc
 from openlia_server.services import eu_v2_template_service as templates_svc
@@ -78,6 +79,24 @@ class SettingsOut(BaseModel):
     financial_enabled: bool
     calendar_enabled: bool
     web_search_enabled: bool
+
+
+class DataSourceSlotOut(BaseModel):
+    available: bool
+    provider_label: str | None
+    unavailable_reason: str | None
+
+
+class OtherConnectorOut(BaseModel):
+    display_name: str
+    category: str
+
+
+class DataSourcesOut(BaseModel):
+    financial: DataSourceSlotOut
+    earnings_calendar: DataSourceSlotOut
+    web_search: DataSourceSlotOut
+    other_connectors: list[OtherConnectorOut]
 
 
 class SettingsUpdateIn(BaseModel):
@@ -224,6 +243,14 @@ class CancelOut(BaseModel):
 # ---------------------------------------------------------------------------
 # Mapping helpers
 # ---------------------------------------------------------------------------
+
+
+def _slot_out(slot: eu_v2_data_sources.DataSourceSlot) -> DataSourceSlotOut:
+    return DataSourceSlotOut(
+        available=slot.available,
+        provider_label=slot.provider_label,
+        unavailable_reason=slot.unavailable_reason,
+    )
 
 
 def _summary(row: ReportEu) -> RunSummaryOut:
@@ -409,6 +436,28 @@ def build_earnings_update_v2_router(
             financial_enabled=dto.financial_enabled,
             calendar_enabled=dto.calendar_enabled,
             web_search_enabled=dto.web_search_enabled,
+        )
+
+    @router.get("/data-sources", response_model=DataSourcesOut)
+    def get_data_sources(
+        provider_kind: str | None = Query(default=None),
+        model: str | None = Query(default=None),
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> DataSourcesOut:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        ds = eu_v2_data_sources.compute_data_sources(
+            db, user_id=user.id, provider_kind=provider_kind, model=model
+        )
+        return DataSourcesOut(
+            financial=_slot_out(ds.financial),
+            earnings_calendar=_slot_out(ds.earnings_calendar),
+            web_search=_slot_out(ds.web_search),
+            other_connectors=[
+                OtherConnectorOut(display_name=c.display_name, category=c.category)
+                for c in ds.other_connectors
+            ],
         )
 
     @router.put("/settings", response_model=SettingsOut)
