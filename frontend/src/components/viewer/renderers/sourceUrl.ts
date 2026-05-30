@@ -31,5 +31,10 @@ export function sourceUrl(source: FileSource): string {
       "sourceUrl(): v3_report sources are rendered via getV3Run inside V3ReportRenderer",
     );
   }
+  if (source.kind === "eu_v2_report") {
+    throw new Error(
+      "sourceUrl(): eu_v2_report sources are rendered via getRun inside EUV2ReportRenderer",
+    );
+  }
   return downloadUrlForAttachment(source.attachmentId);
 }
