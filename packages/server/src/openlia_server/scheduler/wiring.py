@@ -13,6 +13,10 @@ from typing import Any
 
 from openlia_server.scheduler.executors.base import SessionFactory
 from openlia_server.scheduler.executors.eu import EUScanExecutor
+from openlia_server.scheduler.executors.eu_v2 import (
+    EuV2DispatchExecutor,
+    EuV2SyncExecutor,
+)
 from openlia_server.scheduler.executors.graph_extraction import (
     GraphExtractionExecutor,
 )
@@ -25,6 +29,8 @@ from openlia_server.scheduler.executors.portfolio_prices import (
 from openlia_server.scheduler.executors.rs import RSSnapshotExecutor
 from openlia_server.scheduler.payloads import (
     EUScanPlanner,
+    EuV2CalendarSyncer,
+    EuV2Dispatcher,
     MBRequestBuilder,
     MRAssessmentBuilder,
     MRCacheStore,
@@ -50,6 +56,8 @@ def build_scheduler_service(
     mr_cache_store: MRCacheStore,
     rs_runner: RSSnapshotRunner | None = None,
     financial_adapter_provider: Callable[[], Any] | None = None,
+    eu_v2_syncer: EuV2CalendarSyncer | None = None,
+    eu_v2_dispatcher: EuV2Dispatcher | None = None,
 ) -> SchedulerService:
     if batch_runner is None:
         raise TypeError("batch_runner is required (got None)")
@@ -92,6 +100,18 @@ def build_scheduler_service(
         executors[JobType.PORTFOLIO_PRICE_REFRESH] = portfolio_executor_factory(
             session_factory=session_factory,
             financial_adapter_provider=financial_adapter_provider,
+        )
+
+    if eu_v2_syncer is not None:
+        executors[JobType.EU_V2_SYNC] = EuV2SyncExecutor(
+            session_factory=session_factory,
+            syncer=eu_v2_syncer,
+        )
+
+    if eu_v2_dispatcher is not None:
+        executors[JobType.EU_V2_DISPATCH] = EuV2DispatchExecutor(
+            session_factory=session_factory,
+            dispatcher=eu_v2_dispatcher,
         )
 
     return SchedulerService(

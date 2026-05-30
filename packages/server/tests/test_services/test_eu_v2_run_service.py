@@ -1,0 +1,282 @@
+"""Tests for the EU v2 run service (request build + async start + persist).
+
+``build_run_request`` is exercised against seeded settings + the
+builtin ``eu_default`` template. ``start_run_async`` is driven with a
+fake ``LLMSession`` (a scripted ``FakeLLMProvider`` adapter) so the
+runner's tool-use loop completes deterministically with every connector
+off and a null transports bundle — no network, no SDK.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from openlia.llm.runtime.report_eu import (
+    EuDataTransports,
+    EventBroker,
+    LLMSession,
+)
+from openlia.llm.runtime.report_eu.default_template import build_default_template
+from openlia_server.db.models.report_eu import (
+    ReportEu,
+    ReportEuSection,
+    ReportEuTemplate,
+)
+from openlia_server.services import eu_v2_run_service as svc
+from openlia_server.services.eu_v2_settings import update_settings
+from sqlalchemy import select
+
+# Pull the report_eu FakeLLMProvider helpers from the core test tree.
+_CORE_TESTS = Path(__file__).resolve().parents[3] / "core" / "tests"
+sys.path.insert(0, str(_CORE_TESTS))
+from runtime.report_eu._fakes import (  # noqa: E402
+    FakeLLMProvider,
+    script_tool_calls,
+)
+
+
+def _seed_eu_default(db) -> None:
+    """Insert the eu_default builtin row, mirroring what the migration does."""
+    spec = build_default_template()
+    now = datetime.now(UTC)
+    db.add(
+        ReportEuTemplate(
+            id=spec.template_id,
+            user_id=None,
+            name=spec.name,
+            is_builtin=True,
+            template_spec_json=json.loads(spec.model_dump_json()),
+            source_markdown=None,
+            source_doc_blob=None,
+            source_doc_mime=None,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        )
+    )
+    db.flush()
+
+
+@pytest.fixture
+def db_session_with_seed(db_session):
+    _seed_eu_default(db_session)
+    return db_session
+
+
+def test_build_run_request_uses_settings_and_trigger(db_session_with_seed):
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=False,
+        calendar_enabled=True,
+        web_search_enabled=True,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="scheduled",
+        fiscal_period="Q3 FY26",
+        report_date="2026-06-15",
+        release_timing="post_market",
+        eps_estimate="2.50",
+        revenue_estimate=None,
+    )
+    assert req.provider_kind == "anthropic"
+    assert req.enabled_connectors.financial is False
+    assert req.enabled_connectors.web_search is True
+    assert req.trigger_context.fiscal_period == "Q3 FY26"
+    assert req.template.template_id == "eu_default"
+    assert req.subject == "MSFT.US Q3 FY26 earnings"
+
+
+def test_build_run_request_subject_falls_back_to_ticker(db_session_with_seed):
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort="high",
+        financial_enabled=True,
+        calendar_enabled=True,
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.subject == "MSFT.US earnings"
+    assert req.reasoning_effort is not None
+    assert req.reasoning_effort.value == "high"
+
+
+def _fake_session() -> tuple[LLMSession, FakeLLMProvider]:
+    """A real LLMSession with a scripted fake adapter attached.
+
+    Scripts: write all 8 eu_default sections (connectors off, so no
+    data tools), then finalize.
+    """
+    section_ids = [s.id for s in build_default_template().sections]
+    script = [
+        script_tool_calls(("write_section", {"section_id": sid, "markdown": f"{sid} body."}))
+        for sid in section_ids
+    ]
+    script.append(script_tool_calls(("finalize", {})))
+    fake = FakeLLMProvider(scripted_responses=script)
+    session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
+    session.attach_adapter(fake)
+    return session, fake
+
+
+def _null_transports() -> EuDataTransports:
+    def _raise(*_a: object, **_k: object) -> object:
+        raise RuntimeError("not configured")
+
+    return EuDataTransports(
+        fundamentals=_raise, prices=_raise, news=_raise, earnings_calendar=_raise
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_run_async_completes_and_persists(db_session_with_seed, db_session_factory):
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=False,
+        calendar_enabled=False,
+        web_search_enabled=False,
+    )
+    request = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period="Q3 FY26",
+        report_date="2026-06-15",
+        release_timing="post_market",
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+
+    session, _fake = _fake_session()
+    broker = EventBroker()
+    cancel_registry: dict = {}
+
+    report_id = svc.start_run_async(
+        db_session_with_seed,
+        user_id="u-1",
+        request=request,
+        broker=broker,
+        cancel_registry=cancel_registry,
+        session_factory=db_session_factory,
+        trigger_kind="on_demand",
+        transports=_null_transports(),
+        session=session,
+    )
+    db_session_with_seed.commit()
+
+    # The background task runs on the same event loop; let it complete.
+    for _ in range(200):
+        if not svc._BACKGROUND_TASKS:
+            break
+        await asyncio.sleep(0.01)
+
+    with db_session_factory() as check:
+        row = check.get(ReportEu, report_id)
+        assert row is not None
+        assert row.status == "completed"
+        assert row.ticker == "MSFT.US"
+        assert row.trigger_kind == "on_demand"
+        assert row.fiscal_date == "2026-06-15"
+        assert row.completed_at is not None
+
+        sections = list(
+            check.scalars(select(ReportEuSection).where(ReportEuSection.report_id == report_id))
+        )
+        assert len(sections) == 8
+
+
+def test_cleanup_orphaned_running_rows(db_session):
+    """Stuck 'running' rows flipped to 'failed'; completed rows untouched."""
+    now = datetime.now(UTC)
+
+    running_row = ReportEu(
+        id="r-running",
+        user_id="u-1",
+        subject="AAPL earnings",
+        ticker="AAPL",
+        trigger_kind="on_demand",
+        fiscal_date=None,
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        status="running",
+        error_message=None,
+        created_at=now,
+        completed_at=None,
+        cover_json=None,
+        reasoning_effort=None,
+    )
+    completed_row = ReportEu(
+        id="r-completed",
+        user_id="u-1",
+        subject="MSFT earnings",
+        ticker="MSFT",
+        trigger_kind="on_demand",
+        fiscal_date=None,
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        status="completed",
+        error_message=None,
+        created_at=now,
+        completed_at=now,
+        cover_json=None,
+        reasoning_effort=None,
+    )
+    db_session.add(running_row)
+    db_session.add(completed_row)
+    db_session.commit()
+
+    count = svc.cleanup_orphaned_running_rows(db=db_session)
+
+    assert count == 1
+    db_session.expire_all()
+    fixed = db_session.get(ReportEu, "r-running")
+    assert fixed.status == "failed"
+    assert fixed.error_message == "server restart - run did not complete"
+    assert fixed.completed_at is not None
+
+    untouched = db_session.get(ReportEu, "r-completed")
+    assert untouched.status == "completed"
