@@ -7,7 +7,11 @@ from openlia.llm.runtime.report_eu.schemas import (
 from openlia.llm.runtime.report_v2_3.templates.spec import SectionSpec, TemplateSpec
 
 
-def _req(connectors: EnabledConnectors, trigger: TriggerContext | None) -> RunRequest:
+def _req(
+    connectors: EnabledConnectors,
+    trigger: TriggerContext | None,
+    instructions: str | None = None,
+) -> RunRequest:
     return RunRequest(
         subject="MSFT.US Q3 FY26 earnings",
         template=TemplateSpec(
@@ -22,6 +26,7 @@ def _req(connectors: EnabledConnectors, trigger: TriggerContext | None) -> RunRe
         model="claude-sonnet-4-6",
         enabled_connectors=connectors,
         trigger_context=trigger,
+        instructions=instructions,
     )
 
 
@@ -60,3 +65,16 @@ def test_prompt_states_no_tools_when_all_off():
 def test_prompt_lists_template_sections():
     prompt = build_system_prompt(_req(EnabledConnectors(), None))
     assert "quick_take" in prompt
+
+
+def test_prompt_includes_instructions_when_provided():
+    prompt = build_system_prompt(
+        _req(EnabledConnectors(), None, instructions="Favor FCF over EBITDA.")
+    )
+    assert "Analyst instructions" in prompt
+    assert "Favor FCF over EBITDA." in prompt
+
+
+def test_prompt_omits_instructions_when_absent():
+    prompt = build_system_prompt(_req(EnabledConnectors(), None))
+    assert "Analyst instructions" not in prompt
