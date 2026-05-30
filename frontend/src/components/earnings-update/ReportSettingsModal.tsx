@@ -60,7 +60,7 @@ function Toggle({
       className={[
         "flex items-center justify-between gap-4 px-4 py-3.5 transition-colors",
         disabled
-          ? "opacity-50 cursor-not-allowed"
+          ? "opacity-50 cursor-not-allowed pointer-events-none"
           : "cursor-pointer hover:bg-[--color-surface-hover]",
       ].join(" ")}
     >
@@ -161,7 +161,10 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
 
   function reasonText(slot: DataSourceSlot | undefined): string | null {
     if (!slot || slot.available || !slot.unavailable_reason) return null;
-    return t(`earnings.settings_modal.ds_reason_${slot.unavailable_reason}`);
+    const key = `earnings.settings_modal.ds_reason_${slot.unavailable_reason}`;
+    const resolved = t(key);
+    // i18next returns the key itself when the translation is missing.
+    return resolved !== key ? resolved : t("earnings.settings_modal.ds_reason_unknown");
   }
 
   function renderSlot(
