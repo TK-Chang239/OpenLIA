@@ -129,3 +129,20 @@ class RSSnapshotRunner(Protocol):
     """Run a RS snapshot for a given user. Owned by the RS service layer."""
 
     def run_many(self, tickers: Sequence[str]) -> list[Any]: ...
+
+
+# ------------------------------------------------------------------
+# EU v2 — Earnings Update v2 calendar sync + dispatch
+# ------------------------------------------------------------------
+
+
+class EuV2CalendarSyncer(Protocol):
+    """Run the weekly EODHD calendar sync across all EU v2 watchlists."""
+
+    def sync_all(self, *, session: Session) -> int: ...
+
+
+class EuV2Dispatcher(Protocol):
+    """Fire due scheduled earnings runs from eu_v2_earnings_schedule."""
+
+    def dispatch_due(self, *, session: Session, now: datetime) -> int: ...
