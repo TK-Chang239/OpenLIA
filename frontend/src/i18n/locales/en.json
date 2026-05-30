@@ -777,7 +777,22 @@
       "reasoning_hint": "Higher effort yields deeper analysis at greater cost.",
       "reasoning_default": "Default",
       "reasoning_medium": "Medium",
-      "reasoning_high": "High"
+      "reasoning_high": "High",
+      "instructions_title": "Instructions",
+      "instructions_hint": "An optional methodology profile the analyst follows when writing.",
+      "instructions_none": "None",
+      "instructions_custom_suffix": " (custom)",
+      "instructions_upload": "Upload instructions",
+      "instructions_delete_aria": "Delete instruction profile",
+      "instructions_delete_confirm": "Delete this instruction profile?",
+      "instructions_untitled": "Untitled instructions",
+      "instructions_upload_title": "Upload instructions",
+      "instructions_upload_close_aria": "Close",
+      "instructions_upload_file_label": "File (.pdf, .docx, .md, .txt)",
+      "instructions_upload_choose_file": "Choose file",
+      "instructions_upload_name_label": "Display name",
+      "instructions_upload_preview": "The server extracts the document text on save and feeds it to the model as analyst instructions.",
+      "instructions_upload_unsupported": "Unsupported file type: {{filename}}. Use .pdf, .docx, .md, or .txt."
     },
     "schedule_manager": {
       "heading": "Scan Schedules",
