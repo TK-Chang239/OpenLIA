@@ -7,9 +7,11 @@ model cites them inline with standard Markdown footnote syntax
 (``[^web_3]``).
 
 EU v2 deltas vs. v3:
-  - ``RunRequest`` drops ``attachments`` / ``instructions`` (out of
-    scope) and gains ``enabled_connectors`` (which tool groups to
-    build) and ``trigger_context`` (the earnings event covered).
+  - ``RunRequest`` drops ``attachments`` (out of scope) and gains
+    ``enabled_connectors`` (which tool groups to build) and
+    ``trigger_context`` (the earnings event covered). ``instructions``
+    (free-form analyst methodology injected into the system prompt) is
+    supported, same as v3.
   - No revision schemas — EU v2 has no revise flow.
 
 The ``TemplateSpec`` itself is reused verbatim from v2.3 — same Pydantic
