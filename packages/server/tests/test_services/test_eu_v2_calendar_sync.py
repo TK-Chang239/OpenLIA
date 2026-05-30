@@ -3,7 +3,10 @@ from datetime import UTC, datetime
 
 from openlia_server.db.models.report_eu import EuV2EarningsSchedule
 from openlia_server.services import eu_v2_watchlist
-from openlia_server.services.eu_v2_calendar_sync import sync_user_watchlist
+from openlia_server.services.eu_v2_calendar_sync import (
+    sync_all_watchlists,
+    sync_user_watchlist,
+)
 
 
 def add_watchlist(db, user_id: str, tickers: list[str]) -> None:
@@ -81,3 +84,22 @@ def test_already_reported_row_untouched(db_session):
         now=datetime(2026, 6, 2, tzinfo=UTC),
     )
     assert db_session.query(EuV2EarningsSchedule).one().status == "reported"
+
+
+def test_sync_all_watchlists_covers_distinct_users(db_session):
+    add_watchlist(db_session, "u-1", ["MSFT.US"])
+    add_watchlist(db_session, "u-2", ["AAPL.US"])
+    cal = _cal(
+        {
+            "MSFT.US": [{"report_date": "2026-06-15", "before_after_market": "AfterMarket"}],
+            "AAPL.US": [{"report_date": "2026-07-30", "before_after_market": "BeforeMarket"}],
+        }
+    )
+    n = sync_all_watchlists(
+        db_session,
+        earnings_calendar=cal,
+        now=datetime(2026, 6, 1, tzinfo=UTC),
+    )
+    assert n == 2
+    tickers = {r.ticker for r in db_session.query(EuV2EarningsSchedule).all()}
+    assert tickers == {"MSFT.US", "AAPL.US"}
