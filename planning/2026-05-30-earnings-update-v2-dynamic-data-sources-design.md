@@ -178,6 +178,18 @@ cannot reach the engine:
 This keeps the engine honest even if settings were saved while a source was available
 and it later disappeared.
 
+## As-built note (i18n refinement)
+
+To keep all user-facing text localizable (en + zh-TW), the §3 endpoint delivers
+`unavailable_reason` as a stable **code** (`eodhd_unconfigured` | `model_no_web_search`,
+plus a client-side `ds_reason_unknown` fallback for any future code), not an English
+sentence, and `provider_label` as the raw provider/model identity (`"EODHD"` or the
+model id). The settings modal composes the displayed strings client-side: the slot
+label is `"{base} · {provider}"` (web search wraps the model in the localized
+`ds_via` = "via {{provider}}"), and the reason text resolves `ds_reason_{code}` with a
+graceful fallback. The four reason/label/empty/footnote strings live in both locale
+files.
+
 ## Phase 2 (sketch only — NOT in this plan)
 
 - Wire `openlia.connectors.dispatch.Dispatcher` into `report_eu` (pass it into the
