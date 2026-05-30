@@ -1,4 +1,7 @@
 # packages/server/tests/test_services/test_eu_v2_data_sources.py
+from datetime import UTC, datetime
+
+from openlia_server.db.models.auth import User
 from openlia_server.db.models.connectors import Connector
 from openlia_server.services import eu_v2_data_sources, eu_v2_settings
 
@@ -83,3 +86,20 @@ def test_other_connectors_excludes_eodhd_lists_rest(monkeypatch, db_session):
     ds = eu_v2_data_sources.compute_data_sources(db_session, user_id="local")
     names = {c.display_name for c in ds.other_connectors}
     assert names == {"FMP"}  # eodhd excluded; pending news excluded
+
+
+def test_web_search_uses_persisted_model_without_override(monkeypatch, db_session):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    now = datetime.now(UTC)
+    db_session.add(
+        User(
+            id="local", email="local@test.example", display_name="local",
+            password_hash=None, is_admin=False, is_disabled=False,
+            created_at=now, updated_at=now,
+        )
+    )
+    db_session.flush()
+    _set_model(db_session, provider_kind="anthropic", model="claude-haiku-4-5-20251001")
+    ds = eu_v2_data_sources.compute_data_sources(db_session, user_id="local")
+    assert ds.web_search.available is False
+    assert ds.web_search.unavailable_reason == "model_no_web_search"

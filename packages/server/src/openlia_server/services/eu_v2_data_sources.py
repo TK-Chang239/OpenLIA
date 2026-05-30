@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from openlia.connectors.types import ConnectorStatus
 from openlia.llm.capabilities import capabilities_for
 from sqlalchemy.orm import Session
 
@@ -84,7 +85,7 @@ def compute_data_sources(
     other = [
         OtherConnector(display_name=c.display_name, category=c.category)
         for c in connectors_service.list_connectors(db)
-        if c.status == "validated" and c.provider_id != _EODHD_PROVIDER_ID
+        if c.status == ConnectorStatus.VALIDATED.value and c.provider_id != _EODHD_PROVIDER_ID
     ]
 
     return EuDataSources(
