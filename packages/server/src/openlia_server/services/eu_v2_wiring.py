@@ -15,27 +15,30 @@ import logging
 import os
 from typing import Any
 
+from openlia.connectors.types import ConnectorStatus
 from openlia.llm.runtime.report_eu import EuDataTransports
+from sqlalchemy.orm import Session
 
 from .v2_3_wiring import _trim_eodhd_fundamentals
 
 log = logging.getLogger(__name__)
 
 
-def build_eu_v2_transports() -> EuDataTransports | None:
+def build_eu_v2_transports(api_key: str | None = None) -> EuDataTransports | None:
     """Build EODHD-backed transports for the EU v2 runner.
 
-    Returns ``None`` when ``EODHD_API_KEY`` is unset so the runner uses
-    its loud null fallback.
+    Uses ``api_key`` when provided (e.g. resolved from an installed
+    connector), else falls back to ``EODHD_API_KEY``. Returns ``None``
+    when neither yields a key so the runner uses its loud null fallback.
     """
-    api_key = os.getenv("EODHD_API_KEY")
-    if not api_key:
+    key = api_key or os.getenv("EODHD_API_KEY")
+    if not key:
         log.info("EODHD_API_KEY unset; EU v2 data tools will return a not-configured error.")
         return None
 
     from eodhd import APIClient
 
-    client = APIClient(api_key=api_key)
+    client = APIClient(api_key=key)
 
     def fundamentals(ticker: str) -> dict[str, Any]:
         raw = client.get_fundamentals_data(ticker)
@@ -73,4 +76,25 @@ def build_eu_v2_transports() -> EuDataTransports | None:
     )
 
 
-__all__ = ["build_eu_v2_transports"]
+def resolve_eodhd_api_key(db: Session) -> str | None:
+    """Resolve the EODHD key from env first, then an installed connector.
+
+    Falls back to the ``secrets["EODHD_API_KEY"]`` of the first
+    ``validated`` connector with ``provider_id == "eodhd"`` so an
+    EODHD connector installed through the Connectors UI is usable by
+    the report engine (whose transports otherwise read env only).
+    """
+    env = os.getenv("EODHD_API_KEY")
+    if env:
+        return env
+    from openlia_server.services import connectors_service
+
+    for connector in connectors_service.list_connectors(db):
+        if connector.provider_id == "eodhd" and connector.status == ConnectorStatus.VALIDATED.value:
+            key = (connector.secrets or {}).get("EODHD_API_KEY")
+            if key:
+                return key
+    return None
+
+
+__all__ = ["build_eu_v2_transports", "resolve_eodhd_api_key"]
