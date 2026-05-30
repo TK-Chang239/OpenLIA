@@ -28,6 +28,7 @@ from ...report_v2_3.research import (
     ToolExecutionError,
     ToolResult,
     build_eodhd_tools,
+    prune_empty,
 )
 from ...report_v2_3.research.registry import (
     FundamentalsTransport,
@@ -83,11 +84,13 @@ def _wrap(tool: ResearchTool, ledger: CitationLedger) -> ResearchTool:
         )
         # Hand the model a payload that begins with the assigned
         # source_id so it knows what to cite. The raw EODHD payload
-        # stays under ``data``.
+        # stays under ``data``, pruned of value-less fields so the
+        # model's first read (and any cached copy) carries no null or
+        # empty noise — connector-agnostic and strictly lossless.
         annotated_payload: dict[str, Any] = {
             "source_id": entry.source_id,
             "summary": result.summary,
-            "data": result.payload,
+            "data": prune_empty(result.payload),
         }
         return ToolResult(
             payload=annotated_payload,
@@ -145,10 +148,13 @@ def build_earnings_calendar_tool(
             result_summary=summary,
             provenance=_provenance_to_dict(provenance),
         )
+        # Prune the events' value-less fields but keep the
+        # ``upcoming_earnings`` key even when empty — an empty list is a
+        # meaningful "no upcoming releases" signal, not noise to drop.
         annotated_payload: dict[str, Any] = {
             "source_id": entry.source_id,
             "summary": summary,
-            "data": {"ticker": ticker, "upcoming_earnings": list(events)},
+            "data": {"ticker": ticker, "upcoming_earnings": prune_empty(list(events))},
         }
         return ToolResult(payload=annotated_payload, provenance=provenance, summary=summary)
 

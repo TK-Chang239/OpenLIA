@@ -7,6 +7,7 @@ web adapters live in submodules so the runtime layer can depend on
 them without dragging FastAPI or the openai SDK into the core.
 """
 
+from .prune import prune_empty
 from .registry import (
     NullToolExecutor,
     ToolExecutionError,
@@ -25,4 +26,5 @@ __all__ = [
     "build_eodhd_tools",
     "build_research_tools",
     "build_web_search_tool",
+    "prune_empty",
 ]
