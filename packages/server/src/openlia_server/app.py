@@ -54,6 +54,9 @@ from openlia_server.routes.connectors import build_connectors_router
 from openlia_server.routes.departments.earnings_update import (
     build_earnings_update_router,
 )
+from openlia_server.routes.departments.earnings_update_v2 import (
+    build_earnings_update_v2_router,
+)
 from openlia_server.routes.departments.equity_research import (
     build_equity_research_router,
 )
@@ -372,6 +375,8 @@ def _make_lifespan(
 
         app.state.v3_event_broker = EventBroker()
         app.state.v3_cancel_registry = {}
+        app.state.eu_v2_event_broker = EventBroker()
+        app.state.eu_v2_cancel_registry = {}
         _v3_sweep_sf = db_session_factory or _default_session_factory
         with _v3_sweep_sf() as _v3_sweep_db:
             _v3_swept = _v3_cleanup(db=_v3_sweep_db)
@@ -801,6 +806,15 @@ def create_app(
     except Exception:
         log.exception("v2 stage factory unavailable — /v2/report will 503")
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
+    # EU v2 streaming infrastructure — lifespan sets the real broker.
+    # This guard covers tests that call create_app() without entering
+    # the lifespan (i.e. without TestClient or ASGILifespan).
+    if getattr(app.state, "eu_v2_event_broker", None) is None:
+        from openlia.llm.runtime.report_v3 import EventBroker as _EventBroker
+
+        app.state.eu_v2_event_broker = _EventBroker()
+        app.state.eu_v2_cancel_registry = {}
+    app.include_router(build_earnings_update_v2_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
 
