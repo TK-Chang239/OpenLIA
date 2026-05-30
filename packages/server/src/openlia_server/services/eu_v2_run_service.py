@@ -31,6 +31,7 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from openlia.llm.capabilities import capabilities_for
 from openlia.llm.runtime.report_eu import (
     BrokerEmitter,
     CancelToken,
@@ -56,7 +57,10 @@ from openlia_server.db.models.report_eu import (
     ReportEuToolCallLog,
 )
 from openlia_server.services import eu_v2_settings, eu_v2_template_service
-from openlia_server.services.eu_v2_wiring import build_eu_v2_transports
+from openlia_server.services.eu_v2_wiring import (
+    build_eu_v2_transports,
+    resolve_eodhd_api_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -91,10 +95,12 @@ def build_run_request(
         db, user_id=user_id, template_id=settings.template_id
     )
 
+    eodhd_available = resolve_eodhd_api_key(db) is not None
+    caps = capabilities_for(provider_kind=settings.provider_kind, model=settings.model)
     connectors = EnabledConnectors(
-        financial=settings.financial_enabled,
-        earnings_calendar=settings.calendar_enabled,
-        web_search=settings.web_search_enabled,
+        financial=settings.financial_enabled and eodhd_available,
+        earnings_calendar=settings.calendar_enabled and eodhd_available,
+        web_search=settings.web_search_enabled and caps.web_search_native,
     )
     trigger_context = TriggerContext(
         ticker=ticker,
@@ -175,6 +181,8 @@ def start_run_async(
     db.add(row)
     db.flush()
 
+    if transports is None:
+        transports = build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))
     cancel_token = CancelToken()
     cancel_registry[report_id] = cancel_token
     emitter = BrokerEmitter(broker=broker, report_id=report_id)
