@@ -654,6 +654,9 @@
     "earlier_this_week": "Earlier this week",
     "calendar_wiring_pending": "Earnings calendar wiring pending",
     "generating_report": "Generating {{ticker}} earnings update...",
+    "no_upcoming_earnings": "No upcoming earnings scheduled",
+    "report_ready": "Report ready",
+    "disabled_banner": "Earnings Update v2 is disabled. Set EARNINGS_ENGINE_VERSION=v2 to enable.",
     "schedule_modal": {
       "edit_title": "Edit Schedule",
       "add_title": "Add Schedule",

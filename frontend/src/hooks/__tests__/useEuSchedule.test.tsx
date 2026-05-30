@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "../../api/earnings-update";
 import { useEuSchedule } from "../useEuSchedule";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe("useEuSchedule", () => {
   it("loads schedule and exposes a byTicker map", async () => {

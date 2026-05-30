@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { RecentReport } from "../../api/earnings-update";
+import { RunSummary } from "../../api/earnings-update";
 
 import { ReportRowItem } from "./ReportRowItem";
 
 interface Props {
-  reports: RecentReport[];
+  reports: RunSummary[];
   onOpenReport: (id: string) => void;
   onOpenCabinet: () => void;
 }
@@ -89,10 +89,12 @@ export function RecentReportsList({
         <div>
           {reports.map((r) => (
             <ReportRowItem
-              key={r.id}
+              key={r.report_id}
               report={r}
               onOpen={handleOpen}
-              isNew={isWithinNewWindow(r.created_at) && !openedIds.has(r.id)}
+              isNew={
+                isWithinNewWindow(r.created_at) && !openedIds.has(r.report_id)
+              }
             />
           ))}
         </div>

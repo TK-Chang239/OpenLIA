@@ -1,5 +1,7 @@
-import type { RecentReport } from "../../../api/earnings-update";
-import type { WatchlistEntry } from "../../../api/earnings-update";
+import type {
+  RunSummary,
+  WatchlistEntry,
+} from "../../../api/earnings-update";
 
 export type FeedFilter =
   | "all"
@@ -32,8 +34,8 @@ export function isWithinLastWeek(
   return ts >= start;
 }
 
-export function tickerOf(report: RecentReport): string {
-  return (report.subject ?? "").toUpperCase();
+export function tickerOf(report: RunSummary): string {
+  return (report.ticker ?? "").toUpperCase();
 }
 
 interface FilterContext {
@@ -42,10 +44,10 @@ interface FilterContext {
 }
 
 export function applyFilter(
-  reports: RecentReport[],
+  reports: RunSummary[],
   filter: FeedFilter,
   ctx: FilterContext,
-): RecentReport[] {
+): RunSummary[] {
   const watchTickers = new Set(
     ctx.watchlist.map((w) => w.ticker.toUpperCase()),
   );
@@ -67,16 +69,16 @@ export function applyFilter(
 }
 
 export interface FeedGroups {
-  today: RecentReport[];
-  earlierThisWeek: RecentReport[];
+  today: RunSummary[];
+  earlierThisWeek: RunSummary[];
 }
 
 export function groupReports(
-  reports: RecentReport[],
+  reports: RunSummary[],
   now: Date = new Date(),
 ): FeedGroups {
-  const today: RecentReport[] = [];
-  const earlierThisWeek: RecentReport[] = [];
+  const today: RunSummary[] = [];
+  const earlierThisWeek: RunSummary[] = [];
   for (const r of reports) {
     if (isToday(r.created_at, now)) today.push(r);
     else if (isWithinLastWeek(r.created_at, now)) earlierThisWeek.push(r);

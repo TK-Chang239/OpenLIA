@@ -76,11 +76,6 @@ export function CoverageModal({
                   <span className="flex-1 text-[13px] text-[--color-text-secondary] truncate">
                     {e.company_name}
                   </span>
-                  {e.next_earnings_date ? (
-                    <span className="font-mono text-[10px] tracking-[0.06em] uppercase text-[--color-text-tertiary]">
-                      {e.next_earnings_date}
-                    </span>
-                  ) : null}
                   <button
                     type="button"
                     onClick={() => void onRemove(e.id)}
