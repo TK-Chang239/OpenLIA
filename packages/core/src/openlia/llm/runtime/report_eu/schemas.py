@@ -151,9 +151,10 @@ class RunRequest(BaseModel):
     """Input to an Earnings Update v2 run.
 
     Forked from report_v3's RunRequest. Differences: no ``attachments``
-    / ``instructions`` (out of scope for EU v2), and two added fields —
+    (out of scope for EU v2), and two added fields —
     ``enabled_connectors`` (which tool groups to build) and
-    ``trigger_context`` (the earnings event being covered).
+    ``trigger_context`` (the earnings event being covered). Free-form
+    ``instructions`` are supported and injected into the system prompt.
 
     ``subject`` is either a ticker (``MSFT.US``) or a free-form earnings
     topic; the template's ``ticker_anchored`` flag decides how to
@@ -178,6 +179,8 @@ class RunRequest(BaseModel):
     reasoning_effort: ReasoningEffort | None = None
     enabled_connectors: EnabledConnectors = Field(default_factory=EnabledConnectors)
     trigger_context: TriggerContext | None = None
+    # Free-form analyst methodology/guidance injected into the system prompt.
+    instructions: str | None = None
 
 
 class CoverMetric(BaseModel):
