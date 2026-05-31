@@ -138,6 +138,7 @@ export function CoverageDrawer({
       />
       <aside
         role="dialog"
+        aria-modal="true"
         aria-label={t("earnings.coverage.title")}
         className="absolute right-0 top-0 flex h-full w-[460px] max-w-[92vw] flex-col border-l border-[--color-border-subtle] bg-[--color-bg-base] shadow-[-8px_0_32px_rgba(13,13,11,0.10)] motion-safe:animate-[ol-drawer-in_240ms_ease-out]"
       >
