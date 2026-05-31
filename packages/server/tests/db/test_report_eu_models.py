@@ -20,7 +20,9 @@ def test_tablenames():
 
 def test_settings_connector_defaults_are_columns():
     cols = {c.name for c in EuV2Settings.__table__.columns}
-    assert {"financial_enabled", "calendar_enabled", "web_search_enabled"} <= cols
+    assert {"enabled_provider_ids", "web_search_enabled"} <= cols
+    assert "financial_enabled" not in cols
+    assert "calendar_enabled" not in cols
 
 
 def test_instructions_model_shape():

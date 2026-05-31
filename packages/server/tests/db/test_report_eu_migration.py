@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import openlia_server.db.models.register_all  # noqa: F401  (register all tables)
 from alembic import command
 from alembic.config import Config
@@ -60,6 +62,51 @@ def test_migration_upgrade_creates_tables_and_seeds_default(tmp_path, monkeypatc
     assert len(rows) == 1
     assert rows[0][0] == "eu_default"
     assert bool(rows[0][2]) is True
+
+
+def test_migration_data_migrates_enabled_provider_ids(tmp_path, monkeypatch):
+    """A row with the old financial bool on maps to ``["eodhd"]``."""
+    db = tmp_path / "app.db"
+    monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{db}")
+    cfg = _alembic_config(str(db))
+    # Upgrade only to the revision that still has the bool columns, seed a
+    # row, then run the enabled_provider_ids migration over it.
+    command.upgrade(cfg, "7f2a9c4be103")
+
+    engine = create_engine(f"sqlite:///{db}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO eu_v2_settings "
+                "(user_id, provider_kind, model, template_id, language, length, "
+                " financial_enabled, calendar_enabled, web_search_enabled, "
+                " created_at, updated_at) "
+                "VALUES ('u-on', 'anthropic', 'm', 'eu_default', 'en', 'normal', "
+                " 1, 0, 0, '2026-01-01', '2026-01-01')"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO eu_v2_settings "
+                "(user_id, provider_kind, model, template_id, language, length, "
+                " financial_enabled, calendar_enabled, web_search_enabled, "
+                " created_at, updated_at) "
+                "VALUES ('u-off', 'anthropic', 'm', 'eu_default', 'en', 'normal', "
+                " 0, 0, 0, '2026-01-01', '2026-01-01')"
+            )
+        )
+
+    command.upgrade(cfg, "898ac749e884")
+
+    with engine.connect() as conn:
+        on = conn.execute(
+            text("SELECT enabled_provider_ids FROM eu_v2_settings WHERE user_id = 'u-on'")
+        ).scalar_one()
+        off = conn.execute(
+            text("SELECT enabled_provider_ids FROM eu_v2_settings WHERE user_id = 'u-off'")
+        ).scalar_one()
+    assert json.loads(on) == ["eodhd"]
+    assert json.loads(off) == []
 
 
 def test_migration_downgrade_drops_tables(tmp_path, monkeypatch):
