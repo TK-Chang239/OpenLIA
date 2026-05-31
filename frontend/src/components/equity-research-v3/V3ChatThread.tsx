@@ -11,9 +11,10 @@
  *
  *   - one user turn for the initial prompt + the settings snapshot
  *     active when it was submitted
- *   - one system turn for the run itself: ``StreamPanel``-style
- *     live activity while streaming, the ``V3ReportCard`` when the
- *     run reaches a terminal state
+ *   - one system turn for the run itself: a phase-aware
+ *     ``V3ReportCard`` rendered from the first frame — "generating"
+ *     (activity feed + live counts) while streaming, "ready" once
+ *     ``detail`` has loaded
  *   - per revision: one user turn (the revision request) + one
  *     system turn (revision status row; the report card at the top
  *     of the thread updates in place as revisions complete)
@@ -60,7 +61,7 @@ interface Props {
   /** The active run's report id. ``null`` before the first submit. */
   reportId: string | null;
   /** Live SSE state for the currently-running initial dispatch.
-   *  Used by the system turn to render the StreamPanel chips. */
+   *  Used by the system turn to feed the V3ReportCard's live props. */
   stream: {
     status: string;
     events: V3Event[];

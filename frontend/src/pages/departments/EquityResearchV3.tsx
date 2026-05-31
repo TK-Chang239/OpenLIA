@@ -441,6 +441,8 @@ export default function EquityResearchV3(): JSX.Element {
                   events: stream.events,
                   sectionsWritten: stream.sectionsWritten,
                   chartsEmitted: stream.chartsEmitted,
+                  citationsSeen: stream.citationsSeen,
+                  elapsedSeconds: stream.elapsedSeconds,
                   toolCallsInflight: stream.toolCallsInflight,
                   terminalMessage: stream.terminalMessage,
                   errorMessage: stream.errorMessage,
