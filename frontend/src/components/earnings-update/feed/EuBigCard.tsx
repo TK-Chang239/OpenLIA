@@ -1,8 +1,6 @@
 import { FileText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { DemoReportMeta } from "../../../lib/earnings-update/demo-data";
-
 interface Props {
   ticker: string;
   title: string;
@@ -11,7 +9,6 @@ interface Props {
   status: "streaming" | "complete";
   reportId?: string | null;
   onOpen?: (id: string) => void;
-  meta?: DemoReportMeta;
 }
 
 export function EuBigCard({
@@ -22,14 +19,13 @@ export function EuBigCard({
   status,
   reportId,
   onOpen,
-  meta,
 }: Props) {
   const { t } = useTranslation();
   const live = status === "streaming";
   return (
     <article
       data-testid="eu-big-card"
-      className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-0 bg-[--color-bg-elevated] border rounded-[12px] overflow-hidden relative transition-all duration-[--duration-normal] border-[rgba(var(--color-accent-primary-rgb),0.4)] hover:border-[--color-accent-primary] hover:-translate-y-0.5"
+      className="bg-[--color-bg-elevated] border rounded-[12px] overflow-hidden relative transition-all duration-[--duration-normal] border-[rgba(var(--color-accent-primary-rgb),0.4)] hover:border-[--color-accent-primary] hover:-translate-y-0.5"
     >
       <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[--color-accent-primary]" />
       <div className="px-[26px] py-5 flex flex-col gap-3">
@@ -79,61 +75,6 @@ export function EuBigCard({
           )}
         </div>
       </div>
-      <aside className="bg-[--color-accent-subtle] border-t md:border-t-0 md:border-l border-[--color-border-subtle] px-4 py-4 flex flex-col gap-2.5">
-        <div className="grid grid-cols-2 gap-x-3.5 gap-y-2.5">
-          <SideStat
-            label={t("earnings.feed.rev_surprise")}
-            value={meta?.revSurprise ?? "—"}
-            tone={meta ? (meta.revPositive ? "pos" : "neg") : undefined}
-          />
-          <SideStat
-            label={t("earnings.feed.eps_surprise")}
-            value={meta?.epsSurprise ?? "—"}
-            tone={meta ? (meta.epsPositive ? "pos" : "neg") : undefined}
-          />
-          <SideStat
-            label={t("earnings.feed.after_hours")}
-            value={meta?.afterHours ?? "—"}
-            tone={
-              meta?.afterHours !== undefined
-                ? meta.afterHoursPositive
-                  ? "pos"
-                  : "neg"
-                : undefined
-            }
-          />
-          <SideStat label={t("earnings.feed.lia_signal")} value={meta?.liaSignal ?? "—"} />
-        </div>
-      </aside>
     </article>
-  );
-}
-
-function SideStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "pos" | "neg";
-}) {
-  const toneClass =
-    tone === "pos"
-      ? "text-[--color-feedback-success]"
-      : tone === "neg"
-        ? "text-[--color-feedback-error]"
-        : "text-[--color-text-primary]";
-  return (
-    <div className="flex flex-col gap-px">
-      <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-[--color-text-tertiary]">
-        {label}
-      </span>
-      <span
-        className={`font-mono text-[14px] tabular-nums ${toneClass}`}
-      >
-        {value}
-      </span>
-    </div>
   );
 }

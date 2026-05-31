@@ -1,23 +1,40 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RunSummary } from "../../../api/earnings-update";
 import { RecentReportsList } from "../RecentReportsList";
 
-const reports = [
-  {
-    id: "r1",
-    title: "Apple Inc. — Q1 FY2026 Earnings",
-    subject: "AAPL",
-    report_type: "earnings_update",
+function makeRun(over: Partial<RunSummary>): RunSummary {
+  return {
+    report_id: "r",
+    ticker: "AAPL",
+    subject: "Subject",
+    template_id: "eu_default",
+    trigger_kind: "on_demand",
+    fiscal_date: null,
+    language: "en",
+    length: "normal",
+    status: "completed",
     created_at: "2026-04-09T12:00:00Z",
-  },
-  {
-    id: "r2",
-    title: "Tesla Inc. — Q1 FY2026 Earnings",
-    subject: "TSLA",
-    report_type: "earnings_update",
+    completed_at: null,
+    reasoning_effort: null,
+    ...over,
+  };
+}
+
+const reports: RunSummary[] = [
+  makeRun({
+    report_id: "r1",
+    subject: "Apple Inc. — Q1 FY2026 Earnings",
+    ticker: "AAPL",
+    created_at: "2026-04-09T12:00:00Z",
+  }),
+  makeRun({
+    report_id: "r2",
+    subject: "Tesla Inc. — Q1 FY2026 Earnings",
+    ticker: "TSLA",
     created_at: "2026-04-08T12:00:00Z",
-  },
+  }),
 ];
 
 describe("RecentReportsList", () => {
@@ -71,13 +88,12 @@ describe("RecentReportsList", () => {
     });
 
     it("renders New dot for reports created within 24h", () => {
-      const fresh = {
-        id: "fresh",
-        title: "Fresh report",
-        subject: "AAPL",
-        report_type: "earnings_update",
+      const fresh = makeRun({
+        report_id: "fresh",
+        subject: "Fresh report",
+        ticker: "AAPL",
         created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      };
+      });
       render(
         <RecentReportsList
           reports={[fresh]}
@@ -89,13 +105,12 @@ describe("RecentReportsList", () => {
     });
 
     it("does not render New dot for reports older than 24h", () => {
-      const old = {
-        id: "old",
-        title: "Old report",
-        subject: "AAPL",
-        report_type: "earnings_update",
+      const old = makeRun({
+        report_id: "old",
+        subject: "Old report",
+        ticker: "AAPL",
         created_at: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
-      };
+      });
       render(
         <RecentReportsList
           reports={[old]}
@@ -107,13 +122,12 @@ describe("RecentReportsList", () => {
     });
 
     it("clears New dot after the report is opened", () => {
-      const fresh = {
-        id: "fresh",
-        title: "Fresh report",
-        subject: "AAPL",
-        report_type: "earnings_update",
+      const fresh = makeRun({
+        report_id: "fresh",
+        subject: "Fresh report",
+        ticker: "AAPL",
         created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-      };
+      });
       render(
         <RecentReportsList
           reports={[fresh]}
