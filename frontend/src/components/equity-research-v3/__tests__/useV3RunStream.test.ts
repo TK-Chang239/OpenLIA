@@ -192,6 +192,9 @@ describe("useV3RunStream", () => {
     vi.setSystemTime(new Date("2026-05-31T00:00:00Z"));
     try {
       const { result } = renderHook(() => useV3RunStream("run-1"));
+      // No waitFor here: under fake timers waitFor can't resolve; the
+      // EventSource is constructed synchronously in the effect, so the
+      // instance is already present.
       const source = FakeEventSource.instances[0];
 
       expect(result.current.elapsedSeconds).toBeNull();
