@@ -446,6 +446,164 @@ def test_build_run_request_gates_web_search_off_for_incapable_model(
     assert req.enabled_connectors.web_search is False
 
 
+def _seed_connector(
+    db,
+    *,
+    cid: str,
+    provider_id: str,
+    status: str = "validated",
+) -> None:
+    """Insert a routable built-in connector row (mirrors dispatcher tests)."""
+    from openlia_server.db.models.connectors import Connector
+
+    db.add(
+        Connector(
+            id=cid,
+            provider_id=provider_id,
+            display_name=provider_id,
+            source="built_in",
+            category="financial",
+            status=status,
+            launch={"modes": [{"kind": "remote_mcp", "url": "https://x.test", "headers": {}}]},
+            secrets={},
+            cached_tools=[
+                {
+                    "name": "quote",
+                    "description": "x",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"symbol": {"type": "string"}},
+                        "required": ["symbol"],
+                    },
+                }
+            ],
+        )
+    )
+    db.commit()
+
+
+def test_build_run_request_drops_provider_without_validated_connector(db_session_with_seed):
+    """A settings-enabled provider with no validated connector row silently drops."""
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=["eodhd", "ghost"],
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    # eodhd stays (curated path); ghost has no validated connector -> dropped.
+    assert set(req.enabled_connectors.provider_ids) == {"eodhd"}
+
+
+def test_build_run_request_keeps_validated_connector_provider(db_session_with_seed):
+    _seed_connector(db_session_with_seed, cid="c-newsapi", provider_id="newsapi_ai")
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=["newsapi_ai", "ghost"],
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert set(req.enabled_connectors.provider_ids) == {"newsapi_ai"}
+
+
+def test_build_run_request_drops_unvalidated_connector_provider(db_session_with_seed):
+    _seed_connector(
+        db_session_with_seed, cid="c-newsapi", provider_id="newsapi_ai", status="failed"
+    )
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=["newsapi_ai"],
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert set(req.enabled_connectors.provider_ids) == set()
+
+
+def test_build_eu_dispatcher_routes_validated_non_eodhd(db_session):
+    _seed_connector(db_session, cid="c-eodhd", provider_id="eodhd")
+    _seed_connector(db_session, cid="c-newsapi", provider_id="newsapi_ai")
+    dispatcher = svc.build_eu_dispatcher(
+        db_session, enabled_provider_ids=frozenset({"eodhd", "newsapi_ai"})
+    )
+    assert dispatcher is not None
+    names = {c["name"] for c in dispatcher.candidate_tools()}
+    assert "newsapi_ai__quote" in names
+    # eodhd is enabled here so its dispatcher tools are not blocked either.
+    assert "eodhd__quote" in names
+
+
+def test_build_eu_dispatcher_blocks_disabled_provider(db_session):
+    _seed_connector(db_session, cid="c-eodhd", provider_id="eodhd")
+    _seed_connector(db_session, cid="c-newsapi", provider_id="newsapi_ai")
+    dispatcher = svc.build_eu_dispatcher(db_session, enabled_provider_ids=frozenset({"newsapi_ai"}))
+    assert dispatcher is not None
+    names = {c["name"] for c in dispatcher.candidate_tools()}
+    assert "newsapi_ai__quote" in names
+    assert not any(n.startswith("eodhd__") for n in names)
+
+
+def test_build_eu_dispatcher_none_when_only_eodhd_enabled(db_session):
+    _seed_connector(db_session, cid="c-eodhd", provider_id="eodhd")
+    dispatcher = svc.build_eu_dispatcher(db_session, enabled_provider_ids=frozenset({"eodhd"}))
+    assert dispatcher is None
+
+
+def test_build_eu_dispatcher_none_when_no_enabled_non_eodhd(db_session):
+    _seed_connector(db_session, cid="c-newsapi", provider_id="newsapi_ai")
+    dispatcher = svc.build_eu_dispatcher(db_session, enabled_provider_ids=frozenset({"eodhd"}))
+    assert dispatcher is None
+
+
 def test_cleanup_orphaned_running_rows(db_session):
     """Stuck 'running' rows flipped to 'failed'; completed rows untouched."""
     now = datetime.now(UTC)
