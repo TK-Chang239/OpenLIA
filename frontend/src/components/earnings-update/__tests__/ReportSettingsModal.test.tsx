@@ -96,4 +96,44 @@ describe("ReportSettingsModal (v2)", () => {
     renderModal();
     expect(screen.getByTestId("eu-v2-data-sources-other")).toHaveTextContent("FMP");
   });
+
+  it("disables Save and shows error when freeform template and no instructions", async () => {
+    renderModal();
+    const select = await screen.findByTestId("eu-v2-template-select");
+    fireEvent.change(select, { target: { value: "freeform" } });
+    expect(screen.getByTestId("eu-v2-settings-save")).toBeDisabled();
+    expect(
+      screen.getByText(/at least one is required/i),
+    ).toBeInTheDocument();
+  });
+
+  it("enables Save when freeform template but an instructions profile is selected", async () => {
+    vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([
+      { id: "m1", provider_kind: "anthropic", model_ref: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6", is_enabled: true } as never,
+    ]);
+    vi.spyOn(euApi, "fetchTemplates").mockResolvedValue({ templates: [{ id: "eu_default", name: "Earnings Update (Default)", is_builtin: true, created_at: "", updated_at: "" }] });
+    vi.spyOn(euApi, "listEuInstructions").mockResolvedValue([
+      { id: "ins1", name: "My Profile", is_builtin: false, created_at: "", updated_at: "" } as never,
+    ]);
+    render(<ReportSettingsModal settings={base} onSave={vi.fn().mockResolvedValue(base)} onClose={() => {}} />);
+    const tplSelect = await screen.findByTestId("eu-v2-template-select");
+    fireEvent.change(tplSelect, { target: { value: "freeform" } });
+    const insSelect = await screen.findByTestId("eu-v2-instructions-select");
+    await waitFor(() =>
+      expect(insSelect.querySelector('option[value="ins1"]')).not.toBeNull(),
+    );
+    fireEvent.change(insSelect, { target: { value: "ins1" } });
+    await waitFor(() =>
+      expect(screen.getByTestId("eu-v2-settings-save")).not.toBeDisabled(),
+    );
+    expect(screen.queryByText(/at least one is required/i)).toBeNull();
+  });
+
+  it("keeps Save enabled for a normal template with no instructions", async () => {
+    renderModal();
+    const select = await screen.findByTestId("eu-v2-template-select");
+    fireEvent.change(select, { target: { value: "eu_default" } });
+    expect(screen.getByTestId("eu-v2-settings-save")).not.toBeDisabled();
+    expect(screen.queryByText(/at least one is required/i)).toBeNull();
+  });
 });

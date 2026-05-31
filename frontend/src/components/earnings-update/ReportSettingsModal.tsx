@@ -143,6 +143,10 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
     (ins) => ins.id === draft.instructions_id,
   );
 
+  // Template = forced output schema; Instructions = free-form prompt. Each
+  // optional, but not both empty: freeform template with no profile is rejected.
+  const bothEmpty = draft.template_id === "freeform" && !draft.instructions_id;
+
   async function handleInstructionsSaved(
     profile: EuInstructionsSummary,
   ): Promise<void> {
@@ -303,6 +307,9 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
                   data-testid="eu-v2-template-select"
                   className="flex-1 h-9 rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
                 >
+                  <option value="freeform">
+                    {t("earnings.settings_modal.template_freeform")}
+                  </option>
                   {sortedTemplates.map((tpl) => (
                     <option key={tpl.id} value={tpl.id}>
                       {tpl.name}
@@ -330,6 +337,14 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
                   {t("earnings.settings_modal.template_upload")}
                 </button>
               </div>
+              {draft.template_id === "freeform" ? (
+                <p
+                  data-testid="eu-v2-template-freeform-hint"
+                  className="mt-3 text-[12px] text-[--color-text-tertiary] leading-[1.5]"
+                >
+                  {t("earnings.settings_modal.template_freeform_hint")}
+                </p>
+              ) : null}
             </section>
 
             <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
@@ -531,7 +546,15 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
             ) : null}
           </div>
 
-          <footer className="flex items-center justify-end gap-2 px-5 h-14 border-t border-[--color-border-subtle] flex-shrink-0">
+          <footer className="flex items-center justify-end gap-3 px-5 h-14 border-t border-[--color-border-subtle] flex-shrink-0">
+            {bothEmpty ? (
+              <p
+                data-testid="eu-v2-both-empty-error"
+                className="mr-auto text-[12px] text-[--color-feedback-danger] leading-[1.4]"
+              >
+                {t("earnings.settings_modal.both_empty_error")}
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={onClose}
@@ -542,7 +565,7 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || bothEmpty}
               data-testid="eu-v2-settings-save"
               className="inline-flex items-center h-9 px-5 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] disabled:opacity-50 transition-colors"
             >
