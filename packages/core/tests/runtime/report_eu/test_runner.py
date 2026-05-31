@@ -192,6 +192,9 @@ async def test_runner_enters_dispatcher_context():
             self.events: list[str] = []
             self.department: str | None = None
 
+        def candidate_tools(self) -> list[dict]:
+            return []
+
         @contextlib.asynccontextmanager
         async def in_department(self, department: str):
             self.department = department

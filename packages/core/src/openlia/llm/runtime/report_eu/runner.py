@@ -113,6 +113,7 @@ class Runner:
             workspace=workspace,
             transports=self.transports,
             enabled_connectors=request.enabled_connectors,
+            dispatcher=self.dispatcher,
         )
 
         emitter.emit(
