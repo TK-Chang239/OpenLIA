@@ -4,9 +4,9 @@ import {
   addWatchlistEntry,
   fetchWatchlist,
   removeWatchlistEntry,
+  syncWatchlist,
   type WatchlistEntry,
 } from "../api/earnings-update";
-import { getDemoWatchlist, isDemoMode } from "../lib/earnings-update/demo-data";
 
 export function useEuWatchlist() {
   const [entries, setEntries] = useState<WatchlistEntry[]>([]);
@@ -14,12 +14,6 @@ export function useEuWatchlist() {
   const [error, setError] = useState<Error | null>(null);
 
   const refresh = useCallback(async () => {
-    if (isDemoMode()) {
-      setEntries(getDemoWatchlist());
-      setError(null);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
       const r = await fetchWatchlist();
@@ -56,5 +50,10 @@ export function useEuWatchlist() {
     [entries],
   );
 
-  return { entries, loading, error, refresh, add, remove };
+  const syncNow = useCallback(async () => {
+    await syncWatchlist();
+    await refresh();
+  }, [refresh]);
+
+  return { entries, loading, error, refresh, add, remove, syncNow };
 }

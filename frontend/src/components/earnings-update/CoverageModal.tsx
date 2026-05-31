@@ -1,7 +1,7 @@
 import { X, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { WatchlistEntry } from "../../api/earnings-update";
+import type { EuScheduleEntry, WatchlistEntry } from "../../api/earnings-update";
 
 import { AddTickerPopover } from "./AddTickerPopover";
 
@@ -11,6 +11,22 @@ interface Props {
   onClose: () => void;
   onAdd: (ticker: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  nextReleaseByTicker?: Map<string, EuScheduleEntry>;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function isPast(iso: string): boolean {
+  const d = new Date(iso);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d < today;
 }
 
 export function CoverageModal({
@@ -19,6 +35,7 @@ export function CoverageModal({
   onClose,
   onAdd,
   onRemove,
+  nextReleaseByTicker,
 }: Props) {
   const { t } = useTranslation();
   if (!open) return null;
@@ -64,33 +81,66 @@ export function CoverageModal({
             </p>
           ) : (
             <ul className="divide-y divide-[var(--color-border-subtle)]">
-              {entries.map((e) => (
-                <li
-                  key={e.id}
-                  className="flex items-center gap-3 px-5 py-3"
-                  data-testid="coverage-row"
-                >
-                  <span className="font-mono text-[13px] font-semibold text-[--color-text-primary] w-16">
-                    {e.ticker}
-                  </span>
-                  <span className="flex-1 text-[13px] text-[--color-text-secondary] truncate">
-                    {e.company_name}
-                  </span>
-                  {e.next_earnings_date ? (
-                    <span className="font-mono text-[10px] tracking-[0.06em] uppercase text-[--color-text-tertiary]">
-                      {e.next_earnings_date}
-                    </span>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => void onRemove(e.id)}
-                    aria-label={t("earnings.coverage_modal.remove_ticker_aria", { ticker: e.ticker })}
-                    className="text-[--color-text-tertiary] hover:text-[--color-feedback-error]"
+              {entries.map((e) => {
+                const nr = nextReleaseByTicker?.get(e.ticker);
+                const fiscalDate = nr?.fiscal_date ?? null;
+                const timing = nr?.release_timing ?? null;
+                const overdue = fiscalDate ? isPast(fiscalDate) : false;
+                return (
+                  <li
+                    key={e.id}
+                    className="flex items-center gap-3 px-5 py-3"
+                    data-testid="coverage-row"
                   >
-                    <Trash2 size={14} />
-                  </button>
-                </li>
-              ))}
+                    <span className="font-mono text-[13px] font-semibold text-[--color-text-primary] w-16">
+                      {e.ticker}
+                    </span>
+                    <span className="flex-1 text-[13px] text-[--color-text-secondary] truncate">
+                      {e.company_name}
+                    </span>
+                    <span className="flex items-center gap-1.5 shrink-0">
+                      <span
+                        className={[
+                          "text-[11px]",
+                          overdue
+                            ? "text-[--color-feedback-error]"
+                            : fiscalDate
+                              ? "text-[--color-text-secondary]"
+                              : "text-[--color-text-tertiary]",
+                        ].join(" ")}
+                        data-testid="coverage-next-date"
+                      >
+                        {fiscalDate
+                          ? formatDate(fiscalDate)
+                          : t("earnings.watchlist_card.no_upcoming_date")}
+                      </span>
+                      {!overdue && timing ? (
+                        <span
+                          className={[
+                            "text-[10px] rounded-full px-1.5 py-px",
+                            timing === "pre_market"
+                              ? "bg-[--color-info]/10 text-[--color-info]"
+                              : "bg-[--color-warning]/10 text-[--color-warning]",
+                          ].join(" ")}
+                          data-testid="coverage-timing-badge"
+                        >
+                          {timing === "pre_market"
+                            ? t("earnings.watchlist_card.pre_market")
+                            : t("earnings.watchlist_card.post_market")}
+                        </span>
+                      ) : null}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void onRemove(e.id)}
+                      aria-label={t("earnings.coverage_modal.remove_ticker_aria", { ticker: e.ticker })}
+                      className="text-[--color-text-tertiary] hover:text-[--color-feedback-error]"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

@@ -33,7 +33,11 @@ export type FileSource =
   // tables. The viewer renders them with react-markdown — see
   // V3ReportRenderer. The /html and /pdf routes stay as the
   // standalone export surface (new-tab open + Word / PDF download).
-  | { kind: "v3_report"; reportId: string };
+  | { kind: "v3_report"; reportId: string }
+  // EU v2 runs persist sections/charts/citations in the eu_v2_*
+  // tables. The viewer adapts the RunDetail to the shared ReportSchema
+  // and renders through EUV2ReportRenderer (same pipeline as v3).
+  | { kind: "eu_v2_report"; reportId: string };
 
 export interface FileViewerTarget {
   filename: string;

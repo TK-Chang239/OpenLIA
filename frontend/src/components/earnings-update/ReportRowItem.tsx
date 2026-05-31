@@ -1,10 +1,10 @@
 import { useTranslation } from "react-i18next";
 
-import { RecentReport } from "../../api/earnings-update";
+import { RunSummary } from "../../api/earnings-update";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 interface Props {
-  report: RecentReport;
+  report: RunSummary;
   onOpen: (id: string) => void;
   showExtras?: boolean;
   onRemove?: (id: string) => void;
@@ -39,27 +39,27 @@ export function ReportRowItem({
         />
       ) : null}
       <span className="text-sm font-semibold text-[--color-text-primary] w-12 flex-shrink-0">
-        {report.subject ?? "—"}
+        {report.ticker ?? "—"}
       </span>
       <span className="flex-1 text-base text-[--color-text-primary]">
-        {report.title}
+        {report.subject}
       </span>
       <span className="hidden sm:block text-sm text-[--color-text-secondary] flex-shrink-0">
         {formatDate(report.created_at)}
       </span>
       <button
         type="button"
-        onClick={() => onOpen(report.id)}
+        onClick={() => onOpen(report.report_id)}
         className="text-sm text-[--color-accent-primary] hover:text-[--color-accent-hover] ml-2"
       >
         {t("earnings.report_row.open")}
       </button>
       {showExtras ? (
         <>
-          <ReportDownloadButton reportId={report.id} className="ml-2" />
+          <ReportDownloadButton reportId={report.report_id} className="ml-2" />
           <button
             type="button"
-            onClick={() => onRemove?.(report.id)}
+            onClick={() => onRemove?.(report.report_id)}
             aria-label={t("earnings.report_row.remove_aria")}
             className="text-sm text-[--color-text-secondary] hover:text-[--color-feedback-error] ml-2"
           >

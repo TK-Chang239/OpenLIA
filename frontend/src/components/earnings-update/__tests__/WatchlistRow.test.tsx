@@ -25,15 +25,13 @@ describe("WatchlistRow", () => {
         id: "1",
         ticker: "AAPL",
         company_name: "Apple",
-        next_earnings_date: "2026-04-25",
-        release_timing: "post_market" as const,
+        created_at: "2026-01-01T00:00:00Z",
       },
       {
         id: "2",
         ticker: "TSLA",
         company_name: "Tesla",
-        next_earnings_date: "2026-04-22",
-        release_timing: "pre_market" as const,
+        created_at: "2026-01-01T00:00:00Z",
       },
     ];
     render(

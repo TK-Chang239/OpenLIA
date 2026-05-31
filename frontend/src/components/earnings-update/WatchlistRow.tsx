@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 
-import { WatchlistEntry } from "../../api/earnings-update";
+import type {
+  EuScheduleEntry,
+  WatchlistEntry,
+} from "../../api/earnings-update";
 
 import { AddTickerPopover } from "./AddTickerPopover";
 import { WatchlistCard } from "./WatchlistCard";
@@ -9,9 +12,15 @@ interface Props {
   entries: WatchlistEntry[];
   onAdd: (ticker: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  nextReleaseByTicker?: Map<string, EuScheduleEntry>;
 }
 
-export function WatchlistRow({ entries, onAdd, onRemove }: Props) {
+export function WatchlistRow({
+  entries,
+  onAdd,
+  onRemove,
+  nextReleaseByTicker,
+}: Props) {
   const { t } = useTranslation();
   return (
     <section>
@@ -34,6 +43,7 @@ export function WatchlistRow({ entries, onAdd, onRemove }: Props) {
             <WatchlistCard
               key={e.id}
               entry={e}
+              nextRelease={nextReleaseByTicker?.get(e.ticker)}
               onRemove={(id) => void onRemove(id)}
             />
           ))}

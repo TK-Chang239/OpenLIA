@@ -269,3 +269,78 @@ def test_run_start_handler_is_async():
     assert any(
         inspect.iscoroutinefunction(getattr(mod, n, None)) for n in dir(mod) if "start" in n.lower()
     )
+
+
+def test_data_sources_503_when_disabled(client_eu_v2_disabled):
+    r = client_eu_v2_disabled.get(f"{_BASE}/data-sources")
+    assert r.status_code == 503
+
+
+def test_data_sources_financial_unavailable_without_eodhd(client_eu_v2, monkeypatch):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    r = client_eu_v2.get(f"{_BASE}/data-sources")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["financial"]["available"] is False
+    assert body["financial"]["unavailable_reason"] == "eodhd_unconfigured"
+    assert body["earnings_calendar"]["available"] is False
+    assert body["other_connectors"] == []
+
+
+def test_data_sources_financial_available_with_env(client_eu_v2, monkeypatch):
+    monkeypatch.setenv("EODHD_API_KEY", "k")
+    r = client_eu_v2.get(f"{_BASE}/data-sources")
+    body = r.json()
+    assert body["financial"]["available"] is True
+    assert body["financial"]["provider_label"] == "EODHD"
+
+
+def test_data_sources_web_search_query_override(client_eu_v2, monkeypatch):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    r = client_eu_v2.get(
+        f"{_BASE}/data-sources",
+        params={"provider_kind": "anthropic", "model": "claude-sonnet-4-6"},
+    )
+    body = r.json()
+    assert body["web_search"]["available"] is True
+    assert body["web_search"]["provider_label"] == "claude-sonnet-4-6"
+
+
+def test_resolve_eu_transports_bridges_connector_key(client_eu_v2, monkeypatch):
+    # The route module's transport resolver must honor an installed EODHD
+    # connector's stored key (bridge), not only the env var.
+    import openlia_server.routes.departments.earnings_update_v2 as eu_routes
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.connectors import Connector
+
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    # Install a fake eodhd SDK so build_eu_v2_transports can construct a client.
+    import sys
+    import types
+
+    fake = types.ModuleType("eodhd")
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+    fake.APIClient = _FakeClient
+    monkeypatch.setitem(sys.modules, "eodhd", fake)
+
+    with session_mod.SessionLocal() as s:
+        s.add(
+            Connector(
+                id="c-eodhd",
+                provider_id="eodhd",
+                source="built_in",
+                category="financial",
+                launch={},
+                secrets={"EODHD_API_KEY": "db-key"},
+                status="validated",
+            )
+        )
+        s.commit()
+
+    with session_mod.SessionLocal() as s:
+        transports = eu_routes._resolve_eu_transports(s)
+    assert transports is not None

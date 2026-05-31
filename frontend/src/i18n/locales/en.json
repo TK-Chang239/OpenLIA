@@ -654,6 +654,9 @@
     "earlier_this_week": "Earlier this week",
     "calendar_wiring_pending": "Earnings calendar wiring pending",
     "generating_report": "Generating {{ticker}} earnings update...",
+    "no_upcoming_earnings": "No upcoming earnings scheduled",
+    "report_ready": "Report ready",
+    "disabled_banner": "Earnings Update v2 is disabled. Set EARNINGS_ENGINE_VERSION=v2 to enable.",
     "schedule_modal": {
       "edit_title": "Edit Schedule",
       "add_title": "Add Schedule",
@@ -744,7 +747,37 @@
       "custom_empty": "No custom sections yet.",
       "cancel": "Cancel",
       "save": "Save changes",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "v2_title": "Earnings Update settings",
+      "v2_subtitle": "Model, template & data sources",
+      "v2_close_aria": "Close settings",
+      "v2_save": "Save",
+      "v2_saving": "Saving…",
+      "model_title": "Model",
+      "model_hint": "The model used to write every Earnings Update report.",
+      "template_title": "Template",
+      "template_hint": "The report skeleton. Upload your own to customize structure.",
+      "template_custom_suffix": " (custom)",
+      "template_delete_aria": "Delete template",
+      "template_upload": "Upload template",
+      "connectors_title": "Data sources",
+      "connectors_hint": "Tools the engine may call while researching.",
+      "connector_financial": "Financial data (fundamentals, prices)",
+      "connector_calendar": "Earnings calendar",
+      "connector_web_search": "Web search",
+      "ds_via": "via {{provider}}",
+      "ds_reason_eodhd_unconfigured": "Set EODHD_API_KEY or install the EODHD connector in Settings → Connectors.",
+      "ds_reason_model_no_web_search": "The selected model does not support web search.",
+      "ds_reason_unknown": "This data source is unavailable.",
+      "ds_empty": "No data sources available. Configure a data provider in Settings → Connectors, or pick a model with web search.",
+      "ds_other_configured": "Also configured: {{names}} — routing for these arrives in a later update.",
+      "length_section_title": "Length",
+      "language_title": "Language",
+      "reasoning_title": "Reasoning effort",
+      "reasoning_hint": "Higher effort yields deeper analysis at greater cost.",
+      "reasoning_default": "Default",
+      "reasoning_medium": "Medium",
+      "reasoning_high": "High"
     },
     "schedule_manager": {
       "heading": "Scan Schedules",
@@ -758,7 +791,8 @@
       "remove_aria": "Remove {{ticker}}",
       "date_passed": "Date passed",
       "pre_market": "Pre-Market",
-      "post_market": "Post-Market"
+      "post_market": "Post-Market",
+      "no_upcoming_date": "No upcoming date"
     },
     "watchlist_row": {
       "heading": "Watchlist",
@@ -800,7 +834,10 @@
       "rev_label": "Rev.",
       "eps_label": "EPS",
       "up_next_est_eps": "Est. EPS",
-      "up_next_rev": "Rev."
+      "up_next_rev": "Rev.",
+      "up_next_pre_market": "Pre-Market",
+      "up_next_post_market": "Post-Market",
+      "up_next_scheduled": "Scheduled {{when}}"
     }
   },
   "macro": {

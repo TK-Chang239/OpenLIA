@@ -1,23 +1,40 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { RunSummary } from "../../../api/earnings-update";
 import { EUCabinetView } from "../EUCabinetView";
 
-const reports = [
-  {
-    id: "r1",
-    title: "Apple Inc. — Q1 FY2026 Earnings",
-    subject: "AAPL",
-    report_type: "earnings_update",
+function makeRun(over: Partial<RunSummary>): RunSummary {
+  return {
+    report_id: "r",
+    ticker: "AAPL",
+    subject: "Subject",
+    template_id: "eu_default",
+    trigger_kind: "on_demand",
+    fiscal_date: null,
+    language: "en",
+    length: "normal",
+    status: "completed",
     created_at: "2026-04-09T12:00:00Z",
-  },
-  {
-    id: "r2",
-    title: "Tesla Inc. — Q1 FY2026 Earnings",
-    subject: "TSLA",
-    report_type: "earnings_update",
+    completed_at: null,
+    reasoning_effort: null,
+    ...over,
+  };
+}
+
+const reports: RunSummary[] = [
+  makeRun({
+    report_id: "r1",
+    subject: "Apple Inc. — Q1 FY2026 Earnings",
+    ticker: "AAPL",
+    created_at: "2026-04-09T12:00:00Z",
+  }),
+  makeRun({
+    report_id: "r2",
+    subject: "Tesla Inc. — Q1 FY2026 Earnings",
+    ticker: "TSLA",
     created_at: "2026-03-08T12:00:00Z",
-  },
+  }),
 ];
 
 describe("EUCabinetView", () => {

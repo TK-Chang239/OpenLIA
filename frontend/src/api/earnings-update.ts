@@ -1,250 +1,271 @@
 import { fetchJson } from "./client";
 
+const BASE = "/api/departments/earnings-update/v2";
+
+// ----- Types -----
+
+export type ReportLength = "concise" | "normal" | "elaborative";
 export type ReleaseTiming = "pre_market" | "post_market" | null;
+export type ReasoningEffort = "medium" | "high" | null;
+export type RunStatus = "running" | "completed" | "failed";
+export type ScheduleStatus = "pending" | "reported" | "skipped";
 
 export interface WatchlistEntry {
   id: string;
   ticker: string;
-  company_name: string;
-  next_earnings_date: string | null;
-  release_timing: ReleaseTiming;
+  company_name: string | null;
+  created_at: string;
 }
-
 export interface WatchlistListResponse {
   entries: WatchlistEntry[];
 }
 
-export interface CustomSection {
-  id: string;
-  title: string;
-  description: string;
+export interface EuSettings {
+  provider_kind: string;
+  model: string;
+  template_id: string;
+  language: string;
+  length: ReportLength;
+  reasoning_effort: ReasoningEffort;
+  financial_enabled: boolean;
+  calendar_enabled: boolean;
+  web_search_enabled: boolean;
 }
 
-export type ReportLength = "concise" | "normal" | "elaborative";
-
-export interface EuConfig {
-  report_length: ReportLength;
-  enabled_section_ids: string[];
-  custom_sections: CustomSection[];
+export interface DataSourceSlot {
+  available: boolean;
+  provider_label: string | null;
+  unavailable_reason: string | null;
+}
+export interface OtherConnector {
+  display_name: string;
+  category: string;
+}
+export interface DataSourcesInfo {
+  financial: DataSourceSlot;
+  earnings_calendar: DataSourceSlot;
+  web_search: DataSourceSlot;
+  other_connectors: OtherConnector[];
 }
 
-export interface EuSchedule {
+export const getEuDataSources = (
+  params?: { provider_kind?: string; model?: string },
+): Promise<DataSourcesInfo> => {
+  const q = new URLSearchParams();
+  if (params?.provider_kind) q.set("provider_kind", params.provider_kind);
+  if (params?.model) q.set("model", params.model);
+  const qs = q.toString();
+  return fetchJson<DataSourcesInfo>(`${BASE}/data-sources${qs ? `?${qs}` : ""}`);
+};
+
+// Backend TemplateOut includes updated_at; included here for completeness.
+export interface EuTemplate {
   id: string;
-  user_id: string;
-  time: string;
-  timezone: string;
-  days_of_week: number[];
-  label: string | null;
-  is_enabled: boolean;
+  name: string;
+  is_builtin: boolean;
   created_at: string;
-  last_run_at: string | null;
+  updated_at: string;
+}
+export interface TemplateListResponse {
+  templates: EuTemplate[];
 }
 
-export type EuScheduleCreate = Omit<
-  EuSchedule,
-  "id" | "user_id" | "created_at" | "last_run_at"
->;
-
-export type EuScheduleUpdate = EuScheduleCreate;
-
-export interface EuScheduleListResponse {
-  schedules: EuSchedule[];
-}
-
-export interface RecentReport {
+// Backend ScheduleEntryOut includes eps_estimate, revenue_estimate, attempts.
+export interface EuScheduleEntry {
   id: string;
-  title: string;
-  subject: string | null;
-  report_type: string;
+  ticker: string;
+  fiscal_date: string;
+  release_timing: ReleaseTiming;
+  eps_estimate: string | null;
+  revenue_estimate: string | null;
+  scheduled_run_at: string;
+  status: ScheduleStatus;
+  attempts: number;
+  report_id: string | null;
+}
+export interface ScheduleListResponse {
+  schedule: EuScheduleEntry[];
+}
+
+// Backend RunSummaryOut uses report_id (not id) as the primary key.
+export interface RunSummary {
+  report_id: string;
+  ticker: string;
+  subject: string;
+  template_id: string;
+  trigger_kind: "scheduled" | "on_demand";
+  fiscal_date: string | null;
+  language: string;
+  length: string;
+  status: RunStatus;
   created_at: string;
+  completed_at: string | null;
+  reasoning_effort: ReasoningEffort;
 }
 
-export interface RecentReportsListResponse {
-  reports: RecentReport[];
+export interface SectionRow {
+  section_id: string;
+  section_index: number;
+  title: string;
+  markdown: string;
+  version: number;
+}
+export interface ChartRow {
+  chart_id: string;
+  chart_type: string;
+  title: string;
+  spec: Record<string, unknown>;
+  rendered_url: string | null;
+  version: number;
+}
+export interface CitationRow {
+  source_id: string;
+  tool_name: string;
+  display_index: number | null;
+  provenance: Record<string, unknown>;
 }
 
-const BASE = "/api/departments/earnings-update";
-const WATCHLIST_PATH = `${BASE}/watchlist`;
-const CONFIG_PATH = `${BASE}/config`;
-const SCHEDULES_PATH = `${BASE}/schedules`;
-const REPORT_PATH = `${BASE}/report`;
-const REPORTS_PATH = `${BASE}/reports`;
+export interface CoverMetric {
+  label: string;
+  value: string;
+  change: string | null;
+  tone: string | null;
+}
+export interface CoverSpec {
+  subtitle?: string | null;
+  tagline?: string | null;
+  tldr?: string[];
+  key_metrics?: CoverMetric[];
+  rating?: string | null;
+  upside_pct?: number | null;
+}
+
+export interface RunDetail {
+  report: RunSummary;
+  error_message: string | null;
+  sections: SectionRow[];
+  charts: ChartRow[];
+  citations: CitationRow[];
+  cover: CoverSpec | null;
+}
+
+// ----- SSE event types -----
+
+export type EuEventType =
+  | "run.started"
+  | "tool.called"
+  | "tool.completed"
+  | "section.written"
+  | "chart.emitted"
+  | "run.completed"
+  | "run.failed"
+  | "run.cancelled"
+  | "run.snapshot";
+
+export interface EuEvent {
+  type: EuEventType;
+  payload: Record<string, unknown>;
+}
+
+export const EU_TERMINAL_EVENT_TYPES: ReadonlySet<EuEventType> = new Set<EuEventType>([
+  "run.completed",
+  "run.failed",
+  "run.cancelled",
+  "run.snapshot",
+]);
 
 // ----- Watchlist -----
 
 export async function fetchWatchlist(): Promise<WatchlistListResponse> {
-  return fetchJson<WatchlistListResponse>(WATCHLIST_PATH);
+  return fetchJson<WatchlistListResponse>(`${BASE}/watchlist`);
 }
 
-export async function addWatchlistEntry(
-  ticker: string,
-): Promise<WatchlistEntry> {
-  return fetchJson<WatchlistEntry>(WATCHLIST_PATH, {
+export async function addWatchlistEntry(ticker: string): Promise<WatchlistEntry> {
+  return fetchJson<WatchlistEntry>(`${BASE}/watchlist`, {
     method: "POST",
     json: { ticker },
   });
 }
 
-export async function removeWatchlistEntry(entryId: string): Promise<void> {
-  await fetchJson<null>(`${WATCHLIST_PATH}/${entryId}`, { method: "DELETE" });
+export async function removeWatchlistEntry(id: string): Promise<void> {
+  await fetchJson<null>(`${BASE}/watchlist/${id}`, { method: "DELETE" });
 }
 
-// ----- Config -----
-
-export async function fetchConfig(): Promise<EuConfig> {
-  return fetchJson<EuConfig>(CONFIG_PATH);
+export async function syncWatchlist(): Promise<{ synced: number }> {
+  return fetchJson<{ synced: number }>(`${BASE}/watchlist/sync`, {
+    method: "POST",
+  });
 }
 
-export async function updateConfig(cfg: EuConfig): Promise<EuConfig> {
-  return fetchJson<EuConfig>(CONFIG_PATH, { method: "PUT", json: cfg });
+// ----- Settings -----
+
+export async function fetchSettings(): Promise<EuSettings> {
+  return fetchJson<EuSettings>(`${BASE}/settings`);
 }
 
-// ----- Schedules -----
-
-export async function fetchSchedules(): Promise<EuScheduleListResponse> {
-  const list = await fetchJson<EuSchedule[]>(SCHEDULES_PATH);
-  return { schedules: list };
+export async function updateSettings(next: EuSettings): Promise<EuSettings> {
+  return fetchJson<EuSettings>(`${BASE}/settings`, {
+    method: "PUT",
+    json: next,
+  });
 }
 
-export async function createSchedule(
-  payload: EuScheduleCreate,
-): Promise<EuSchedule> {
-  return fetchJson<EuSchedule>(SCHEDULES_PATH, {
+// ----- Templates -----
+
+export async function fetchTemplates(): Promise<TemplateListResponse> {
+  return fetchJson<TemplateListResponse>(`${BASE}/templates`);
+}
+
+export async function uploadTemplate(payload: {
+  name: string;
+  source_markdown: string;
+}): Promise<EuTemplate> {
+  return fetchJson<EuTemplate>(`${BASE}/templates`, {
     method: "POST",
     json: payload,
   });
 }
 
-export async function updateSchedule(
-  id: string,
-  payload: EuScheduleUpdate,
-): Promise<EuSchedule> {
-  return fetchJson<EuSchedule>(`${SCHEDULES_PATH}/${id}`, {
-    method: "PATCH",
-    json: payload,
-  });
+export async function deleteTemplate(id: string): Promise<void> {
+  await fetchJson<null>(`${BASE}/templates/${id}`, { method: "DELETE" });
 }
 
-export async function deleteSchedule(id: string): Promise<void> {
-  await fetchJson<unknown>(`${SCHEDULES_PATH}/${id}`, { method: "DELETE" });
+// ----- Schedule (read-only) -----
+
+export async function fetchSchedule(): Promise<ScheduleListResponse> {
+  return fetchJson<ScheduleListResponse>(`${BASE}/schedule`);
 }
 
-// ----- Reports -----
+// ----- Runs -----
 
-export interface RecentReportsQuery {
-  limit?: number;
-  q?: string;
-  ticker?: string;
-  from?: string;
-  to?: string;
-}
-
-export async function fetchRecentReports(
-  query: number | RecentReportsQuery = 5,
-): Promise<RecentReportsListResponse> {
-  const opts: RecentReportsQuery =
-    typeof query === "number" ? { limit: query } : query;
-  const params = new URLSearchParams();
-  params.set("limit", String(opts.limit ?? 5));
-  if (opts.q) params.set("q", opts.q);
-  if (opts.ticker) params.set("ticker", opts.ticker);
-  if (opts.from) params.set("from", opts.from);
-  if (opts.to) params.set("to", opts.to);
-  return fetchJson<RecentReportsListResponse>(
-    `${REPORTS_PATH}?${params.toString()}`,
-  );
-}
-
-export async function deleteReport(reportId: string): Promise<void> {
-  await fetchJson<unknown>(`${REPORTS_PATH}/${reportId}`, { method: "DELETE" });
-}
-
-export function reportStreamUrl(): string {
-  return REPORT_PATH;
-}
-
-export interface OnDemandReportResult {
-  report_id: string;
-  title: string;
-}
-
-/**
- * POST to /report, consume the SSE stream, and resolve with
- * `{report_id, title}` once a `report.complete` event arrives. Rejects if the
- * stream ends without a complete event, or if a `report.error` event is
- * emitted.
- */
-export async function startOnDemandReport(payload: {
+export async function startRun(payload: {
   ticker: string;
-}): Promise<OnDemandReportResult> {
-  const res = await fetch(REPORT_PATH, {
+}): Promise<{ report_id: string }> {
+  return fetchJson<{ report_id: string }>(`${BASE}/runs/start`, {
     method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-    },
-    body: JSON.stringify({ ticker: payload.ticker }),
+    json: payload,
   });
-  if (!res.ok || !res.body) {
-    let detail = `HTTP ${res.status}`;
-    try {
-      const body = await res.json();
-      if (body && typeof body === "object" && "detail" in body) {
-        detail = String((body as { detail: unknown }).detail);
-      }
-    } catch {
-      // ignore parse error
-    }
-    throw new Error(detail);
-  }
+}
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let title = "";
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+export async function fetchRuns(status?: RunStatus): Promise<RunSummary[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  return fetchJson<RunSummary[]>(`${BASE}/runs${qs}`);
+}
 
-      let nl = buffer.indexOf("\n\n");
-      while (nl !== -1) {
-        const chunk = buffer.slice(0, nl);
-        buffer = buffer.slice(nl + 2);
-        nl = buffer.indexOf("\n\n");
+export async function getRun(id: string): Promise<RunDetail> {
+  return fetchJson<RunDetail>(`${BASE}/runs/${encodeURIComponent(id)}`);
+}
 
-        const line = chunk.split("\n").find((l) => l.startsWith("data: "));
-        if (!line) continue;
-        const raw = line.slice("data: ".length);
-        let event: { type?: string; [k: string]: unknown };
-        try {
-          event = JSON.parse(raw) as { type?: string; [k: string]: unknown };
-        } catch {
-          continue;
-        }
+export async function deleteRun(id: string): Promise<void> {
+  await fetchJson<null>(`${BASE}/runs/${id}`, { method: "DELETE" });
+}
 
-        if (event.type === "report.start") {
-          // schema title arrives with report.complete; no-op here
-        } else if (event.type === "report.complete") {
-          const schema = event.schema as { title?: string } | undefined;
-          title = schema?.title ?? "Earnings Update";
-          return {
-            report_id: String(event.report_id),
-            title,
-          };
-        } else if (event.type === "report.error") {
-          throw new Error(String(event.message ?? "Report generation failed"));
-        }
-      }
-    }
-  } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-      // ignore
-    }
-  }
-  throw new Error("Report stream ended without a completion event");
+export async function cancelRun(id: string): Promise<{ cancelled: boolean }> {
+  return fetchJson<{ cancelled: boolean }>(`${BASE}/runs/${id}/cancel`, {
+    method: "POST",
+  });
+}
+
+export function runEventsUrl(id: string): string {
+  return `${BASE}/runs/${encodeURIComponent(id)}/events`;
 }
