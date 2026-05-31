@@ -32,9 +32,24 @@ _FTS_SHADOW_TABLES = frozenset(
     }
 )
 
+# Tables that belong to removed equity-research engines (v1/v2/v2.2/v2.3).
+# Their ORM models were deleted with the engines, but the tables are
+# retained on disk for rollback / data preservation (no destructive
+# migration). Autogenerate must not treat their absence from
+# `Base.metadata` as a drop-candidate.
+_LEGACY_ORPHANED_TABLES = frozenset(
+    {
+        "er_v2_model_assignments",
+        "er_v2_3_model_assignments",
+        "er_v2_3_run_state",
+    }
+)
+
 
 def _include_object(obj, name, type_, reflected, compare_to):
     if type_ == "table" and name in _FTS_SHADOW_TABLES:
+        return False
+    if type_ == "table" and name in _LEGACY_ORPHANED_TABLES:
         return False
     return True
 
