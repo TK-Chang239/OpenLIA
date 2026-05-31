@@ -101,6 +101,7 @@ export function TopBar({
         ) : null}
       </nav>
       <div className="ml-auto flex items-center gap-[14px]">
+        {chatHeader?.generating ? <LivePill label="GENERATING" /> : null}
         {live && <LivePill />}
         {chatHeader ? (
           <button

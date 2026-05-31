@@ -120,10 +120,25 @@ function pillLabelFor(s: V3SettingsValue): string {
 // to a safe constant.
 const V3_MODE_FOR_SHARED_CHROME = "stock_initiation" as const;
 
+/** Opts the page into the shell entrance choreography (see
+ *  motion-shell.css). Exported for testing. */
+export function useOmEntranceChoreography(): void {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("om-anim");
+    document.body.setAttribute("data-om-auto", "");
+    return () => {
+      root.classList.remove("om-anim");
+      document.body.removeAttribute("data-om-auto");
+    };
+  }, []);
+}
+
 export default function EquityResearchV3(): JSX.Element {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const reportIdFromUrl = searchParams.get("id") ?? null;
+  useOmEntranceChoreography();
 
   const [prompt, setPrompt] = useState("");
   const [settings, setSettings] = useState<V3SettingsValue>(() => loadSettings());
@@ -384,6 +399,7 @@ export default function EquityResearchV3(): JSX.Element {
       chatTitle: activeSubject ?? "New chat",
       onSelect: handleSelectRun,
       onCreate: handleNewRun,
+      generating: isStreaming,
       renderPopover: (props) => (
         <V3RunsPopover
           activeSessionId={props.activeSessionId}
@@ -400,6 +416,7 @@ export default function EquityResearchV3(): JSX.Element {
     clear,
     handleNewRun,
     handleSelectRun,
+    isStreaming,
     register,
   ]);
 
@@ -441,6 +458,8 @@ export default function EquityResearchV3(): JSX.Element {
                   events: stream.events,
                   sectionsWritten: stream.sectionsWritten,
                   chartsEmitted: stream.chartsEmitted,
+                  citationsSeen: stream.citationsSeen,
+                  elapsedSeconds: stream.elapsedSeconds,
                   toolCallsInflight: stream.toolCallsInflight,
                   terminalMessage: stream.terminalMessage,
                   errorMessage: stream.errorMessage,
