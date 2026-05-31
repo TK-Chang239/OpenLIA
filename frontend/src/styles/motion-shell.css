@@ -1,0 +1,45 @@
+/* ============================================================
+   motion-shell.css — opt-in entrance choreography for the
+   standard app shell (sidebar / topbar / content). A page opts
+   in by adding ``om-anim`` to <html> and ``data-om-auto`` to
+   <body>; shell elements are tagged with ``data-om-shell``.
+   ============================================================ */
+@keyframes om-side-in    { from { opacity: 0; transform: translate3d(-22px,0,0); } to { opacity: 1; transform: none; } }
+@keyframes om-bar-rise   { from { opacity: 0; transform: translate3d(0,-8px,0); }  to { opacity: 1; transform: none; } }
+@keyframes om-content-in { from { opacity: 0; transform: translate3d(8px,0,0); }   to { opacity: 1; transform: none; } }
+@keyframes om-fade-up    { from { opacity: 0; transform: translate3d(0,12px,0); }  to { opacity: 1; transform: none; } }
+/* Used by V3ActivityFeed rows and any in-card reveal. Defined here,
+   globally, because Tailwind's animate-[cardIn_...] arbitrary value
+   emits ``animation: cardIn ...`` that needs a global keyframe. */
+@keyframes cardIn        { from { opacity: 0; transform: translateY(8px); }         to { opacity: 1; transform: translateY(0); } }
+
+html.om-anim body[data-om-auto] [data-om-shell="sidebar"] {
+  animation: om-side-in 420ms var(--ease-out) both;
+}
+
+html.om-anim body[data-om-auto] [data-om-shell="topbar"] {
+  animation: om-bar-rise 340ms var(--ease-out) both;
+  animation-delay: 120ms;
+}
+
+html.om-anim body[data-om-auto] [data-om-shell="content"] {
+  animation: om-content-in 360ms var(--ease-out) both;
+  animation-delay: 160ms;
+}
+
+/* The page-content wrapper fades up. Scoped to [data-om-content] so
+   sibling overlays in <main> (e.g. FileViewer, which has its own
+   entrance animation) are not caught by the cascade. */
+html.om-anim body[data-om-auto] [data-om-shell="content"] > [data-om-content] {
+  animation: om-fade-up 440ms var(--ease-out) both;
+  animation-delay: 260ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.om-anim body[data-om-auto] [data-om-shell="sidebar"],
+  html.om-anim body[data-om-auto] [data-om-shell="topbar"],
+  html.om-anim body[data-om-auto] [data-om-shell="content"],
+  html.om-anim body[data-om-auto] [data-om-shell="content"] > [data-om-content] {
+    animation: none !important;
+  }
+}

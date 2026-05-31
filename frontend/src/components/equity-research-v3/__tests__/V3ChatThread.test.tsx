@@ -59,6 +59,8 @@ const EMPTY_STREAM = {
   events: [] as never[],
   sectionsWritten: 0,
   chartsEmitted: 0,
+  citationsSeen: 0,
+  elapsedSeconds: null as number | null,
   toolCallsInflight: 0,
   terminalMessage: null as string | null,
   errorMessage: null as string | null,
@@ -160,19 +162,40 @@ describe("V3ChatThread — initial turn", () => {
     expect(chips).not.toHaveTextContent(/Reasoning/);
   });
 
-  test("renders StreamPanel while detail is null", async () => {
+  test("renders the generating report card while the run streams", async () => {
     render(
       <V3ChatThread
-        initialPrompt="Research RKLB.US"
-        initialSettings={SETTINGS}
-        reportId="rep-1"
-        stream={{ ...EMPTY_STREAM, status: "streaming" }}
+        initialPrompt="Initiate coverage on AAPL"
+        initialSettings={{
+          templateName: "Stock Initiation",
+          length: "normal",
+          language: "en",
+          reasoningEffort: "medium",
+          modelLabel: "Claude Sonnet",
+        }}
+        reportId="run-1"
+        stream={{
+          status: "streaming",
+          events: [],
+          sectionsWritten: 2,
+          chartsEmitted: 0,
+          citationsSeen: 1,
+          elapsedSeconds: 4.2,
+          toolCallsInflight: 1,
+          terminalMessage: null,
+          errorMessage: null,
+        }}
         detail={null}
-        onRefreshDetail={() => {}}
+        onRefreshDetail={() => undefined}
       />,
     );
-    await waitFor(() => expect(listV3RevisionsMock).toHaveBeenCalled());
-    expect(screen.getByTestId("er-v3-stream-panel")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("er-v3-report-card-generating"),
+    ).toBeInTheDocument();
+    // Subject renders in both the user turn and the generating card.
+    expect(
+      screen.getAllByText("Initiate coverage on AAPL").length,
+    ).toBeGreaterThan(0);
   });
 
   test("renders V3ReportCard once detail is present", async () => {

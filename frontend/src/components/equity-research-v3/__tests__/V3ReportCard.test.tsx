@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import type { V3ReportDetail } from "../../../api/equity-research-v3";
+import type { V3ReportDetail, V3Event } from "../../../api/equity-research-v3";
 import { V3ReportCard } from "../V3ReportCard";
 
 const BASE_DETAIL: V3ReportDetail = {
@@ -118,5 +118,87 @@ describe("V3ReportCard", () => {
     expect(
       screen.getByText(/Body of the overview section/),
     ).toBeInTheDocument();
+  });
+});
+
+const LIVE = {
+  status: "streaming" as const,
+  sectionsWritten: 3,
+  chartsEmitted: 1,
+  citationsSeen: 4,
+  elapsedSeconds: 22.4,
+  events: [
+    { type: "section.written", payload: { section_id: "overview", char_count: 1500 } },
+  ] as V3Event[],
+  terminalMessage: null,
+  errorMessage: null,
+};
+
+describe("V3ReportCard — generating phase", () => {
+  test("shows a GENERATING pill, the subject, and live counts", () => {
+    render(
+      <V3ReportCard
+        phase="generating"
+        subject="AAPL"
+        templateLabel="Stock Initiation"
+        createdAtIso={null}
+        live={LIVE}
+      />,
+    );
+    expect(screen.getByText("AAPL")).toBeInTheDocument();
+    expect(screen.getByTestId("er-v3-report-card-generating")).toBeInTheDocument();
+    const meta = screen.getByTestId("er-v3-report-card-meta");
+    expect(meta).toHaveTextContent("3 sections");
+    expect(meta).toHaveTextContent("4 sources");
+    expect(meta).toHaveTextContent("Elapsed 22.4s");
+  });
+
+  test("renders the activity feed and hides the action row while generating", () => {
+    render(
+      <V3ReportCard
+        phase="generating"
+        subject="AAPL"
+        templateLabel="Stock Initiation"
+        createdAtIso={null}
+        live={LIVE}
+      />,
+    );
+    expect(screen.getByTestId("er-v3-activity-feed")).toBeInTheDocument();
+    expect(screen.queryByTestId("er-v3-report-card-open")).toBeNull();
+  });
+
+  test("shows a FAILED pill and the error message when the stream fails before detail", () => {
+    render(
+      <V3ReportCard
+        phase="generating"
+        subject="AAPL"
+        templateLabel="Stock Initiation"
+        createdAtIso={null}
+        live={{ ...LIVE, status: "failed", errorMessage: "stream dropped" }}
+      />,
+    );
+    expect(screen.getByTestId("er-v3-report-card-failed")).toBeInTheDocument();
+    expect(screen.getByText("stream dropped")).toBeInTheDocument();
+  });
+
+  test("shows a steady Finalizing pill when the stream completed but detail has not loaded yet", () => {
+    render(
+      <V3ReportCard
+        phase="generating"
+        subject="AAPL"
+        templateLabel="Stock Initiation"
+        createdAtIso={null}
+        live={{ ...LIVE, status: "completed" }}
+      />,
+    );
+    expect(screen.getByTestId("er-v3-report-card-finalizing")).toBeInTheDocument();
+    expect(screen.queryByTestId("er-v3-report-card-generating")).toBeNull();
+  });
+
+  test("ready phase shows Generated-in time from generatedSeconds", () => {
+    render(<V3ReportCard detail={BASE_DETAIL} generatedSeconds={22.4} />);
+    expect(screen.getByTestId("er-v3-report-card-meta")).toHaveTextContent(
+      "Generated in 22.4s",
+    );
   });
 });

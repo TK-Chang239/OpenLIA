@@ -38,6 +38,8 @@ export interface V3StreamState {
   events: V3Event[];
   sectionsWritten: number;
   chartsEmitted: number;
+  citationsSeen: number;
+  elapsedSeconds: number | null;
   toolCallsInflight: number;
   terminalMessage: string | null;
   errorMessage: string | null;
@@ -61,6 +63,9 @@ export function useV3RunStream(reportId: string | null): V3StreamState {
   const [events, setEvents] = useState<V3Event[]>([]);
   const [sectionsWritten, setSectionsWritten] = useState(0);
   const [chartsEmitted, setChartsEmitted] = useState(0);
+  const [citationsSeen, setCitationsSeen] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
+  const startedAtRef = useRef<number | null>(null);
   const [toolCallsInflight, setToolCallsInflight] = useState(0);
   const [terminalMessage, setTerminalMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -76,6 +81,9 @@ export function useV3RunStream(reportId: string | null): V3StreamState {
     setEvents([]);
     setSectionsWritten(0);
     setChartsEmitted(0);
+    setCitationsSeen(0);
+    setElapsedSeconds(null);
+    startedAtRef.current = null;
     setToolCallsInflight(0);
     setTerminalMessage(null);
     setErrorMessage(null);
@@ -93,10 +101,14 @@ export function useV3RunStream(reportId: string | null): V3StreamState {
       const event: V3Event = { type, payload };
       setEvents((prev) => [...prev, event]);
 
-      if (type === "tool.called") {
+      if (type === "run.started") {
+        startedAtRef.current = Date.now();
+        setElapsedSeconds(0);
+      } else if (type === "tool.called") {
         setToolCallsInflight((n) => n + 1);
       } else if (type === "tool.completed") {
         setToolCallsInflight((n) => Math.max(0, n - 1));
+        if (payload.source_id) setCitationsSeen((n) => n + 1);
       } else if (type === "section.written") {
         setSectionsWritten((n) => n + 1);
       } else if (type === "chart.emitted") {
@@ -117,6 +129,9 @@ export function useV3RunStream(reportId: string | null): V3StreamState {
                 : "completed";
         }
         if (resolved) setStatus(resolved);
+        if (startedAtRef.current != null) {
+          setElapsedSeconds((Date.now() - startedAtRef.current) / 1000);
+        }
         // Server closes the stream after the terminal event. Close
         // explicitly here too so EventSource's default 3s reconnect
         // doesn't loop forever once the run is done.
@@ -159,6 +174,19 @@ export function useV3RunStream(reportId: string | null): V3StreamState {
     };
   }, [reportId]);
 
+  // Tick the elapsed clock once per second while streaming. The
+  // terminal handler writes the final value; this only drives the
+  // live count-up so the generating card's timer moves.
+  useEffect(() => {
+    if (status !== "streaming") return;
+    const id = window.setInterval(() => {
+      if (startedAtRef.current != null) {
+        setElapsedSeconds((Date.now() - startedAtRef.current) / 1000);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [status]);
+
   const cancel = useCallback(async () => {
     if (!reportId) return;
     try {
@@ -177,6 +205,8 @@ export function useV3RunStream(reportId: string | null): V3StreamState {
       events,
       sectionsWritten,
       chartsEmitted,
+      citationsSeen,
+      elapsedSeconds,
       toolCallsInflight,
       terminalMessage,
       errorMessage,
@@ -185,6 +215,8 @@ export function useV3RunStream(reportId: string | null): V3StreamState {
     [
       cancel,
       chartsEmitted,
+      citationsSeen,
+      elapsedSeconds,
       errorMessage,
       events,
       sectionsWritten,

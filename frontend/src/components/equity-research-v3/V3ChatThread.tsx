@@ -11,9 +11,10 @@
  *
  *   - one user turn for the initial prompt + the settings snapshot
  *     active when it was submitted
- *   - one system turn for the run itself: ``StreamPanel``-style
- *     live activity while streaming, the ``V3ReportCard`` when the
- *     run reaches a terminal state
+ *   - one system turn for the run itself: a phase-aware
+ *     ``V3ReportCard`` rendered from the first frame — "generating"
+ *     (activity feed + live counts) while streaming, "ready" once
+ *     ``detail`` has loaded
  *   - per revision: one user turn (the revision request) + one
  *     system turn (revision status row; the report card at the top
  *     of the thread updates in place as revisions complete)
@@ -60,12 +61,14 @@ interface Props {
   /** The active run's report id. ``null`` before the first submit. */
   reportId: string | null;
   /** Live SSE state for the currently-running initial dispatch.
-   *  Used by the system turn to render the StreamPanel chips. */
+   *  Used by the system turn to feed the V3ReportCard's live props. */
   stream: {
     status: string;
     events: V3Event[];
     sectionsWritten: number;
     chartsEmitted: number;
+    citationsSeen: number;
+    elapsedSeconds: number | null;
     toolCallsInflight: number;
     terminalMessage: string | null;
     errorMessage: string | null;
@@ -219,23 +222,29 @@ export function V3ChatThread({
 
       {/* --- Initial system turn ----------------------------------- */}
       <SystemTurn>
-        {detail ? (
-          <V3ReportCard
-            detail={detail}
-            revising={revisions?.some((r) => !isTerminal(r.status)) ?? false}
-          />
-        ) : (
-          <StreamPanel
-            reportId={reportId}
-            status={stream.status}
-            events={stream.events}
-            sectionsWritten={stream.sectionsWritten}
-            chartsEmitted={stream.chartsEmitted}
-            toolCallsInflight={stream.toolCallsInflight}
-            terminalMessage={stream.terminalMessage}
-            errorMessage={stream.errorMessage}
-          />
-        )}
+        <V3ReportCard
+          phase={detail ? "ready" : "generating"}
+          subject={promptText}
+          templateLabel={settings?.templateName ?? ""}
+          createdAtIso={detail?.report.created_at ?? null}
+          detail={detail}
+          generatedSeconds={detail ? stream.elapsedSeconds : undefined}
+          revising={revisions?.some((r) => !isTerminal(r.status)) ?? false}
+          live={{
+            status: stream.status as
+              | "streaming"
+              | "completed"
+              | "failed"
+              | "cancelled",
+            sectionsWritten: stream.sectionsWritten,
+            chartsEmitted: stream.chartsEmitted,
+            citationsSeen: stream.citationsSeen,
+            elapsedSeconds: stream.elapsedSeconds,
+            events: stream.events,
+            terminalMessage: stream.terminalMessage,
+            errorMessage: stream.errorMessage,
+          }}
+        />
       </SystemTurn>
 
       {/* --- Per-revision turns ------------------------------------- */}
@@ -445,144 +454,6 @@ function RevisionStatusBadge({
       {map.label}
     </span>
   );
-}
-
-function StreamPanel({
-  reportId,
-  status,
-  events,
-  sectionsWritten,
-  chartsEmitted,
-  toolCallsInflight,
-  terminalMessage,
-  errorMessage,
-}: {
-  reportId: string;
-  status: string;
-  events: V3Event[];
-  sectionsWritten: number;
-  chartsEmitted: number;
-  toolCallsInflight: number;
-  terminalMessage: string | null;
-  errorMessage: string | null;
-}): JSX.Element {
-  return (
-    <section
-      data-testid="er-v3-stream-panel"
-      className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] p-4"
-    >
-      <header className="mb-3 flex items-center justify-between">
-        <div>
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            Live activity
-          </h2>
-          <p className="font-mono text-[10.5px] text-[--color-text-tertiary]">
-            {reportId}
-          </p>
-        </div>
-        <StatusBadge status={status} />
-      </header>
-
-      <dl className="mb-3 grid grid-cols-3 gap-3 text-sm">
-        <Chip label="Sections written" value={sectionsWritten} />
-        <Chip label="Charts emitted" value={chartsEmitted} />
-        <Chip label="Tool calls in flight" value={toolCallsInflight} />
-      </dl>
-
-      {terminalMessage ? (
-        <p className="mb-2 text-[12px] text-[--color-feedback-warning]">
-          {terminalMessage}
-        </p>
-      ) : null}
-      {errorMessage ? (
-        <p className="mb-2 text-[12px] text-[--color-feedback-danger]">
-          {errorMessage}
-        </p>
-      ) : null}
-
-      <ol className="max-h-72 space-y-1 overflow-y-auto font-mono text-[11px]">
-        {events.length === 0 ? (
-          <li className="text-[--color-text-tertiary]">
-            Waiting for the first event…
-          </li>
-        ) : (
-          [...events].reverse().map((e, idx) => (
-            <li
-              key={`${e.type}-${events.length - 1 - idx}`}
-              className="text-[--color-text-secondary]"
-            >
-              <span className="text-[--color-accent-on]">{e.type}</span>{" "}
-              <span className="text-[--color-text-tertiary]">
-                {summarizePayload(e)}
-              </span>
-            </li>
-          ))
-        )}
-      </ol>
-    </section>
-  );
-}
-
-function StatusBadge({ status }: { status: string }): JSX.Element {
-  const tone =
-    {
-      streaming:
-        "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-secondary]",
-      completed:
-        "border-[--color-feedback-success] bg-[rgba(80,180,80,0.08)] text-[--color-feedback-success]",
-      failed:
-        "border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] text-[--color-feedback-danger]",
-      cancelled:
-        "border-[--color-feedback-warning] bg-[rgba(255,180,0,0.08)] text-[--color-feedback-warning]",
-      idle: "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-tertiary]",
-    }[status] ??
-    "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-tertiary]";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-[2px] font-mono text-[10px] uppercase tracking-[0.08em] ${tone}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function Chip({ label, value }: { label: string; value: number }): JSX.Element {
-  return (
-    <div className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-3 py-2">
-      <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-        {label}
-      </div>
-      <div className="text-[18px] font-semibold tabular-nums text-[--color-text-primary]">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function summarizePayload(event: V3Event): string {
-  switch (event.type) {
-    case "run.started":
-      return `${event.payload.subject} — ${event.payload.model}`;
-    case "tool.called":
-      return `turn ${event.payload.turn} → ${event.payload.tool_name}`;
-    case "tool.completed": {
-      const ok = event.payload.ok ? "ok" : "error";
-      const sid = event.payload.source_id ? ` ${event.payload.source_id}` : "";
-      return `turn ${event.payload.turn} ← ${event.payload.tool_name} (${ok})${sid}`;
-    }
-    case "section.written":
-      return `${event.payload.section_id} (${event.payload.char_count ?? "?"} chars)`;
-    case "chart.emitted":
-      return `${event.payload.chart_id} (${event.payload.chart_type})`;
-    case "run.completed":
-    case "run.failed":
-    case "run.cancelled":
-      return `${event.payload.section_count ?? 0} sections · ${event.payload.chart_count ?? 0} charts · ${event.payload.citation_count ?? 0} citations`;
-    case "run.snapshot":
-      return `prior run status: ${event.payload.status}`;
-    default:
-      return "";
-  }
 }
 
 // ---------------------------------------------------------------------------
