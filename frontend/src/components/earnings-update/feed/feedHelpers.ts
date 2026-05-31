@@ -1,14 +1,4 @@
-import type {
-  RunSummary,
-  WatchlistEntry,
-} from "../../../api/earnings-update";
-
-export type FeedFilter =
-  | "all"
-  | "watchlist"
-  | "portfolio"
-  | "beats"
-  | "misses";
+import type { RunSummary } from "../../../api/earnings-update";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -24,10 +14,7 @@ export function isToday(iso: string, now: Date = new Date()): boolean {
   return ts >= startOfTodayLocal(now);
 }
 
-export function isWithinLastWeek(
-  iso: string,
-  now: Date = new Date(),
-): boolean {
+export function isWithinLastWeek(iso: string, now: Date = new Date()): boolean {
   const ts = new Date(iso).getTime();
   if (Number.isNaN(ts)) return false;
   const start = startOfTodayLocal(now) - 6 * DAY_MS;
@@ -38,34 +25,12 @@ export function tickerOf(report: RunSummary): string {
   return (report.ticker ?? "").toUpperCase();
 }
 
-interface FilterContext {
-  watchlist: WatchlistEntry[];
-  search: string;
-}
-
-export function applyFilter(
-  reports: RunSummary[],
-  filter: FeedFilter,
-  ctx: FilterContext,
-): RunSummary[] {
-  const watchTickers = new Set(
-    ctx.watchlist.map((w) => w.ticker.toUpperCase()),
+export function searchReports(reports: RunSummary[], search: string): RunSummary[] {
+  const q = search.trim().toUpperCase();
+  if (!q) return reports;
+  return reports.filter(
+    (r) => tickerOf(r).includes(q) || (r.subject ?? "").toUpperCase().includes(q),
   );
-  const search = ctx.search.trim().toUpperCase();
-  return reports.filter((r) => {
-    const t = tickerOf(r);
-    if (search && !t.includes(search)) return false;
-    switch (filter) {
-      case "all":
-        return true;
-      case "watchlist":
-        return watchTickers.has(t);
-      case "portfolio":
-      case "beats":
-      case "misses":
-        return false;
-    }
-  });
 }
 
 export interface FeedGroups {
