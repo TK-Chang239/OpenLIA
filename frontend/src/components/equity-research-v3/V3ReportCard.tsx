@@ -323,6 +323,17 @@ function StatusPill({
         </span>
       );
     }
+    if (status === "completed") {
+      return (
+        <span
+          data-testid="er-v3-report-card-finalizing"
+          className={`${base} border-[rgba(168,204,0,0.4)] bg-[rgba(212,255,0,0.12)] text-[--color-feedback-success]`}
+        >
+          <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-[--color-feedback-success]" />
+          Finalizing
+        </span>
+      );
+    }
     return (
       <span
         data-testid="er-v3-report-card-generating"

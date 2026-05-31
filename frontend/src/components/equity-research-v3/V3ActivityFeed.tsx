@@ -18,7 +18,7 @@ export function V3ActivityFeed({ events }: { events: V3Event[] }): JSX.Element {
   // the bottom, nearest the composer, like a chat transcript.
   const ordered = events;
   const visible = expanded ? ordered : ordered.slice(-COLLAPSED_CAP);
-  const hiddenCount = ordered.length - visible.length;
+  const collapsedHiddenCount = Math.max(0, ordered.length - COLLAPSED_CAP);
 
   return (
     <div data-testid="er-v3-activity-feed" className="px-[18px] pb-[14px]">
@@ -58,7 +58,7 @@ export function V3ActivityFeed({ events }: { events: V3Event[] }): JSX.Element {
             className={expanded ? "rotate-180 transition-transform" : "transition-transform"}
             aria-hidden="true"
           />
-          {expanded ? "Show less" : `Show all activity (${hiddenCount} more)`}
+          {expanded ? "Show less" : `Show all activity (${collapsedHiddenCount} more)`}
         </button>
       ) : null}
     </div>
