@@ -323,15 +323,21 @@ export function ErComposer({
           <button
             type="button"
             onClick={onModeClick}
+            data-testid="er-composer-mode-pill"
+            data-generating={isStreaming ? "true" : "false"}
             aria-label={t("equity_research.change_mode_aria")}
             className="inline-flex items-center gap-2 rounded-full border border-[--color-border-subtle] bg-[--color-bg-base] py-[5px] pl-2 pr-[10px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
           >
             <span
               aria-hidden="true"
-              className="h-1.5 w-1.5 rounded-full bg-[--color-accent-primary] shadow-[0_0_5px_rgba(212,255,0,0.6)]"
+              className={
+                isStreaming
+                  ? "h-1.5 w-1.5 rounded-full bg-[--color-accent-primary] shadow-[0_0_5px_rgba(212,255,0,0.6)] motion-safe:animate-pulse"
+                  : "h-1.5 w-1.5 rounded-full bg-[--color-accent-primary] shadow-[0_0_5px_rgba(212,255,0,0.6)]"
+              }
             />
             <strong className="font-medium tracking-[0.06em] text-[--color-text-primary]">
-              {templateLabel ?? t(MODE_KEY[mode])}
+              {isStreaming ? "Generating" : (templateLabel ?? t(MODE_KEY[mode]))}
             </strong>
             <span className="text-[--color-text-tertiary]">·</span>
             <span>{t(LENGTH_KEY[length])}</span>
