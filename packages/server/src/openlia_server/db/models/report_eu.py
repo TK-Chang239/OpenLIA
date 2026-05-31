@@ -263,7 +263,9 @@ class ReportEuInstructions(Base):
         nullable=True,
     )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_builtin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     body_text: Mapped[str] = mapped_column(Text, nullable=False)
     source_doc_blob: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     source_doc_mime: Mapped[str | None] = mapped_column(String(128), nullable=True)
