@@ -2,10 +2,8 @@ import { useTranslation } from "react-i18next";
 
 interface Props {
   reportsThisWeek: number | null;
-  beats: number | null;
-  misses: number | null;
-  avgSurprise: string | null;
-  avgLatency: string | null;
+  trackedTickers: number | null;
+  upcomingThisWeek: number | null;
   watchlistEmpty: boolean;
 }
 
@@ -13,10 +11,8 @@ const DASH = "—";
 
 export function EuHero({
   reportsThisWeek,
-  beats,
-  misses,
-  avgSurprise,
-  avgLatency,
+  trackedTickers,
+  upcomingThisWeek,
   watchlistEmpty,
 }: Props) {
   const { t } = useTranslation();
@@ -44,54 +40,20 @@ export function EuHero({
       </div>
       <div className="flex gap-7">
         <Stat label={t("earnings.feed.stat_reports_wk")} value={reportsThisWeek ?? DASH} />
-        <Stat
-          label={t("earnings.feed.stat_beats_misses")}
-          value={
-            beats === null || misses === null ? (
-              DASH
-            ) : (
-              <>
-                <span className="text-[--color-feedback-success]">{beats}</span>
-                {" / "}
-                <span className="text-[--color-feedback-error]">{misses}</span>
-              </>
-            )
-          }
-        />
-        <Stat
-          label={t("earnings.feed.stat_avg_surprise")}
-          value={avgSurprise ?? DASH}
-          tone={avgSurprise && avgSurprise.startsWith("-") ? "neg" : "pos"}
-        />
-        <Stat label={t("earnings.feed.stat_avg_latency")} value={avgLatency ?? DASH} />
+        <Stat label={t("earnings.feed.stat_tracked")} value={trackedTickers ?? DASH} />
+        <Stat label={t("earnings.feed.stat_upcoming")} value={upcomingThisWeek ?? DASH} />
       </div>
     </section>
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: React.ReactNode;
-  tone?: "pos" | "neg";
-}) {
-  const toneClass =
-    tone === "pos"
-      ? "text-[--color-feedback-success]"
-      : tone === "neg"
-        ? "text-[--color-feedback-error]"
-        : "text-[--color-text-primary]";
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="font-mono text-[9.5px] tracking-[0.12em] uppercase text-[--color-text-tertiary]">
         {label}
       </span>
-      <span
-        className={`font-mono text-[22px] tabular-nums leading-none ${toneClass}`}
-      >
+      <span className="font-mono text-[22px] tabular-nums leading-none text-[--color-text-primary]">
         {value}
       </span>
     </div>
