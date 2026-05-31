@@ -113,6 +113,51 @@ def _freeform_template_spec() -> TemplateSpec:
     )
 
 
+def _resolve_revision_shape(
+    *, db: DBSession, user_id: str, parent: ReportV3
+) -> tuple[TemplateSpec, str | None]:
+    """Rebuild the (template, instructions_text) a revision should run
+    with, from the parent run row.
+
+    - A freeform parent (``template_id == "freeform"``) resolves to the
+      sections-less spec rather than a DB lookup that would 404. This is
+      what makes no-template reports revisable at all.
+    - The parent's ``instructions_id`` (when set) re-resolves to text so
+      the revision replays the same methodology. A profile deleted since
+      the original run degrades gracefully to no instructions rather than
+      blocking the revision.
+
+    Raises ``HTTPException(400)`` only when a genuine (non-freeform)
+    template the parent depended on has gone missing.
+    """
+    if parent.template_id == FREEFORM_TEMPLATE_ID:
+        template: TemplateSpec = _freeform_template_spec()
+    else:
+        try:
+            template = templates_svc.resolve_template(
+                db=db, user_id=user_id, template_id=parent.template_id
+            )
+        except templates_svc.TemplateNotFoundError:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Parent report's template {parent.template_id!r} is "
+                    f"no longer available. Re-upload it or revise after "
+                    f"restoring."
+                ),
+            ) from None
+
+    instructions_text: str | None = None
+    if parent.instructions_id:
+        try:
+            instructions_text = instructions_svc.resolve_instructions(
+                db=db, user_id=user_id, instructions_id=parent.instructions_id
+            )
+        except instructions_svc.InstructionsNotFoundError:
+            instructions_text = None
+    return template, instructions_text
+
+
 # ---------------------------------------------------------------------------
 # Payloads
 # ---------------------------------------------------------------------------
@@ -578,6 +623,7 @@ def build_equity_research_v3_router(
             model=payload.model,
             reasoning_effort=payload.reasoning_effort,
             instructions=instructions,
+            instructions_id=payload.instructions_id,
         )
         try:
             outcome = await svc.start_run(
@@ -692,6 +738,7 @@ def build_equity_research_v3_router(
             reasoning_effort=payload.reasoning_effort,
             attachments=attachments,
             instructions=instructions,
+            instructions_id=payload.instructions_id,
         )
         try:
             handle = svc.start_run_async(
@@ -1096,21 +1143,14 @@ def build_equity_research_v3_router(
                 ),
             )
 
-        # Re-resolve the parent's template so the revision engine has
-        # the same structural authority as the original run.
-        try:
-            template: TemplateSpec = templates_svc.resolve_template(
-                db=db, user_id=user.id, template_id=parent.template_id
-            )
-        except templates_svc.TemplateNotFoundError:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Parent report's template {parent.template_id!r} is "
-                    f"no longer available. Re-upload it or revise after "
-                    f"restoring."
-                ),
-            ) from None
+        # Re-resolve the parent's template + instruction profile so the
+        # revision engine carries the same structural authority AND the
+        # same methodology as the original run. Freeform parents resolve
+        # to the sections-less spec (so no-template reports are
+        # revisable); a since-deleted profile degrades to no instructions.
+        template, instructions = _resolve_revision_shape(
+            db=db, user_id=user.id, parent=parent
+        )
 
         run_request = RunRequest(
             subject=parent.subject,
@@ -1123,6 +1163,8 @@ def build_equity_research_v3_router(
             # revisions default to "off". A follow-up can let the
             # client send an override per-revision.
             reasoning_effort=None,
+            instructions=instructions,
+            instructions_id=parent.instructions_id,
         )
         revise_ctx = revision_svc.build_revise_context_from_db(
             db=db, report_id=report_id, revision_request=payload.request
