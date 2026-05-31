@@ -1,6 +1,12 @@
+import contextlib
+
 import pytest
 from openlia.llm.runtime.report_eu import CancelToken, EuDataTransports, LLMSession, Runner
+from openlia.llm.runtime.report_eu import runner as runner_module
 from openlia.llm.runtime.report_eu.schemas import EnabledConnectors, RunRequest
+from openlia.llm.runtime.report_v2_3.research import ResearchTool, ToolResult
+from openlia.llm.runtime.report_v2_3.research.tools import ToolDescriptor
+from openlia.llm.runtime.report_v2_3.schemas import ComputedSource
 from openlia.llm.runtime.report_v2_3.templates.spec import SectionSpec, TemplateSpec
 
 from ._fakes import FakeLLMProvider, script_text, script_tool_calls
@@ -116,6 +122,105 @@ async def test_runner_max_turns_without_finalize_fails():
     result = await runner.run(session=session)
     assert result.status == "failed"
     assert "hard limit of 2 model turns" in result.message
+
+
+def _make_async_tool(name: str, recorder: list[str]) -> ResearchTool:
+    """A ResearchTool whose execute is a coroutine returning a ToolResult."""
+
+    async def _aexec(args: dict) -> ToolResult:
+        recorder.append(name)
+        return ToolResult(
+            payload={"ok": True, "echo": args},
+            provenance=ComputedSource(method=name, derived_from=["(async)"]),
+            summary=f"async tool {name} ran",
+        )
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name=name,
+            description="async test tool",
+            parameters={"type": "object", "properties": {}},
+        ),
+        execute=_aexec,
+    )
+
+
+def _patch_catalog_with(monkeypatch, extra_tool: ResearchTool) -> None:
+    """Wrap build_catalog so the runner's catalog also carries extra_tool."""
+    real_build = runner_module.build_catalog
+
+    def _wrapped(**kwargs):
+        catalog = real_build(**kwargs)
+        catalog.core_tools.append(extra_tool)
+        return catalog
+
+    monkeypatch.setattr(runner_module, "build_catalog", _wrapped)
+
+
+@pytest.mark.asyncio
+async def test_runner_dispatches_async_tool(monkeypatch):
+    """A tool whose execute is a coroutine is awaited and its result reaches the loop."""
+    req = _req(EnabledConnectors(provider_ids=frozenset(), web_search=False))
+    recorder: list[str] = []
+    _patch_catalog_with(monkeypatch, _make_async_tool("async_probe", recorder))
+    script = [
+        script_tool_calls(
+            ("async_probe", {"x": 1}),
+            ("write_section", {"section_id": "quick_take", "markdown": "body."}),
+        ),
+        script_tool_calls(("finalize", {})),
+    ]
+    runner, session, fake = _runner_with_fake(req, script)
+    result = await runner.run(session=session)
+    assert result.status == "completed"
+    # The coroutine actually ran (await happened).
+    assert recorder == ["async_probe"]
+    # The awaited tool result (a serialized ToolResult, not a coroutine repr)
+    # reached the model as a tool message on the next turn.
+    second_messages = fake.captured_requests[1].messages
+    tool_msgs = [m for m in second_messages if m.role == "tool"]
+    assert any('"echo"' in m.content for m in tool_msgs)
+    assert not any("coroutine" in m.content for m in tool_msgs)
+
+
+@pytest.mark.asyncio
+async def test_runner_enters_dispatcher_context():
+    """When a dispatcher is supplied the turn loop runs inside in_department(...)."""
+
+    class FakeDispatcher:
+        def __init__(self) -> None:
+            self.events: list[str] = []
+            self.department: str | None = None
+
+        @contextlib.asynccontextmanager
+        async def in_department(self, department: str):
+            self.department = department
+            self.events.append("enter")
+            try:
+                yield
+            finally:
+                self.events.append("exit")
+
+    req = _req(EnabledConnectors(provider_ids=frozenset(), web_search=False))
+    dispatcher = FakeDispatcher()
+    session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
+    fake = FakeLLMProvider(
+        scripted_responses=[
+            script_tool_calls(("write_section", {"section_id": "quick_take", "markdown": "body."})),
+            script_tool_calls(("finalize", {})),
+        ]
+    )
+    session.attach_adapter(fake)
+    runner = Runner(
+        request=req,
+        transports=_transports(),
+        max_turns=20,
+        dispatcher=dispatcher,
+    )
+    result = await runner.run(session=session)
+    assert result.status == "completed"
+    assert dispatcher.events == ["enter", "exit"]
+    assert dispatcher.department == "earnings_update"
 
 
 @pytest.mark.asyncio
