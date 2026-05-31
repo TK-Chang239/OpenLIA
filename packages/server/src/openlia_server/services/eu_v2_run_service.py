@@ -31,6 +31,8 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from openlia.connectors.dispatch import Dispatcher
+from openlia.connectors.types import ConnectorStatus
 from openlia.llm.capabilities import capabilities_for
 from openlia.llm.runtime.report_eu import (
     BrokerEmitter,
@@ -57,7 +59,12 @@ from openlia_server.db.models.report_eu import (
     ReportEuSection,
     ReportEuToolCallLog,
 )
-from openlia_server.services import eu_v2_settings, eu_v2_template_service
+from openlia_server.services import (
+    connectors_service,
+    dispatcher_factory,
+    eu_v2_settings,
+    eu_v2_template_service,
+)
 from openlia_server.services.eu_v2_wiring import (
     build_eu_v2_transports,
     resolve_eodhd_api_key,
@@ -155,6 +162,17 @@ def build_run_request(
     eodhd_available = resolve_eodhd_api_key(db) is not None
     caps = capabilities_for(provider_kind=settings.provider_kind, model=settings.model)
     providers = set(settings.enabled_provider_ids)
+    # AND-gate the settings-enabled set by the validated connector registry:
+    # a provider the user enabled is only honored if a validated connector
+    # actually backs it. A removed / failed connector silently disables.
+    # EODHD is curated (env-only EODHD_API_KEY has no connector row), so it
+    # bypasses this gate and keeps its own availability check below.
+    validated_provider_ids = {
+        row.provider_id
+        for row in connectors_service.list_connectors(db)
+        if row.status == ConnectorStatus.VALIDATED.value
+    }
+    providers = {p for p in providers if p == "eodhd" or p in validated_provider_ids}
     if "eodhd" in providers and not eodhd_available:
         providers.discard("eodhd")
     connectors = EnabledConnectors(
@@ -188,6 +206,36 @@ def build_run_request(
         trigger_context=trigger_context,
         instructions=instructions_text,
     )
+
+
+def build_eu_dispatcher(
+    db: DBSession,
+    *,
+    enabled_provider_ids: frozenset[str] | set[str],
+) -> Dispatcher | None:
+    """Build a connector ``Dispatcher`` scoped to the enabled providers.
+
+    Blocklist semantics: every connector whose ``provider_id`` is not in
+    ``enabled_provider_ids`` is passed to ``build_dispatcher`` as a disabled
+    (blocked) row so the runtime router never offers its tools.
+
+    Returns ``None`` when there is nothing for the dispatcher to route —
+    i.e. no validated connector whose provider is enabled and != "eodhd"
+    (EODHD is served by the curated data path, not the dispatcher). The
+    runner then stays on the curated-only path rather than carrying an
+    empty dispatcher.
+    """
+    rows = connectors_service.list_connectors(db)
+    disabled = frozenset(r.id for r in rows if r.provider_id not in enabled_provider_ids)
+    routable = any(
+        r.status == ConnectorStatus.VALIDATED.value
+        and r.provider_id in enabled_provider_ids
+        and r.provider_id != "eodhd"
+        for r in rows
+    )
+    if not routable:
+        return None
+    return dispatcher_factory.build_dispatcher(db, disabled_connector_ids=disabled)
 
 
 def start_run_async(
@@ -243,6 +291,11 @@ def start_run_async(
 
     if transports is None:
         transports = build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))
+    # Build the connector dispatcher from db rows now (request-time), like
+    # transports — it is an in-memory object safe to hand to the bg task.
+    dispatcher = build_eu_dispatcher(
+        db, enabled_provider_ids=request.enabled_connectors.provider_ids
+    )
     cancel_token = CancelToken()
     cancel_registry[report_id] = cancel_token
     emitter = BrokerEmitter(broker=broker, report_id=report_id)
@@ -253,6 +306,7 @@ def start_run_async(
             request=request,
             session=session,
             transports=transports,
+            dispatcher=dispatcher,
             emitter=emitter,
             cancel_token=cancel_token,
             session_factory=session_factory,
@@ -272,6 +326,7 @@ async def _run_in_background(
     request: RunRequest,
     session: LLMSession | None,
     transports: EuDataTransports | None,
+    dispatcher: Dispatcher | None,
     emitter: BrokerEmitter,
     cancel_token: CancelToken,
     session_factory: Callable[[], DBSession],
@@ -285,7 +340,11 @@ async def _run_in_background(
     cancel token from the registry so cancel-after-finish is a no-op.
     """
     try:
-        runner = Runner(request=request, transports=_resolve_transports(transports))
+        runner = Runner(
+            request=request,
+            transports=_resolve_transports(transports),
+            dispatcher=dispatcher,
+        )
         try:
             if session is None:
                 session = LLMSession.create(
@@ -489,6 +548,7 @@ def _resolve_transports(transports: EuDataTransports | None) -> EuDataTransports
 __all__ = [
     "EU_FREEFORM_TEMPLATE_ID",
     "EmptyBriefError",
+    "build_eu_dispatcher",
     "build_run_request",
     "cancel_run",
     "cleanup_orphaned_running_rows",
