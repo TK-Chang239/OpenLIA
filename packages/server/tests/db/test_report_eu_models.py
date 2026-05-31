@@ -3,6 +3,7 @@ from openlia_server.db.models.report_eu import (
     EuV2Settings,
     EuV2WatchlistEntry,
     ReportEu,
+    ReportEuInstructions,
     ReportEuSection,
     ReportEuTemplate,
 )
@@ -19,7 +20,31 @@ def test_tablenames():
 
 def test_settings_connector_defaults_are_columns():
     cols = {c.name for c in EuV2Settings.__table__.columns}
-    assert {"financial_enabled", "calendar_enabled", "web_search_enabled"} <= cols
+    assert {"enabled_provider_ids", "web_search_enabled"} <= cols
+    assert "financial_enabled" not in cols
+    assert "calendar_enabled" not in cols
+
+
+def test_instructions_model_shape():
+    assert ReportEuInstructions.__tablename__ == "report_eu_instructions"
+    cols = {c.name for c in ReportEuInstructions.__table__.columns}
+    assert {
+        "id",
+        "user_id",
+        "name",
+        "is_builtin",
+        "body_text",
+        "source_doc_blob",
+        "source_doc_mime",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    } <= cols
+
+
+def test_settings_has_nullable_instructions_id():
+    col = EuV2Settings.__table__.columns["instructions_id"]
+    assert col.nullable is True
 
 
 def test_schedule_dedup_unique_constraint():

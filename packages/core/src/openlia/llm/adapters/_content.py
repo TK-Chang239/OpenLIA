@@ -195,6 +195,26 @@ def _as_anthropic_blocks(content: Any) -> list[dict[str, Any]]:
     return list(content)
 
 
+def apply_message_cache_breakpoint(rendered: list[dict[str, Any]]) -> None:
+    """Stamp an ephemeral ``cache_control`` on the last block of the last
+    rendered message, mutating ``rendered`` in place.
+
+    Incremental conversation caching: each turn caches the prefix up to
+    here so the next turn (whose prefix is identical and longer) reads it.
+    String content is normalized to a single text block first, since
+    ``cache_control`` attaches to a content block, not a raw string.
+    No-op on an empty list or an empty content block list.
+    """
+    if not rendered:
+        return
+    last = rendered[-1]
+    blocks = _as_anthropic_blocks(last["content"])
+    if not blocks:
+        return
+    blocks[-1] = {**blocks[-1], "cache_control": {"type": "ephemeral"}}
+    last["content"] = blocks
+
+
 # ─── OpenAI / OpenRouter (OpenAI-style chat completions) ────────────────────
 
 

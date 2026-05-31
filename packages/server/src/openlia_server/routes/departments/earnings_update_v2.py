@@ -31,7 +31,17 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response, StreamingResponse
 from openlia.llm.runtime.report_eu import (
     CancelToken,
@@ -55,10 +65,16 @@ from openlia_server.middleware.auth import build_require_auth
 from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 from openlia_server.services import eu_v2_calendar_sync as calendar_sync
 from openlia_server.services import eu_v2_data_sources
+from openlia_server.services import eu_v2_instructions_service as instructions_svc
 from openlia_server.services import eu_v2_run_service as run_svc
 from openlia_server.services import eu_v2_settings as settings_svc
 from openlia_server.services import eu_v2_template_service as templates_svc
 from openlia_server.services import eu_v2_watchlist as watchlist_svc
+from openlia_server.services.attachments import (
+    FileUpload,
+    extract_text,
+    validate_uploads,
+)
 from openlia_server.services.eu_v2_wiring import (
     build_eu_v2_transports,
     resolve_eodhd_api_key,
@@ -79,27 +95,31 @@ class SettingsOut(BaseModel):
     language: str
     length: str
     reasoning_effort: str | None
-    financial_enabled: bool
-    calendar_enabled: bool
+    enabled_provider_ids: list[str]
     web_search_enabled: bool
+    instructions_id: str | None
 
 
-class DataSourceSlotOut(BaseModel):
+class InstructionsOut(BaseModel):
+    id: str
+    name: str
+    is_builtin: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class DataSourceOut(BaseModel):
+    key: str
+    display_name: str
+    category: str
+    routing: str
     available: bool
-    provider_label: str | None
+    enabled: bool
     unavailable_reason: str | None
 
 
-class OtherConnectorOut(BaseModel):
-    display_name: str
-    category: str
-
-
 class DataSourcesOut(BaseModel):
-    financial: DataSourceSlotOut
-    earnings_calendar: DataSourceSlotOut
-    web_search: DataSourceSlotOut
-    other_connectors: list[OtherConnectorOut]
+    sources: list[DataSourceOut]
 
 
 class SettingsUpdateIn(BaseModel):
@@ -109,9 +129,9 @@ class SettingsUpdateIn(BaseModel):
     language: str = Field(..., min_length=1)
     length: str = Field(..., min_length=1)
     reasoning_effort: str | None = None
-    financial_enabled: bool
-    calendar_enabled: bool
+    enabled_provider_ids: list[str]
     web_search_enabled: bool
+    instructions_id: str | None = None
 
 
 class WatchlistEntryOut(BaseModel):
@@ -248,11 +268,15 @@ class CancelOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _slot_out(slot: eu_v2_data_sources.DataSourceSlot) -> DataSourceSlotOut:
-    return DataSourceSlotOut(
-        available=slot.available,
-        provider_label=slot.provider_label,
-        unavailable_reason=slot.unavailable_reason,
+def _data_source_out(s: eu_v2_data_sources.DataSource) -> DataSourceOut:
+    return DataSourceOut(
+        key=s.key,
+        display_name=s.display_name,
+        category=s.category,
+        routing=s.routing,
+        available=s.available,
+        enabled=s.enabled,
+        unavailable_reason=s.unavailable_reason,
     )
 
 
@@ -436,9 +460,9 @@ def build_earnings_update_v2_router(
             language=dto.language,
             length=dto.length,
             reasoning_effort=dto.reasoning_effort,
-            financial_enabled=dto.financial_enabled,
-            calendar_enabled=dto.calendar_enabled,
+            enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
+            instructions_id=dto.instructions_id,
         )
 
     @router.get("/data-sources", response_model=DataSourcesOut)
@@ -453,15 +477,7 @@ def build_earnings_update_v2_router(
         ds = eu_v2_data_sources.compute_data_sources(
             db, user_id=user.id, provider_kind=provider_kind, model=model
         )
-        return DataSourcesOut(
-            financial=_slot_out(ds.financial),
-            earnings_calendar=_slot_out(ds.earnings_calendar),
-            web_search=_slot_out(ds.web_search),
-            other_connectors=[
-                OtherConnectorOut(display_name=c.display_name, category=c.category)
-                for c in ds.other_connectors
-            ],
-        )
+        return DataSourcesOut(sources=[_data_source_out(s) for s in ds.sources])
 
     @router.put("/settings", response_model=SettingsOut)
     def put_settings(
@@ -471,6 +487,11 @@ def build_earnings_update_v2_router(
     ) -> SettingsOut:
         if not eu_v2_enabled():
             raise _engine_disabled()
+        if payload.template_id == "freeform" and not payload.instructions_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pick a template or an instruction profile — at least one is required.",
+            )
         try:
             dto = settings_svc.update_settings(
                 db,
@@ -481,9 +502,9 @@ def build_earnings_update_v2_router(
                 language=payload.language,
                 length=payload.length,
                 reasoning_effort=payload.reasoning_effort,
-                financial_enabled=payload.financial_enabled,
-                calendar_enabled=payload.calendar_enabled,
+                enabled_provider_ids=payload.enabled_provider_ids,
                 web_search_enabled=payload.web_search_enabled,
+                instructions_id=payload.instructions_id,
             )
         except ValueError as exc:
             raise HTTPException(
@@ -496,9 +517,9 @@ def build_earnings_update_v2_router(
             language=dto.language,
             length=dto.length,
             reasoning_effort=dto.reasoning_effort,
-            financial_enabled=dto.financial_enabled,
-            calendar_enabled=dto.calendar_enabled,
+            enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
+            instructions_id=dto.instructions_id,
         )
 
     # ----- Watchlist -----
@@ -673,6 +694,92 @@ def build_earnings_update_v2_router(
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    # ----- Instructions -----
+
+    @router.get("/instructions", response_model=list[InstructionsOut])
+    def list_instructions(
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> list[InstructionsOut]:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        rows = instructions_svc.list_instructions(db=db, user_id=user.id)
+        return [
+            InstructionsOut(
+                id=r.id,
+                name=r.name,
+                is_builtin=r.is_builtin,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    @router.post(
+        "/instructions",
+        status_code=status.HTTP_201_CREATED,
+        response_model=InstructionsOut,
+    )
+    async def upload_instructions(
+        name: str = Form(..., min_length=1, max_length=256),
+        file: UploadFile = File(...),
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> InstructionsOut:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        content = await file.read()
+        upload = FileUpload(
+            filename=file.filename or "unnamed",
+            mime_type=file.content_type or "application/octet-stream",
+            content=content,
+        )
+        errors = validate_uploads([upload])
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"errors": [{"filename": e.filename, "reason": e.reason} for e in errors]},
+            )
+        try:
+            row = instructions_svc.create_instructions_from_upload(
+                db=db,
+                user_id=user.id,
+                name=name,
+                body_text=extract_text(upload) or "",
+                source_doc_blob=content,
+                source_doc_mime=upload.mime_type,
+            )
+        except instructions_svc.InstructionsValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        db.commit()
+        return InstructionsOut(
+            id=row.id,
+            name=row.name,
+            is_builtin=row.is_builtin,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @router.delete(
+        "/instructions/{instructions_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def delete_instructions(
+        instructions_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        try:
+            instructions_svc.soft_delete_instructions(
+                db=db, user_id=user.id, instructions_id=instructions_id
+            )
+        except instructions_svc.InstructionsNotFoundError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     # ----- Schedule -----
 
     @router.get("/schedule", response_model=ScheduleListOut)
@@ -734,17 +841,20 @@ def build_earnings_update_v2_router(
             raise _engine_disabled()
         broker, cancel_registry = _streaming_state(request)
 
-        run_request = run_svc.build_run_request(
-            db,
-            user_id=user.id,
-            ticker=payload.ticker,
-            trigger_kind="on_demand",
-            fiscal_period=None,
-            report_date=None,
-            release_timing=None,
-            eps_estimate=None,
-            revenue_estimate=None,
-        )
+        try:
+            run_request = run_svc.build_run_request(
+                db,
+                user_id=user.id,
+                ticker=payload.ticker,
+                trigger_kind="on_demand",
+                fiscal_period=None,
+                report_date=None,
+                release_timing=None,
+                eps_estimate=None,
+                revenue_estimate=None,
+            )
+        except run_svc.EmptyBriefError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         report_id = run_svc.start_run_async(
             db,
             user_id=user.id,

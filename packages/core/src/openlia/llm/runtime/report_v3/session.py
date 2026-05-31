@@ -191,6 +191,9 @@ class LLMSession:
             temperature=temperature,
             native_tools=native_tools,
             reasoning_effort=reasoning_effort,
+            # Multi-turn tool-use loop: cache the growing prefix so each
+            # turn re-reads prior tool results instead of re-billing them.
+            cache_conversation=True,
         )
         del extra  # reserved for future per-provider overrides
         return await adapter.generate(request)

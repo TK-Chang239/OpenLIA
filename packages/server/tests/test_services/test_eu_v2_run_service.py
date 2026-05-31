@@ -63,7 +63,11 @@ def _seed_eu_default(db) -> None:
 
 
 @pytest.fixture
-def db_session_with_seed(db_session):
+def db_session_with_seed(db_session, monkeypatch):
+    # Make EODHD availability deterministic instead of depending on an
+    # ambient env key (which only happens to be present when the whole
+    # suite runs). Tests that need EODHD *absent* delenv it themselves.
+    monkeypatch.setenv("EODHD_API_KEY", "test-eodhd-key")
     _seed_eu_default(db_session)
     return db_session
 
@@ -78,8 +82,7 @@ def test_build_run_request_uses_settings_and_trigger(db_session_with_seed):
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=True,
     )
     req = svc.build_run_request(
@@ -94,7 +97,8 @@ def test_build_run_request_uses_settings_and_trigger(db_session_with_seed):
         revenue_estimate=None,
     )
     assert req.provider_kind == "anthropic"
-    assert req.enabled_connectors.financial is False
+    # eodhd provider enabled with EODHD available -> eodhd provider on
+    assert req.enabled_connectors.eodhd is True
     assert req.enabled_connectors.web_search is True
     assert req.trigger_context.fiscal_period == "Q3 FY26"
     assert req.template.template_id == "eu_default"
@@ -111,8 +115,7 @@ def test_build_run_request_subject_falls_back_to_ticker(db_session_with_seed):
         language="en",
         length="normal",
         reasoning_effort="high",
-        financial_enabled=True,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=False,
     )
     req = svc.build_run_request(
@@ -129,6 +132,135 @@ def test_build_run_request_subject_falls_back_to_ticker(db_session_with_seed):
     assert req.subject == "MSFT.US earnings"
     assert req.reasoning_effort is not None
     assert req.reasoning_effort.value == "high"
+
+
+def test_build_run_request_resolves_selected_instructions(db_session_with_seed):
+    from openlia_server.services import eu_v2_instructions_service
+
+    profile = eu_v2_instructions_service.create_instructions_from_upload(
+        db=db_session_with_seed,
+        user_id="u-1",
+        name="My methodology",
+        body_text="Lead with the surprise. Quantify everything.",
+    )
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=[],
+        web_search_enabled=False,
+        instructions_id=profile.id,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.instructions == "Lead with the surprise. Quantify everything."
+
+
+def test_build_run_request_instructions_none_when_unset(db_session_with_seed):
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=[],
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.instructions is None
+
+
+def test_build_run_request_freeform_with_instructions(db_session_with_seed):
+    from openlia_server.services import eu_v2_instructions_service
+
+    profile = eu_v2_instructions_service.create_instructions_from_upload(
+        db=db_session_with_seed,
+        user_id="u-1",
+        name="Freeform methodology",
+        body_text="Write whatever structure best fits the print.",
+    )
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id=svc.EU_FREEFORM_TEMPLATE_ID,
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=[],
+        web_search_enabled=False,
+        instructions_id=profile.id,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.template.template_id == svc.EU_FREEFORM_TEMPLATE_ID
+    assert req.template.sections == []
+    assert req.instructions == "Write whatever structure best fits the print."
+
+
+def test_build_run_request_freeform_without_instructions_raises(db_session_with_seed):
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id=svc.EU_FREEFORM_TEMPLATE_ID,
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=[],
+        web_search_enabled=False,
+        instructions_id=None,
+    )
+    with pytest.raises(svc.EmptyBriefError):
+        svc.build_run_request(
+            db_session_with_seed,
+            user_id="u-1",
+            ticker="MSFT.US",
+            trigger_kind="on_demand",
+            fiscal_period=None,
+            report_date=None,
+            release_timing=None,
+            eps_estimate=None,
+            revenue_estimate=None,
+        )
 
 
 def _fake_session() -> tuple[LLMSession, FakeLLMProvider]:
@@ -169,8 +301,7 @@ async def test_start_run_async_completes_and_persists(db_session_with_seed, db_s
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=False,
+        enabled_provider_ids=[],
         web_search_enabled=False,
     )
     request = svc.build_run_request(
@@ -252,8 +383,7 @@ def test_build_run_request_gates_financial_off_without_eodhd(monkeypatch, db_ses
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=True,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=True,
     )
     req = eu_v2_run_service.build_run_request(
@@ -267,8 +397,7 @@ def test_build_run_request_gates_financial_off_without_eodhd(monkeypatch, db_ses
         eps_estimate=None,
         revenue_estimate=None,
     )
-    assert req.enabled_connectors.financial is False
-    assert req.enabled_connectors.earnings_calendar is False
+    assert req.enabled_connectors.eodhd is False
     assert req.enabled_connectors.web_search is True
 
 
@@ -303,8 +432,7 @@ def test_build_run_request_gates_web_search_off_for_incapable_model(
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=True,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=True,
     )
     req = eu_v2_run_service.build_run_request(
@@ -318,8 +446,167 @@ def test_build_run_request_gates_web_search_off_for_incapable_model(
         eps_estimate=None,
         revenue_estimate=None,
     )
-    assert req.enabled_connectors.financial is True
+    assert req.enabled_connectors.eodhd is True
     assert req.enabled_connectors.web_search is False
+
+
+def _seed_connector(
+    db,
+    *,
+    cid: str,
+    provider_id: str,
+    status: str = "validated",
+) -> None:
+    """Insert a routable built-in connector row (mirrors dispatcher tests)."""
+    from openlia_server.db.models.connectors import Connector
+
+    db.add(
+        Connector(
+            id=cid,
+            provider_id=provider_id,
+            display_name=provider_id,
+            source="built_in",
+            category="financial",
+            status=status,
+            launch={"modes": [{"kind": "remote_mcp", "url": "https://x.test", "headers": {}}]},
+            secrets={},
+            cached_tools=[
+                {
+                    "name": "quote",
+                    "description": "x",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"symbol": {"type": "string"}},
+                        "required": ["symbol"],
+                    },
+                }
+            ],
+        )
+    )
+    db.commit()
+
+
+def test_build_run_request_drops_provider_without_validated_connector(db_session_with_seed):
+    """A settings-enabled provider with no validated connector row silently drops."""
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=["eodhd", "ghost"],
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    # eodhd stays (curated path); ghost has no validated connector -> dropped.
+    assert set(req.enabled_connectors.provider_ids) == {"eodhd"}
+
+
+def test_build_run_request_keeps_validated_connector_provider(db_session_with_seed):
+    _seed_connector(db_session_with_seed, cid="c-newsapi", provider_id="newsapi_ai")
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=["newsapi_ai", "ghost"],
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert set(req.enabled_connectors.provider_ids) == {"newsapi_ai"}
+
+
+def test_build_run_request_drops_unvalidated_connector_provider(db_session_with_seed):
+    _seed_connector(
+        db_session_with_seed, cid="c-newsapi", provider_id="newsapi_ai", status="failed"
+    )
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=["newsapi_ai"],
+        web_search_enabled=False,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert set(req.enabled_connectors.provider_ids) == set()
+
+
+def test_build_eu_dispatcher_routes_validated_non_eodhd(db_session):
+    _seed_connector(db_session, cid="c-eodhd", provider_id="eodhd")
+    _seed_connector(db_session, cid="c-newsapi", provider_id="newsapi_ai")
+    dispatcher = svc.build_eu_dispatcher(
+        db_session, enabled_provider_ids=frozenset({"eodhd", "newsapi_ai"})
+    )
+    assert dispatcher is not None
+    names = {c["name"] for c in dispatcher.candidate_tools()}
+    assert "newsapi_ai__quote" in names
+    # EODHD is always blocked from the dispatcher (served by the curated
+    # path), even when enabled — so its tools are never enumerated here.
+    assert not any(n.startswith("eodhd__") for n in names)
+
+
+def test_build_eu_dispatcher_blocks_disabled_provider(db_session):
+    _seed_connector(db_session, cid="c-eodhd", provider_id="eodhd")
+    _seed_connector(db_session, cid="c-newsapi", provider_id="newsapi_ai")
+    dispatcher = svc.build_eu_dispatcher(db_session, enabled_provider_ids=frozenset({"newsapi_ai"}))
+    assert dispatcher is not None
+    names = {c["name"] for c in dispatcher.candidate_tools()}
+    assert "newsapi_ai__quote" in names
+    assert not any(n.startswith("eodhd__") for n in names)
+
+
+def test_build_eu_dispatcher_none_when_only_eodhd_enabled(db_session):
+    _seed_connector(db_session, cid="c-eodhd", provider_id="eodhd")
+    dispatcher = svc.build_eu_dispatcher(db_session, enabled_provider_ids=frozenset({"eodhd"}))
+    assert dispatcher is None
+
+
+def test_build_eu_dispatcher_none_when_no_enabled_non_eodhd(db_session):
+    _seed_connector(db_session, cid="c-newsapi", provider_id="newsapi_ai")
+    dispatcher = svc.build_eu_dispatcher(db_session, enabled_provider_ids=frozenset({"eodhd"}))
+    assert dispatcher is None
 
 
 def test_cleanup_orphaned_running_rows(db_session):

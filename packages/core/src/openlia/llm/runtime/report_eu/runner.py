@@ -21,10 +21,13 @@ phase; this module owns the in-memory flow that produces a populated
 
 from __future__ import annotations
 
+import contextlib
+import inspect
 import json
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from ...types import Message, ToolCall
 from ..report_v2_3.research import (
@@ -34,7 +37,7 @@ from ..report_v2_3.research import (
 )
 from .events import CancelToken, EventEmitter, NullEmitter
 from .ledger import CitationLedger
-from .prompts import build_system_prompt
+from .prompts import ConnectorPromptInfo, build_system_prompt
 from .schemas import RunRequest, RunResult
 from .session import LLMSession
 from .tools import build_catalog
@@ -61,6 +64,11 @@ class Runner:
     # 30 min default: earnings updates with web search can take 20-30
     # turns at 30-90s each (web search + long-context latency compound).
     max_wall_time_seconds: int = 30 * 60
+    # Optional connector dispatcher. Duck-typed: when set, must expose an
+    # async ``in_department(department)`` context manager. The runner runs
+    # its whole tool loop inside that context so connector tools resolve
+    # the right per-department credentials. None ⇒ no context wrapping.
+    dispatcher: Any = None
 
     async def run(
         self,
@@ -105,6 +113,7 @@ class Runner:
             workspace=workspace,
             transports=self.transports,
             enabled_connectors=request.enabled_connectors,
+            dispatcher=self.dispatcher,
         )
 
         emitter.emit(
@@ -118,13 +127,51 @@ class Runner:
             },
         )
 
-        system_prompt = build_system_prompt(request)
+        connector_tools = _connector_prompt_info(catalog)
+        system_prompt = build_system_prompt(request, connector_tools=connector_tools)
         tool_schemas = catalog.core_schemas()
         tools_by_name = catalog.by_name()
 
         messages: list[Message] = [_initial_user_turn(request)]
 
         deadline = time.monotonic() + self.max_wall_time_seconds
+
+        if self.dispatcher is not None:
+            ctx = self.dispatcher.in_department("earnings_update")
+        else:
+            ctx = contextlib.nullcontext()
+
+        async with ctx:
+            return await self._run_turn_loop(
+                session=session,
+                emitter=emitter,
+                cancel_token=cancel_token,
+                workspace=workspace,
+                ledger=ledger,
+                tool_schemas=tool_schemas,
+                tools_by_name=tools_by_name,
+                native_tools=catalog.native_tools,
+                system_prompt=system_prompt,
+                messages=messages,
+                deadline=deadline,
+            )
+
+    async def _run_turn_loop(
+        self,
+        *,
+        session: LLMSession,
+        emitter: EventEmitter,
+        cancel_token: CancelToken,
+        workspace: RunWorkspace,
+        ledger: CitationLedger,
+        tool_schemas: list,
+        tools_by_name: dict[str, ResearchTool],
+        native_tools: tuple[str, ...],
+        system_prompt: str,
+        messages: list[Message],
+        deadline: float,
+    ) -> RunResult:
+        request = self.request
 
         for turn in range(self.max_turns):
             if cancel_token.cancelled:
@@ -150,7 +197,7 @@ class Runner:
                 messages=messages,
                 system=system_prompt,
                 tools=tool_schemas,
-                native_tools=catalog.native_tools,
+                native_tools=native_tools,
                 reasoning_effort=request.reasoning_effort,
             )
 
@@ -188,7 +235,7 @@ class Runner:
                         "args_summary": _summarize_args(call.arguments),
                     },
                 )
-                result_message = _dispatch_one(call, tools_by_name)
+                result_message = await _dispatch_one(call, tools_by_name)
                 messages.append(result_message)
                 _emit_tool_completion(
                     emitter,
@@ -220,6 +267,27 @@ class Runner:
         )
 
 
+def _connector_prompt_info(catalog: Any) -> tuple[ConnectorPromptInfo, ...]:
+    """Derive per-connector prompt info from the catalog's dispatcher tools.
+
+    Dispatcher tools have ``<provider>__<tool>`` names; curated EODHD tools
+    have plain names and are skipped (the EODHD block covers them). Tools
+    are grouped by provider prefix into one ``ConnectorPromptInfo`` each,
+    preserving first-seen provider order.
+    """
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for descriptor in catalog.descriptors:
+        name = descriptor.name
+        if "__" not in name:
+            continue
+        provider = name.split("__", 1)[0]
+        grouped.setdefault(provider, []).append((name, descriptor.description))
+    return tuple(
+        ConnectorPromptInfo(label=provider, tools=tuple(tools))
+        for provider, tools in grouped.items()
+    )
+
+
 def _initial_user_turn(request: RunRequest) -> Message:
     return Message(
         role="user",
@@ -232,12 +300,17 @@ def _initial_user_turn(request: RunRequest) -> Message:
     )
 
 
-def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) -> Message:
+async def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) -> Message:
     """Execute one tool call and produce the matching tool message.
 
     Errors from the tool are returned as tool messages too — the model
     sees the structured error and can correct itself or try a different
     tool. The loop never crashes on a single bad tool call.
+
+    A tool's ``execute`` may be sync (curated EODHD + output tools) or a
+    coroutine (connector tools). When it returns an awaitable the result
+    is awaited here, inside the same try/except so a raise from either
+    the sync call or the awaited coroutine surfaces as a structured error.
     """
     tool = tools_by_name.get(call.name)
     if tool is None:
@@ -254,6 +327,8 @@ def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) -> Mes
 
     try:
         result = tool.execute(call.arguments)
+        if inspect.isawaitable(result):
+            result = await result
     except ToolExecutionError as exc:
         body = json.dumps({"error": str(exc)})
         return Message(role="tool", content=body, tool_call_id=call.id)

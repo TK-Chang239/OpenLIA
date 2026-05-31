@@ -6,6 +6,7 @@ import time
 from collections.abc import AsyncIterator
 
 from openlia.llm.adapters._content import (
+    apply_message_cache_breakpoint,
     render_anthropic_messages,
     split_at_cache_breakpoint,
 )
@@ -90,7 +91,13 @@ def _build_anthropic_tools(request: LLMRequest) -> list[dict] | None:
         payload_tools.append(
             {"type": _WEB_SEARCH_NATIVE_TYPE, "name": _WEB_SEARCH_NATIVE_NAME, "max_uses": max_uses}
         )
-    return payload_tools or None
+    if not payload_tools:
+        return None
+    if request.cache_conversation:
+        # Cache the (static, per-run) tools block: one breakpoint on the
+        # last entry caches the whole array as a prefix every turn reuses.
+        payload_tools[-1] = {**payload_tools[-1], "cache_control": {"type": "ephemeral"}}
+    return payload_tools
 
 
 def _parse_anthropic_content(
@@ -248,6 +255,8 @@ class AnthropicAdapter(LLMProvider):
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
         }
+        if request.cache_conversation:
+            apply_message_cache_breakpoint(payload["messages"])
         if request.system:
             payload["system"] = _build_system_with_cache_control(request.system)
         if request.stop:
@@ -313,6 +322,8 @@ class AnthropicAdapter(LLMProvider):
             "temperature": request.temperature,
             "stream": True,
         }
+        if request.cache_conversation:
+            apply_message_cache_breakpoint(payload["messages"])
         if request.system:
             payload["system"] = _build_system_with_cache_control(request.system)
         if request.stop:
