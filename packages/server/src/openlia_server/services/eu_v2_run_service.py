@@ -217,7 +217,10 @@ def build_eu_dispatcher(
 
     Blocklist semantics: every connector whose ``provider_id`` is not in
     ``enabled_provider_ids`` is passed to ``build_dispatcher`` as a disabled
-    (blocked) row so the runtime router never offers its tools.
+    (blocked) row so the runtime router never offers its tools. EODHD is
+    always blocked from the dispatcher too — it is served by the curated
+    data path, so leaving it routable would make the dispatcher enumerate
+    its full SDK surface only for ``build_dispatcher_tools`` to skip it.
 
     Returns ``None`` when there is nothing for the dispatcher to route —
     i.e. no validated connector whose provider is enabled and != "eodhd"
@@ -226,7 +229,11 @@ def build_eu_dispatcher(
     empty dispatcher.
     """
     rows = connectors_service.list_connectors(db)
-    disabled = frozenset(r.id for r in rows if r.provider_id not in enabled_provider_ids)
+    disabled = frozenset(
+        r.id
+        for r in rows
+        if r.provider_id not in enabled_provider_ids or r.provider_id == "eodhd"
+    )
     routable = any(
         r.status == ConnectorStatus.VALIDATED.value
         and r.provider_id in enabled_provider_ids
