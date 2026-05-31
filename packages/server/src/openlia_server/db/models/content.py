@@ -290,16 +290,10 @@ class RepoItem(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "report_id", name="uq_repo_items_user_report"),
-        UniqueConstraint(
-            "user_id", "pipeline_run_id", name="uq_repo_items_user_pipeline_run"
-        ),
-        UniqueConstraint(
-            "user_id", "v3_report_id", name="uq_repo_items_user_v3_report"
-        ),
+        UniqueConstraint("user_id", "pipeline_run_id", name="uq_repo_items_user_pipeline_run"),
+        UniqueConstraint("user_id", "v3_report_id", name="uq_repo_items_user_v3_report"),
         Index("ix_repo_items_user_id_created_at", "user_id", "created_at"),
-        Index(
-            "ix_repo_items_user_id_v3_report_id", "user_id", "v3_report_id"
-        ),
+        Index("ix_repo_items_user_id_v3_report_id", "user_id", "v3_report_id"),
         CheckConstraint(
             "((CASE WHEN report_id IS NOT NULL THEN 1 ELSE 0 END) + "
             "(CASE WHEN pipeline_run_id IS NOT NULL THEN 1 ELSE 0 END) + "

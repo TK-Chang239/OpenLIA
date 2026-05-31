@@ -44,6 +44,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column
@@ -117,7 +118,7 @@ class ReportEuSection(Base):
     section_index: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     markdown: Mapped[str] = mapped_column(Text, nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_eu_sections"),
@@ -157,7 +158,7 @@ class ReportEuChart(Base):
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     spec_json: Mapped[str] = mapped_column(Text, nullable=False)
     rendered_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_eu_charts"),
@@ -296,9 +297,15 @@ class ReportEuToolCallLog(Base):
     result_summary: Mapped[str] = mapped_column(Text, nullable=False)
     provenance_json: Mapped[str] = mapped_column(Text, nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    wall_time_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    wall_time_ms: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
     __table_args__ = (
@@ -351,8 +358,10 @@ class EuV2EarningsSchedule(Base):
     eps_estimate: Mapped[str | None] = mapped_column(String(32), nullable=True)
     revenue_estimate: Mapped[str | None] = mapped_column(String(32), nullable=True)
     scheduled_run_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     report_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     synced_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
@@ -386,11 +395,19 @@ class EuV2Settings(Base):
     model: Mapped[str] = mapped_column(String(128), nullable=False)
     template_id: Mapped[str] = mapped_column(String(64), nullable=False)
     instructions_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    language: Mapped[str] = mapped_column(String(16), nullable=False, default="en")
-    length: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    language: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="en", server_default="en"
+    )
+    length: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="normal", server_default="normal"
+    )
     reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    enabled_provider_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    web_search_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    enabled_provider_ids: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
+    web_search_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 

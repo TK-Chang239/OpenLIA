@@ -66,6 +66,10 @@ class ReportV3(Base):
     )
     subject: Mapped[str] = mapped_column(String(256), nullable=False)
     template_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Saved instruction profile this run used (report_v3_instructions.id),
+    # or NULL when none. Persisted so a revision can re-resolve the same
+    # methodology and replay it into the revise prompt.
+    instructions_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     language: Mapped[str] = mapped_column(String(16), nullable=False)
     length: Mapped[str] = mapped_column(String(16), nullable=False)
     provider_kind: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -134,7 +138,7 @@ class ReportV3Section(Base):
     )
     # 1-based monotonic version per (report_id, section_id). 1 for the
     # original run, 2+ for revisions that touch that section.
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_v3_sections"),
@@ -185,7 +189,7 @@ class ReportV3Chart(Base):
         ForeignKey("report_v3_revisions.id", ondelete="CASCADE"),
         nullable=True,
     )
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_v3_charts"),
@@ -373,9 +377,15 @@ class ReportV3ToolCallLog(Base):
     result_summary: Mapped[str] = mapped_column(Text, nullable=False)
     provenance_json: Mapped[str] = mapped_column(Text, nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    wall_time_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    wall_time_ms: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     timestamp: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
     __table_args__ = (
@@ -425,9 +435,7 @@ class ReportV3Revision(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime(), nullable=True
-    )
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_v3_revisions"),

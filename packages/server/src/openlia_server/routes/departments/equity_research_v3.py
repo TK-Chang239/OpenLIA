@@ -26,7 +26,6 @@ errors bubble as 500.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -111,6 +110,51 @@ def _freeform_template_spec() -> TemplateSpec:
         default_length=None,
         sections=[],
     )
+
+
+def _resolve_revision_shape(
+    *, db: DBSession, user_id: str, parent: ReportV3
+) -> tuple[TemplateSpec, str | None]:
+    """Rebuild the (template, instructions_text) a revision should run
+    with, from the parent run row.
+
+    - A freeform parent (``template_id == "freeform"``) resolves to the
+      sections-less spec rather than a DB lookup that would 404. This is
+      what makes no-template reports revisable at all.
+    - The parent's ``instructions_id`` (when set) re-resolves to text so
+      the revision replays the same methodology. A profile deleted since
+      the original run degrades gracefully to no instructions rather than
+      blocking the revision.
+
+    Raises ``HTTPException(400)`` only when a genuine (non-freeform)
+    template the parent depended on has gone missing.
+    """
+    if parent.template_id == FREEFORM_TEMPLATE_ID:
+        template: TemplateSpec = _freeform_template_spec()
+    else:
+        try:
+            template = templates_svc.resolve_template(
+                db=db, user_id=user_id, template_id=parent.template_id
+            )
+        except templates_svc.TemplateNotFoundError:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Parent report's template {parent.template_id!r} is "
+                    f"no longer available. Re-upload it or revise after "
+                    f"restoring."
+                ),
+            ) from None
+
+    instructions_text: str | None = None
+    if parent.instructions_id:
+        try:
+            instructions_text = instructions_svc.resolve_instructions(
+                db=db, user_id=user_id, instructions_id=parent.instructions_id
+            )
+        except instructions_svc.InstructionsNotFoundError:
+            instructions_text = None
+    return template, instructions_text
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +477,10 @@ def _engine_disabled() -> HTTPException:
 
 
 def _engine_enabled() -> bool:
-    return os.environ.get(_ENV_FLAG, "").strip().lower() == _ENABLED_VALUE
+    # v3 is now the sole equity-research engine and is always enabled. The
+    # REPORT_ENGINE_VERSION flag is retained only for backward compatibility:
+    # any value (including unset) keeps v3 on.
+    return True
 
 
 def _streaming_state(request: Request) -> tuple[EventBroker, dict[str, CancelToken]]:
@@ -578,6 +625,7 @@ def build_equity_research_v3_router(
             model=payload.model,
             reasoning_effort=payload.reasoning_effort,
             instructions=instructions,
+            instructions_id=payload.instructions_id,
         )
         try:
             outcome = await svc.start_run(
@@ -674,9 +722,7 @@ def build_equity_research_v3_router(
                 raise HTTPException(
                     status_code=400,
                     detail={
-                        "errors": [
-                            {"filename": e.filename, "reason": e.reason} for e in errors
-                        ]
+                        "errors": [{"filename": e.filename, "reason": e.reason} for e in errors]
                     },
                 )
             attachments = prepare_v3_attachments(uploads)
@@ -692,6 +738,7 @@ def build_equity_research_v3_router(
             reasoning_effort=payload.reasoning_effort,
             attachments=attachments,
             instructions=instructions,
+            instructions_id=payload.instructions_id,
         )
         try:
             handle = svc.start_run_async(
@@ -1003,11 +1050,7 @@ def build_equity_research_v3_router(
         if errors:
             raise HTTPException(
                 status_code=400,
-                detail={
-                    "errors": [
-                        {"filename": e.filename, "reason": e.reason} for e in errors
-                    ]
-                },
+                detail={"errors": [{"filename": e.filename, "reason": e.reason} for e in errors]},
             )
         try:
             row = instructions_svc.create_instructions_from_upload(
@@ -1096,21 +1139,12 @@ def build_equity_research_v3_router(
                 ),
             )
 
-        # Re-resolve the parent's template so the revision engine has
-        # the same structural authority as the original run.
-        try:
-            template: TemplateSpec = templates_svc.resolve_template(
-                db=db, user_id=user.id, template_id=parent.template_id
-            )
-        except templates_svc.TemplateNotFoundError:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Parent report's template {parent.template_id!r} is "
-                    f"no longer available. Re-upload it or revise after "
-                    f"restoring."
-                ),
-            ) from None
+        # Re-resolve the parent's template + instruction profile so the
+        # revision engine carries the same structural authority AND the
+        # same methodology as the original run. Freeform parents resolve
+        # to the sections-less spec (so no-template reports are
+        # revisable); a since-deleted profile degrades to no instructions.
+        template, instructions = _resolve_revision_shape(db=db, user_id=user.id, parent=parent)
 
         run_request = RunRequest(
             subject=parent.subject,
@@ -1123,6 +1157,8 @@ def build_equity_research_v3_router(
             # revisions default to "off". A follow-up can let the
             # client send an override per-revision.
             reasoning_effort=None,
+            instructions=instructions,
+            instructions_id=parent.instructions_id,
         )
         revise_ctx = revision_svc.build_revise_context_from_db(
             db=db, report_id=report_id, revision_request=payload.request

@@ -2,6 +2,7 @@
 @import "./report/theme-light.css";
 @import "./report/theme-dark.css";
 @import "./report/layout.css";
+@import "./motion-shell.css";
 /* Noto Sans TC — Traditional Chinese web font. Loaded from Google Fonts
    so the binaries are CDN-cached and tree-shakable per weight. */
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap");

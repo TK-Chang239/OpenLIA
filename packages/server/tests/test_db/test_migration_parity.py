@@ -72,6 +72,15 @@ def test_metadata_matches_alembic_head(tmp_path: Path) -> None:
         "graph_artifact_summaries_fts_idx",
     }
     db_tables -= _FTS_SHADOW
+    # Tables of the removed equity-research engines (v1/v2/v2.2/v2.3). The
+    # ORM models were deleted with the engines but the tables are retained
+    # on disk for rollback / data preservation (see env._LEGACY_ORPHANED_TABLES).
+    _LEGACY_ORPHANED = {
+        "er_v2_model_assignments",
+        "er_v2_3_model_assignments",
+        "er_v2_3_run_state",
+    }
+    db_tables -= _LEGACY_ORPHANED
 
     assert orm_tables == db_tables, (
         f"Missing from DB: {orm_tables - db_tables}; Extra in DB: {db_tables - orm_tables}"

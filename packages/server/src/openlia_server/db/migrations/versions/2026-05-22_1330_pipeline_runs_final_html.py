@@ -21,9 +21,7 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     with op.batch_alter_table("pipeline_runs", schema=None) as batch_op:
         batch_op.add_column(sa.Column("final_html", sa.Text(), nullable=True))
-        batch_op.add_column(
-            sa.Column("final_html_at", sa.DateTime(timezone=True), nullable=True)
-        )
+        batch_op.add_column(sa.Column("final_html_at", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:

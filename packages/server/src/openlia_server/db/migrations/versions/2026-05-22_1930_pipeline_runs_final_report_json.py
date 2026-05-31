@@ -29,9 +29,7 @@ def upgrade() -> None:
         batch_op.drop_column("final_html_at")
         batch_op.drop_column("final_html")
         batch_op.add_column(sa.Column("final_report_json", sa.JSON(), nullable=True))
-        batch_op.add_column(
-            sa.Column("final_report_at", sa.DateTime(timezone=True), nullable=True)
-        )
+        batch_op.add_column(sa.Column("final_report_at", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:
@@ -39,6 +37,4 @@ def downgrade() -> None:
         batch_op.drop_column("final_report_at")
         batch_op.drop_column("final_report_json")
         batch_op.add_column(sa.Column("final_html", sa.Text(), nullable=True))
-        batch_op.add_column(
-            sa.Column("final_html_at", sa.DateTime(timezone=True), nullable=True)
-        )
+        batch_op.add_column(sa.Column("final_html_at", sa.DateTime(timezone=True), nullable=True))

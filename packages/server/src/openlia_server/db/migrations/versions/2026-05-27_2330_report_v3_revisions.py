@@ -74,9 +74,7 @@ def upgrade() -> None:
                 nullable=True,
             )
         )
-        batch.add_column(
-            sa.Column("version", sa.Integer(), nullable=False, server_default="1")
-        )
+        batch.add_column(sa.Column("version", sa.Integer(), nullable=False, server_default="1"))
         batch.drop_constraint(
             "uq_report_v3_sections_report_id_section_id",
             type_="unique",
@@ -101,9 +99,7 @@ def upgrade() -> None:
                 nullable=True,
             )
         )
-        batch.add_column(
-            sa.Column("version", sa.Integer(), nullable=False, server_default="1")
-        )
+        batch.add_column(sa.Column("version", sa.Integer(), nullable=False, server_default="1"))
         batch.drop_constraint(
             "uq_report_v3_charts_report_id_chart_id",
             type_="unique",
@@ -120,6 +116,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop the (report_id, chart_id, version) index BEFORE the batch that
+    # drops the `version` column. SQLite batch mode rebuilds the table by
+    # copying its reflected indexes; if this index still exists while
+    # `version` is being dropped, the rebuild references a now-missing
+    # column and fails with "no such column: version".
+    op.drop_index(
+        "ix_report_v3_charts_report_id_chart_id_version",
+        table_name="report_v3_charts",
+    )
     with op.batch_alter_table("report_v3_charts") as batch:
         batch.drop_constraint(
             "uq_report_v3_charts_report_id_chart_id_version",
@@ -131,11 +136,11 @@ def downgrade() -> None:
         )
         batch.drop_column("version")
         batch.drop_column("revision_id")
-    op.drop_index(
-        "ix_report_v3_charts_report_id_chart_id_version",
-        table_name="report_v3_charts",
-    )
 
+    op.drop_index(
+        "ix_report_v3_sections_report_id_section_id_version",
+        table_name="report_v3_sections",
+    )
     with op.batch_alter_table("report_v3_sections") as batch:
         batch.drop_constraint(
             "uq_report_v3_sections_report_id_section_id_version",
@@ -147,10 +152,6 @@ def downgrade() -> None:
         )
         batch.drop_column("version")
         batch.drop_column("revision_id")
-    op.drop_index(
-        "ix_report_v3_sections_report_id_section_id_version",
-        table_name="report_v3_sections",
-    )
 
     op.drop_index(
         "ix_report_v3_revisions_report_id_status",

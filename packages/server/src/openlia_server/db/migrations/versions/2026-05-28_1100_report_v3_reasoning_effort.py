@@ -25,9 +25,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.batch_alter_table("report_v3") as batch:
-        batch.add_column(
-            sa.Column("reasoning_effort", sa.String(length=16), nullable=True)
-        )
+        batch.add_column(sa.Column("reasoning_effort", sa.String(length=16), nullable=True))
 
 
 def downgrade() -> None:

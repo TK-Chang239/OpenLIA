@@ -66,8 +66,7 @@ class ErUserConfig(Base, TimestampMixin):
             name="ck_er_user_configs_report_length",
         ),
         CheckConstraint(
-            "report_reasoning_effort IS NULL OR "
-            "report_reasoning_effort IN ('off','medium','high')",
+            "report_reasoning_effort IS NULL OR report_reasoning_effort IN ('off','medium','high')",
             name="ck_er_user_configs_reasoning_effort",
         ),
         Index("ix_er_user_configs_user_id", "user_id"),

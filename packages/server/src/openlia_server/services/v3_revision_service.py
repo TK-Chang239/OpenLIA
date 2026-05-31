@@ -101,9 +101,7 @@ def has_active_revision(*, db: DBSession, report_id: str) -> bool:
     return db.execute(stmt).scalar_one_or_none() is not None
 
 
-def list_revisions(
-    *, db: DBSession, user_id: str, report_id: str
-) -> list[ReportV3Revision]:
+def list_revisions(*, db: DBSession, user_id: str, report_id: str) -> list[ReportV3Revision]:
     """All revisions for this report, oldest first. Owner-scoped."""
     parent = db.get(ReportV3, report_id)
     if parent is None or parent.user_id != user_id:
@@ -116,18 +114,14 @@ def list_revisions(
     return list(db.execute(stmt).scalars().all())
 
 
-def get_revision(
-    *, db: DBSession, user_id: str, revision_id: str
-) -> ReportV3Revision:
+def get_revision(*, db: DBSession, user_id: str, revision_id: str) -> ReportV3Revision:
     row = db.get(ReportV3Revision, revision_id)
     if row is None or row.user_id != user_id:
         raise RevisionNotFoundError(f"v3 revision {revision_id!r} not found")
     return row
 
 
-def cancel_revision(
-    *, cancel_registry: dict[str, CancelToken], revision_id: str
-) -> bool:
+def cancel_revision(*, cancel_registry: dict[str, CancelToken], revision_id: str) -> bool:
     """Flip the cancel flag for an in-flight revision. Returns True
     if a token was found (cancellation is cooperative — the runner
     exits at the next safe point)."""
@@ -168,10 +162,7 @@ def start_revision_async(
     # Monotonic per-report index. Counts ALL prior revisions (including
     # failed/cancelled) so the chronological story stays consistent.
     revision_index = (
-        db.query(ReportV3Revision)
-        .filter(ReportV3Revision.report_id == report_id)
-        .count()
-        + 1
+        db.query(ReportV3Revision).filter(ReportV3Revision.report_id == report_id).count() + 1
     )
     revision_id = str(uuid.uuid4())
     now = datetime.now(UTC)
@@ -250,9 +241,7 @@ async def _run_revision_in_background(
             return
         except Exception as exc:
             log.exception("v3 revision %s crashed unexpectedly", revision_id)
-            _mark_revision_failed(
-                session_factory, revision_id, report_id, f"unexpected: {exc}"
-            )
+            _mark_revision_failed(session_factory, revision_id, report_id, f"unexpected: {exc}")
             return
 
         _persist_revision_outcome(
@@ -322,9 +311,7 @@ def _persist_revision_outcome(
             prior = prior_chart_by_id.get(chart.chart_id)
             if prior is not None and prior.model_dump_json() == spec_json:
                 continue
-            next_version = _next_version_for(
-                bg_db, report_id, chart.chart_id, "chart"
-            )
+            next_version = _next_version_for(bg_db, report_id, chart.chart_id, "chart")
             bg_db.add(
                 ReportV3Chart(
                     report_id=report_id,
@@ -387,9 +374,7 @@ def _persist_revision_outcome(
         bg_db.commit()
 
 
-def _next_version_for(
-    db: DBSession, report_id: str, item_id: str, kind: str
-) -> int:
+def _next_version_for(db: DBSession, report_id: str, item_id: str, kind: str) -> int:
     """Return the next version number for a (report_id, section_id)
     or (report_id, chart_id). Falls back to 1 when no prior rows."""
     if kind == "section":
@@ -420,11 +405,7 @@ def _recompute_display_indices(db: DBSession, report_id: str) -> None:
     rendered state — a source that only appeared in a since-revised
     section drops out of the live numbering."""
     latest_sections = _latest_section_rows(db, report_id)
-    citations = (
-        db.query(ReportV3Citation)
-        .filter(ReportV3Citation.report_id == report_id)
-        .all()
-    )
+    citations = db.query(ReportV3Citation).filter(ReportV3Citation.report_id == report_id).all()
     citation_by_source = {c.source_id: c for c in citations}
 
     import re
@@ -445,16 +426,10 @@ def _recompute_display_indices(db: DBSession, report_id: str) -> None:
         citation.display_index = seen.get(citation.source_id)
 
 
-def _latest_section_rows(
-    db: DBSession, report_id: str
-) -> list[ReportV3Section]:
+def _latest_section_rows(db: DBSession, report_id: str) -> list[ReportV3Section]:
     """One row per section_id at its highest version, ordered by
     the latest version's section_index."""
-    rows = (
-        db.query(ReportV3Section)
-        .filter(ReportV3Section.report_id == report_id)
-        .all()
-    )
+    rows = db.query(ReportV3Section).filter(ReportV3Section.report_id == report_id).all()
     latest_by_section_id: dict[str, ReportV3Section] = {}
     for row in rows:
         current = latest_by_section_id.get(row.section_id)
@@ -504,15 +479,9 @@ def build_revise_context_from_db(
     latest_charts = _latest_chart_rows(db, report_id)
     from openlia.llm.runtime.report_v3 import ChartSpec
 
-    prior_charts = [
-        ChartSpec.model_validate_json(row.spec_json) for row in latest_charts
-    ]
+    prior_charts = [ChartSpec.model_validate_json(row.spec_json) for row in latest_charts]
 
-    citation_rows = (
-        db.query(ReportV3Citation)
-        .filter(ReportV3Citation.report_id == report_id)
-        .all()
-    )
+    citation_rows = db.query(ReportV3Citation).filter(ReportV3Citation.report_id == report_id).all()
     prior_citations = [
         PriorCitation(
             source_id=row.source_id,
@@ -530,14 +499,8 @@ def build_revise_context_from_db(
     )
 
 
-def _latest_chart_rows(
-    db: DBSession, report_id: str
-) -> list[ReportV3Chart]:
-    rows = (
-        db.query(ReportV3Chart)
-        .filter(ReportV3Chart.report_id == report_id)
-        .all()
-    )
+def _latest_chart_rows(db: DBSession, report_id: str) -> list[ReportV3Chart]:
+    rows = db.query(ReportV3Chart).filter(ReportV3Chart.report_id == report_id).all()
     latest_by_chart_id: dict[str, ReportV3Chart] = {}
     for row in rows:
         current = latest_by_chart_id.get(row.chart_id)
