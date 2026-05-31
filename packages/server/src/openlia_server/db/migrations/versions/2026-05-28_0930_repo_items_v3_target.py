@@ -44,9 +44,7 @@ def upgrade() -> None:
             ["id"],
             ondelete="CASCADE",
         )
-        batch.drop_constraint(
-            "ck_repo_items_exactly_one_target", type_="check"
-        )
+        batch.drop_constraint("ck_repo_items_exactly_one_target", type_="check")
         batch.create_check_constraint(
             "ck_repo_items_exactly_one_target",
             "((report_id IS NOT NULL)::int + "
@@ -57,9 +55,7 @@ def upgrade() -> None:
             "(CASE WHEN pipeline_run_id IS NOT NULL THEN 1 ELSE 0 END) + "
             "(CASE WHEN v3_report_id IS NOT NULL THEN 1 ELSE 0 END)) = 1",
         )
-        batch.create_unique_constraint(
-            "uq_repo_items_user_v3_report", ["user_id", "v3_report_id"]
-        )
+        batch.create_unique_constraint("uq_repo_items_user_v3_report", ["user_id", "v3_report_id"])
 
     op.create_index(
         "ix_repo_items_user_id_v3_report_id",
@@ -72,9 +68,7 @@ def downgrade() -> None:
     op.drop_index("ix_repo_items_user_id_v3_report_id", table_name="repo_items")
     with op.batch_alter_table("repo_items") as batch:
         batch.drop_constraint("uq_repo_items_user_v3_report", type_="unique")
-        batch.drop_constraint(
-            "ck_repo_items_exactly_one_target", type_="check"
-        )
+        batch.drop_constraint("ck_repo_items_exactly_one_target", type_="check")
         batch.create_check_constraint(
             "ck_repo_items_exactly_one_target",
             "(report_id IS NOT NULL AND pipeline_run_id IS NULL) OR "

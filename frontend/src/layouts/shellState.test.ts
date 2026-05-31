@@ -40,8 +40,8 @@ describe("crumbsForPath", () => {
     expect(crumbsForPath("/totally-unknown")).toEqual(["nav.home"]);
   });
 
-  it("maps /equity-research-v3 to the Equity Research crumb", () => {
-    expect(crumbsForPath("/equity-research-v3")).toEqual([
+  it("maps /equity-research to the Equity Research crumb", () => {
+    expect(crumbsForPath("/equity-research")).toEqual([
       "nav.home",
       "nav.equity_research",
     ]);

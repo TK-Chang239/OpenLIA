@@ -85,13 +85,10 @@ def _build_write_section_tool(workspace: RunWorkspace) -> ResearchTool:
             and section_id not in template_section_titles
         ):
             raise ToolExecutionError(
-                f"Unknown section_id {section_id!r}. "
-                f"Valid ids: {sorted(template_section_titles)}."
+                f"Unknown section_id {section_id!r}. Valid ids: {sorted(template_section_titles)}."
             )
         if not isinstance(markdown, str) or not markdown.strip():
-            raise ToolExecutionError(
-                "write_section requires non-empty string `markdown`."
-            )
+            raise ToolExecutionError("write_section requires non-empty string `markdown`.")
 
         unresolved = _unresolved_citations(markdown, workspace)
         if unresolved:
@@ -189,9 +186,7 @@ def _build_emit_chart_tool(workspace: RunWorkspace) -> ResearchTool:
                 f"Invalid chart spec: {exc.errors(include_url=False, include_context=False)}"
             ) from exc
 
-        unresolved = [
-            sid for sid in spec.source_ids if workspace.ledger.lookup(sid) is None
-        ]
+        unresolved = [sid for sid in spec.source_ids if workspace.ledger.lookup(sid) is None]
         if unresolved:
             valid = [e.source_id for e in workspace.ledger.all()]
             raise ToolExecutionError(
@@ -248,8 +243,7 @@ def _build_emit_chart_tool(workspace: RunWorkspace) -> ResearchTool:
                         "type": "object",
                         "additionalProperties": {"type": "string"},
                         "description": (
-                            "Optional axis labels, e.g. "
-                            "{x: 'Fiscal Year', y: 'Revenue ($B)'}."
+                            "Optional axis labels, e.g. {x: 'Fiscal Year', y: 'Revenue ($B)'}."
                         ),
                     },
                     "source_ids": {
@@ -277,8 +271,7 @@ def _build_set_cover_tool(workspace: RunWorkspace) -> ResearchTool:
             spec = CoverSpec.model_validate(args)
         except ValidationError as exc:
             raise ToolExecutionError(
-                "Invalid cover spec: "
-                f"{exc.errors(include_url=False, include_context=False)}"
+                f"Invalid cover spec: {exc.errors(include_url=False, include_context=False)}"
             ) from exc
         workspace.set_cover(spec)
         return ToolResult(
@@ -347,8 +340,7 @@ def _build_set_cover_tool(workspace: RunWorkspace) -> ResearchTool:
                                 "change": {
                                     "type": "string",
                                     "description": (
-                                        "Optional period-over-period "
-                                        "delta, e.g. '+18% YoY'."
+                                        "Optional period-over-period delta, e.g. '+18% YoY'."
                                     ),
                                 },
                                 "tone": {
@@ -363,8 +355,7 @@ def _build_set_cover_tool(workspace: RunWorkspace) -> ResearchTool:
                     "rating": {
                         "type": "string",
                         "description": (
-                            "Investment rating, e.g. 'Buy', 'Hold', "
-                            "'Overweight', 'N/A'."
+                            "Investment rating, e.g. 'Buy', 'Hold', 'Overweight', 'N/A'."
                         ),
                     },
                     "upside_pct": {
@@ -425,10 +416,7 @@ def _build_finalize_tool(workspace: RunWorkspace) -> ResearchTool:
         # Revise mode: at least one section must have been touched
         # this run — finalizing a revision that wrote nothing would
         # produce a confusing no-op revision row + version bump.
-        if (
-            workspace.revision_mode
-            and not workspace.sections_written_this_run
-        ):
+        if workspace.revision_mode and not workspace.sections_written_this_run:
             return ToolResult(
                 payload={
                     "ok": False,

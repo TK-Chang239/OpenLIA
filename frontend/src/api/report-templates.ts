@@ -8,13 +8,6 @@ export interface TemplateLoadNotice {
   message: string;
 }
 
-export async function fetchConversionPrompt(): Promise<string> {
-  const r = await fetch(`${BASE}/conversion_prompt`);
-  if (!r.ok) throw new Error(`failed: ${r.status}`);
-  const { prompt } = await r.json();
-  return prompt;
-}
-
 export interface ReportTemplate {
   id: string;
   name: string;

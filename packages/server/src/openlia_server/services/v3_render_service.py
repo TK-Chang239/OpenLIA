@@ -38,9 +38,7 @@ def render_html(
     report_id: str,
 ) -> HtmlRender:
     """Assemble HTML for a persisted run, updating chart rendered_urls in place."""
-    row, sections, charts, citations = svc.get_run(
-        db=db, user_id=user_id, report_id=report_id
-    )
+    row, sections, charts, citations = svc.get_run(db=db, user_id=user_id, report_id=report_id)
     assembled = assemble_html(
         report=row,
         sections=sections,
@@ -68,12 +66,8 @@ def render_docx(
     """
     from openlia_server.services.v3_docx import render_docx as _build_docx
 
-    row, sections, charts, citations = svc.get_run(
-        db=db, user_id=user_id, report_id=report_id
-    )
-    return _build_docx(
-        report=row, sections=sections, charts=charts, citations=citations
-    )
+    row, sections, charts, citations = svc.get_run(db=db, user_id=user_id, report_id=report_id)
+    return _build_docx(report=row, sections=sections, charts=charts, citations=citations)
 
 
 async def render_pdf(

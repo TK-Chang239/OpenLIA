@@ -95,9 +95,7 @@ async def test_start_run_async_returns_immediately_and_background_completes(
     user = _make_user(db_session)
     req = _request()
 
-    llm_session = LLMSession.create(
-        provider_kind="anthropic", model="claude-sonnet-4-6"
-    )
+    llm_session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
     fake = FakeLLMProvider(scripted_responses=_happy_script(req))
     llm_session.attach_adapter(fake)
     runner = Runner(max_turns=30, transports_factory=_fake_transports)
@@ -137,18 +135,14 @@ async def test_start_run_async_returns_immediately_and_background_completes(
 
 
 @pytest.mark.asyncio
-async def test_cancel_run_aborts_background_with_failed_status(
-    create_tables, db_session: Session
-):
+async def test_cancel_run_aborts_background_with_failed_status(create_tables, db_session: Session):
     user = _make_user(db_session)
     req = _request()
 
     # Script with many tool calls so we have a window to cancel mid-run.
     script = [script_tool_calls(("get_company_news", {"ticker": "RKLB.US"}))] * 25
 
-    llm_session = LLMSession.create(
-        provider_kind="anthropic", model="claude-sonnet-4-6"
-    )
+    llm_session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
     # 50ms per turn so the cancel lands while the runner is still
     # iterating, not after it has exhausted the script.
     fake = FakeLLMProvider(scripted_responses=script, per_call_delay_seconds=0.05)
@@ -252,7 +246,8 @@ def test_cleanup_orphaned_running_rows_marks_only_running_status(
     assert converted == 1
 
     statuses = sorted(
-        r.status for r in db_session.scalars(
+        r.status
+        for r in db_session.scalars(
             __import__("sqlalchemy").select(ReportV3).where(ReportV3.user_id == user.id)
         )
     )

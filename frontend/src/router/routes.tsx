@@ -12,7 +12,6 @@ import { SetupPage } from "../pages/SetupPage";
 import { MemoryPage } from "../pages/MemoryPage";
 import { useAuth } from "../auth/AuthContext";
 import { SecretaryPage } from "../pages/SecretaryPage";
-import EquityResearch from "../pages/departments/EquityResearch";
 import EquityResearchV3 from "../pages/departments/EquityResearchV3";
 import EarningsUpdate from "../pages/departments/EarningsUpdate";
 import MorningBriefing from "../pages/departments/MorningBriefing";
@@ -21,7 +20,6 @@ import RetailSentiment from "../pages/departments/RetailSentiment";
 const MacroResearch = lazy(() => import("../pages/departments/MacroResearch"));
 import PanicThermometer from "../pages/departments/PanicThermometer";
 import ReportPrintPage from "../pages/ReportPrintPage";
-import ReportPrintPageV2 from "../pages/ReportPrintPageV2";
 import { DeptDisabledBanner } from "../components/sidebar/DeptDisabledBanner";
 import { DisclaimerGate } from "./DisclaimerGate";
 
@@ -83,10 +81,6 @@ export const routes: RouteObject[] = [
       // controlled by the print stylesheet, and so the body of the page
       // can be paginated by Playwright/browser print engines cleanly.
       { path: "/reports/:id/render", element: <ReportPrintPage /> },
-      // v2.2 pipeline_run equivalent — backend export pipeline navigates
-      // here for PDF/DOCX render, runs the v2→v1 block adapter, then
-      // hands the schema to the same ReportRenderer.
-      { path: "/reports/v2/:runId/render", element: <ReportPrintPageV2 /> },
       {
         element: (
           <ProtectedRoute>
@@ -116,18 +110,8 @@ export const routes: RouteObject[] = [
                     ),
                   },
                   {
+                    // v3 single-model engine — the sole equity-research engine.
                     path: "/equity-research",
-                    element: (
-                      <WithDeptBanner departmentId="equity_research">
-                        <EquityResearch />
-                      </WithDeptBanner>
-                    ),
-                  },
-                  {
-                    // v3 single-model engine. Gated server-side by
-                    // REPORT_ENGINE_VERSION=v3; the page surfaces a
-                    // clear banner when the engine is disabled.
-                    path: "/equity-research-v3",
                     element: (
                       <WithDeptBanner departmentId="equity_research">
                         <EquityResearchV3 />

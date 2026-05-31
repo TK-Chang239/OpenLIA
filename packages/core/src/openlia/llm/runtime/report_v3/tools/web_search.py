@@ -60,9 +60,7 @@ def build_web_search_descriptor() -> ToolDescriptor:
     )
 
 
-def ingest_web_citations(
-    citations: Iterable, ledger: CitationLedger
-) -> dict[str, str]:
+def ingest_web_citations(citations: Iterable, ledger: CitationLedger) -> dict[str, str]:
     """Append any new web citations to the ledger.
 
     Takes ``LLMResponse.citations`` (an iterable of v2.3 ``Citation``

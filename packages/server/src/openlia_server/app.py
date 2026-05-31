@@ -57,24 +57,6 @@ from openlia_server.routes.departments.earnings_update import (
 from openlia_server.routes.departments.earnings_update_v2 import (
     build_earnings_update_v2_router,
 )
-from openlia_server.routes.departments.equity_research import (
-    build_equity_research_router,
-)
-from openlia_server.routes.departments.equity_research_v2 import (
-    build_equity_research_v2_router,
-)
-from openlia_server.routes.departments.equity_research_v2_3 import (
-    build_equity_research_v2_3_router,
-)
-from openlia_server.routes.departments.equity_research_v2_3_models import (
-    build_equity_research_v2_3_models_router,
-)
-from openlia_server.routes.departments.equity_research_v2_3_sse import (
-    build_equity_research_v2_3_sse_router,
-)
-from openlia_server.routes.departments.equity_research_v2_models import (
-    build_equity_research_v2_models_router,
-)
 from openlia_server.routes.departments.equity_research_v3 import (
     build_equity_research_v3_router,
 )
@@ -780,47 +762,7 @@ def create_app(
     )
 
     app.include_router(build_secretary_router(db_session_factory=factory, mode=mode))
-    app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
-    app.include_router(build_equity_research_v2_router(db_session_factory=factory, mode=mode))
-    app.include_router(
-        build_equity_research_v2_models_router(db_session_factory=factory, mode=mode)
-    )
-    app.include_router(build_equity_research_v2_3_router(db_session_factory=factory, mode=mode))
-    app.include_router(
-        build_equity_research_v2_3_models_router(db_session_factory=factory, mode=mode)
-    )
-    app.include_router(build_equity_research_v2_3_sse_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_v3_router(db_session_factory=factory, mode=mode))
-    # Wire the v2.3 runner factory when an OpenAI-backed CLARIFY model is
-    # configured via env (OPENAI_API_KEY + OPENLIA_V2_3_CLARIFY_MODEL). If
-    # the env is incomplete the factory stays unset and the v2.3 routes
-    # respond 503 with code=v2_3_engine_unavailable. Failures during
-    # adapter construction are logged but never abort startup — they would
-    # also surface as 503 from the routes.
-    try:
-        from openlia_server.services.v2_3_wiring import (
-            build_v2_3_runner_factory_from_env,
-        )
-
-        v2_3_factory = build_v2_3_runner_factory_from_env()
-        if v2_3_factory is not None:
-            app.state.v2_3_runner_factory = v2_3_factory
-    except Exception:
-        log.exception("v2.3 runner factory wiring failed — /v2.3 routes will 503")
-
-    # Wire the v2.2 stage factory so the SSE endpoints have a real pipeline.
-    # Errors during provider resolution are deferred to request time — the
-    # routes already return 503 with code=v2_engine_unavailable when the
-    # attribute is missing, and this matches that shape if the env is
-    # incomplete on this deployment.
-    try:
-        from openlia_server.services.v2_stage_factory import (
-            make_v2_runner_stage_factory,
-        )
-
-        app.state.v2_runner_stage_factory = make_v2_runner_stage_factory()
-    except Exception:
-        log.exception("v2 stage factory unavailable — /v2/report will 503")
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     # EU v2 streaming infrastructure — lifespan sets the real broker.
     # This guard covers tests that call create_app() without entering
@@ -966,14 +908,10 @@ def create_app(
         db_session_factory=factory,
         skill_registry=getattr(app.state, "skills_registry", None),
     )
-    # Report runner is consumed by per-department routes (equity_research, earnings_update).
+    # Report runner is consumed by per-department routes (morning_briefing, earnings_update).
     # `build_report_runner` returns a RefreshingReportRunner that opens a fresh DB session
     # per run, so we can share a single instance across requests.
     app.state.report_runner = build_report_runner(
-        db_session_factory=factory,
-        skill_registry=getattr(app.state, "skills_registry", None),
-    )
-    app.state.equity_research_inner_factory = lambda: build_report_runner(
         db_session_factory=factory,
         skill_registry=getattr(app.state, "skills_registry", None),
     )

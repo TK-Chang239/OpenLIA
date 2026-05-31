@@ -1,9 +1,8 @@
 """EODHD data-transport wiring for the EU v2 engine.
 
 Mirrors ``v3_wiring.py`` but returns an ``EuDataTransports`` bundle that
-includes the additional ``earnings_calendar`` callable. The earnings-calendar
-transport calls the v2.2 ``eodhd_upcoming_earnings`` helper so the core
-package stays free of the EODHD SDK.
+includes the additional ``earnings_calendar`` callable, backed by the EODHD
+SDK's upcoming-earnings endpoint.
 
 ``build_eu_v2_transports`` reads ``EODHD_API_KEY`` and returns an
 ``EuDataTransports`` bundle, or ``None`` when the key is unset.
@@ -19,7 +18,7 @@ from openlia.connectors.types import ConnectorStatus
 from openlia.llm.runtime.report_eu import EuDataTransports
 from sqlalchemy.orm import Session
 
-from .v2_3_wiring import _trim_eodhd_fundamentals
+from .eodhd_payload import trim_eodhd_fundamentals
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ def build_eu_v2_transports(api_key: str | None = None) -> EuDataTransports | Non
             payload = raw[0]
         else:
             return {"value": raw}
-        return _trim_eodhd_fundamentals(payload)
+        return trim_eodhd_fundamentals(payload)
 
     def prices(ticker: str, from_date: str, to_date: str) -> list[dict[str, Any]]:
         rows = client.get_eod_historical_stock_market_data(
@@ -61,12 +60,9 @@ def build_eu_v2_transports(api_key: str | None = None) -> EuDataTransports | Non
         return list(rows) if rows else []
 
     def earnings_calendar(ticker: str) -> list[dict[str, Any]]:
-        from openlia.llm.runtime.report_v2_2.tools.library_helpers.eodhd import (
-            eodhd_upcoming_earnings,
-        )
-
-        payload = eodhd_upcoming_earnings.execute(ticker)
-        return list(payload.get("upcoming_earnings", []))
+        symbol = ticker if "." in ticker else f"{ticker}.US"
+        rows = client.get_upcoming_earnings_data(symbols=symbol)
+        return list(rows) if rows else []
 
     return EuDataTransports(
         fundamentals=fundamentals,

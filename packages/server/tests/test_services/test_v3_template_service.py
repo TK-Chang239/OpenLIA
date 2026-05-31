@@ -114,15 +114,11 @@ def test_resolve_template_returns_user_upload(db_session, seeded_user):
         name="Mine",
         markdown=_GOOD_MD,
     )
-    spec = svc.resolve_template(
-        db=db_session, user_id=seeded_user.id, template_id=row.id
-    )
+    spec = svc.resolve_template(db=db_session, user_id=seeded_user.id, template_id=row.id)
     assert spec.template_id == row.id
 
 
-def test_resolve_template_hides_other_users_uploads(
-    db_session, seeded_user, other_user
-):
+def test_resolve_template_hides_other_users_uploads(db_session, seeded_user, other_user):
     row = svc.create_template_from_markdown(
         db=db_session,
         user_id=other_user.id,
@@ -130,9 +126,7 @@ def test_resolve_template_hides_other_users_uploads(
         markdown=_GOOD_MD,
     )
     with pytest.raises(svc.TemplateNotFoundError):
-        svc.resolve_template(
-            db=db_session, user_id=seeded_user.id, template_id=row.id
-        )
+        svc.resolve_template(db=db_session, user_id=seeded_user.id, template_id=row.id)
 
 
 def test_resolve_template_hides_soft_deleted(db_session, seeded_user):
@@ -142,25 +136,17 @@ def test_resolve_template_hides_soft_deleted(db_session, seeded_user):
         name="Doomed",
         markdown=_GOOD_MD,
     )
-    svc.soft_delete_template(
-        db=db_session, user_id=seeded_user.id, template_id=row.id
-    )
+    svc.soft_delete_template(db=db_session, user_id=seeded_user.id, template_id=row.id)
     with pytest.raises(svc.TemplateNotFoundError):
-        svc.resolve_template(
-            db=db_session, user_id=seeded_user.id, template_id=row.id
-        )
+        svc.resolve_template(db=db_session, user_id=seeded_user.id, template_id=row.id)
 
 
 def test_resolve_template_raises_for_unknown(db_session, seeded_user):
     with pytest.raises(svc.TemplateNotFoundError):
-        svc.resolve_template(
-            db=db_session, user_id=seeded_user.id, template_id=str(uuid.uuid4())
-        )
+        svc.resolve_template(db=db_session, user_id=seeded_user.id, template_id=str(uuid.uuid4()))
 
 
-def test_list_templates_returns_builtins_plus_owner_uploads(
-    db_session, seeded_user, other_user
-):
+def test_list_templates_returns_builtins_plus_owner_uploads(db_session, seeded_user, other_user):
     _seed_builtins(db_session)
     mine = svc.create_template_from_markdown(
         db=db_session, user_id=seeded_user.id, name="alpha", markdown=_GOOD_MD
@@ -185,9 +171,7 @@ def test_list_templates_hides_soft_deleted(db_session, seeded_user):
     row = svc.create_template_from_markdown(
         db=db_session, user_id=seeded_user.id, name="Goner", markdown=_GOOD_MD
     )
-    svc.soft_delete_template(
-        db=db_session, user_id=seeded_user.id, template_id=row.id
-    )
+    svc.soft_delete_template(db=db_session, user_id=seeded_user.id, template_id=row.id)
     rows = svc.list_templates(db=db_session, user_id=seeded_user.id)
     assert row.id not in [r.id for r in rows]
 
@@ -202,13 +186,9 @@ def test_soft_delete_rejects_builtin(db_session, seeded_user):
         )
 
 
-def test_soft_delete_rejects_other_users_upload(
-    db_session, seeded_user, other_user
-):
+def test_soft_delete_rejects_other_users_upload(db_session, seeded_user, other_user):
     row = svc.create_template_from_markdown(
         db=db_session, user_id=other_user.id, name="theirs", markdown=_GOOD_MD
     )
     with pytest.raises(svc.TemplateNotFoundError):
-        svc.soft_delete_template(
-            db=db_session, user_id=seeded_user.id, template_id=row.id
-        )
+        svc.soft_delete_template(db=db_session, user_id=seeded_user.id, template_id=row.id)
