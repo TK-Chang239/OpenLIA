@@ -196,6 +196,74 @@ def test_build_run_request_instructions_none_when_unset(db_session_with_seed):
     assert req.instructions is None
 
 
+def test_build_run_request_freeform_with_instructions(db_session_with_seed):
+    from openlia_server.services import eu_v2_instructions_service
+
+    profile = eu_v2_instructions_service.create_instructions_from_upload(
+        db=db_session_with_seed,
+        user_id="u-1",
+        name="Freeform methodology",
+        body_text="Write whatever structure best fits the print.",
+    )
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id=svc.EU_FREEFORM_TEMPLATE_ID,
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=False,
+        calendar_enabled=False,
+        web_search_enabled=False,
+        instructions_id=profile.id,
+    )
+    req = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+    assert req.template.template_id == svc.EU_FREEFORM_TEMPLATE_ID
+    assert req.template.sections == []
+    assert req.instructions == "Write whatever structure best fits the print."
+
+
+def test_build_run_request_freeform_without_instructions_raises(db_session_with_seed):
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id=svc.EU_FREEFORM_TEMPLATE_ID,
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        financial_enabled=False,
+        calendar_enabled=False,
+        web_search_enabled=False,
+        instructions_id=None,
+    )
+    with pytest.raises(svc.EmptyBriefError):
+        svc.build_run_request(
+            db_session_with_seed,
+            user_id="u-1",
+            ticker="MSFT.US",
+            trigger_kind="on_demand",
+            fiscal_period=None,
+            report_date=None,
+            release_timing=None,
+            eps_estimate=None,
+            revenue_estimate=None,
+        )
+
+
 def _fake_session() -> tuple[LLMSession, FakeLLMProvider]:
     """A real LLMSession with a scripted fake adapter attached.
 

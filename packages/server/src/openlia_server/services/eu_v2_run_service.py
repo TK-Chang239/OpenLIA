@@ -44,6 +44,7 @@ from openlia.llm.runtime.report_eu import (
     Runner,
     RunRequest,
     RunResult,
+    TemplateSpec,
     TriggerContext,
 )
 from openlia.llm.types import ReasoningEffort
@@ -68,6 +69,43 @@ log = logging.getLogger(__name__)
 # only keeps a weak reference internally, so a task can be GC'd mid-run
 # if no one holds it. We add on create and discard on completion.
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+# Sentinel ``template_id`` for a "No template (instructions only)" run.
+# Resolves to a freeform TemplateSpec (empty sections) instead of a DB
+# lookup; the run is shaped entirely by the selected instruction profile.
+EU_FREEFORM_TEMPLATE_ID = "freeform"
+
+
+class EmptyBriefError(ValueError):
+    """A freeform run was requested with no instruction profile.
+
+    With no template and no instructions there is nothing to shape the
+    report, so the run is rejected before it starts. Callers map this to
+    a 400 with the message text.
+    """
+
+
+def _freeform_template_spec() -> TemplateSpec:
+    """A sections-less template for instructions-only runs.
+
+    ``TemplateSpec.sections`` is declared ``min_length=1`` (the shared
+    v2.3 schema predates freeform), so we ``model_construct`` to bypass
+    that one constraint rather than weaken the cross-engine contract.
+    Safe here: the spec is never round-tripped through validation —
+    only ``template_id`` is persisted, and the runner reads ``name`` /
+    ``shape_description`` / the empty ``sections`` directly.
+    """
+    return TemplateSpec.model_construct(
+        template_id=EU_FREEFORM_TEMPLATE_ID,
+        name="Freeform",
+        shape_description=(
+            "No fixed template — the report's structure is guided by the "
+            "analyst instructions and the subject."
+        ),
+        ticker_anchored=True,
+        default_length=None,
+        sections=[],
+    )
 
 
 def build_run_request(
@@ -101,9 +139,18 @@ def build_run_request(
             )
         except eu_v2_instructions_service.InstructionsNotFoundError:
             instructions_text = None
-    template = eu_v2_template_service.resolve_template(
-        db, user_id=user_id, template_id=settings.template_id
-    )
+
+    if settings.template_id == EU_FREEFORM_TEMPLATE_ID:
+        if not instructions_text:
+            raise EmptyBriefError(
+                "A freeform run (no template) requires an instruction profile. "
+                "Pick a template or an instruction profile."
+            )
+        template = _freeform_template_spec()
+    else:
+        template = eu_v2_template_service.resolve_template(
+            db, user_id=user_id, template_id=settings.template_id
+        )
 
     eodhd_available = resolve_eodhd_api_key(db) is not None
     caps = capabilities_for(provider_kind=settings.provider_kind, model=settings.model)
@@ -438,6 +485,8 @@ def _resolve_transports(transports: EuDataTransports | None) -> EuDataTransports
 
 
 __all__ = [
+    "EU_FREEFORM_TEMPLATE_ID",
+    "EmptyBriefError",
     "build_run_request",
     "cancel_run",
     "cleanup_orphaned_running_rows",
