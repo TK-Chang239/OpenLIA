@@ -5,7 +5,7 @@ import type { EuScheduleEntry, WatchlistEntry } from "../../api/earnings-update"
 
 import { AddTickerPopover } from "./AddTickerPopover";
 
-interface Props {
+interface WatchlistModalProps {
   open: boolean;
   entries: WatchlistEntry[];
   onClose: () => void;
@@ -29,26 +29,26 @@ function isPast(iso: string): boolean {
   return d < today;
 }
 
-export function CoverageModal({
+export function WatchlistModal({
   open,
   entries,
   onClose,
   onAdd,
   onRemove,
   nextReleaseByTicker,
-}: Props) {
+}: WatchlistModalProps) {
   const { t } = useTranslation();
   if (!open) return null;
   return (
     <div
       role="dialog"
-      aria-label={t("earnings.coverage_modal.aria")}
+      aria-label={t("earnings.watchlist_modal.aria")}
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center"
     >
       <button
         type="button"
-        aria-label={t("earnings.coverage_modal.close_aria")}
+        aria-label={t("earnings.watchlist_modal.close_aria")}
         onClick={onClose}
         className="absolute inset-0 bg-black/40"
       />
@@ -56,16 +56,16 @@ export function CoverageModal({
         <header className="flex items-center justify-between px-5 h-12 border-b border-[--color-border-subtle]">
           <div>
             <h2 className="text-[15px] font-semibold text-[--color-text-primary] m-0">
-              {t("earnings.coverage_modal.title")}
+              {t("earnings.watchlist_modal.title")}
             </h2>
             <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-[--color-text-tertiary] m-0">
-              {t("earnings.coverage_modal.subtitle")}
+              {t("earnings.watchlist_modal.subtitle")}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label={t("earnings.coverage_modal.close_modal_aria")}
+            aria-label={t("earnings.watchlist_modal.close_modal_aria")}
             className="text-[--color-text-secondary] hover:text-[--color-text-primary]"
           >
             <X size={16} />
@@ -77,7 +77,7 @@ export function CoverageModal({
         <div className="flex-1 overflow-y-auto">
           {entries.length === 0 ? (
             <p className="px-5 py-8 text-center text-[13px] text-[--color-text-tertiary]">
-              {t("earnings.coverage_modal.empty")}
+              {t("earnings.watchlist_modal.empty")}
             </p>
           ) : (
             <ul className="divide-y divide-[var(--color-border-subtle)]">
@@ -90,7 +90,7 @@ export function CoverageModal({
                   <li
                     key={e.id}
                     className="flex items-center gap-3 px-5 py-3"
-                    data-testid="coverage-row"
+                    data-testid="watchlist-row"
                   >
                     <span className="font-mono text-[13px] font-semibold text-[--color-text-primary] w-16">
                       {e.ticker}
@@ -108,7 +108,7 @@ export function CoverageModal({
                               ? "text-[--color-text-secondary]"
                               : "text-[--color-text-tertiary]",
                         ].join(" ")}
-                        data-testid="coverage-next-date"
+                        data-testid="watchlist-next-date"
                       >
                         {fiscalDate
                           ? formatDate(fiscalDate)
@@ -122,7 +122,7 @@ export function CoverageModal({
                               ? "bg-[--color-info]/10 text-[--color-info]"
                               : "bg-[--color-warning]/10 text-[--color-warning]",
                           ].join(" ")}
-                          data-testid="coverage-timing-badge"
+                          data-testid="watchlist-timing-badge"
                         >
                           {timing === "pre_market"
                             ? t("earnings.watchlist_card.pre_market")
@@ -133,7 +133,7 @@ export function CoverageModal({
                     <button
                       type="button"
                       onClick={() => void onRemove(e.id)}
-                      aria-label={t("earnings.coverage_modal.remove_ticker_aria", { ticker: e.ticker })}
+                      aria-label={t("earnings.watchlist_modal.remove_ticker_aria", { ticker: e.ticker })}
                       className="text-[--color-text-tertiary] hover:text-[--color-feedback-error]"
                     >
                       <Trash2 size={14} />

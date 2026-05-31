@@ -639,7 +639,7 @@
   },
   "earnings": {
     "title": "Earnings Update",
-    "coverage": "Coverage",
+    "watchlist": "Watchlist",
     "settings": "Settings",
     "report_settings_aria": "Report settings",
     "load_failed": "Failed to load earnings data. Try again.",
@@ -681,13 +681,13 @@
       "adding": "Adding...",
       "add": "Add"
     },
-    "coverage_modal": {
-      "aria": "Coverage",
-      "title": "Coverage",
+    "watchlist_modal": {
+      "aria": "Watchlist",
+      "title": "Watchlist",
       "subtitle": "Auto-generated when earnings release",
       "close_aria": "Close",
-      "close_modal_aria": "Close coverage modal",
-      "empty": "No tickers in coverage. Add one to start tracking earnings.",
+      "close_modal_aria": "Close watchlist modal",
+      "empty": "No tickers in your watchlist. Add one to start tracking earnings.",
       "remove_ticker_aria": "Remove {{ticker}}"
     },
     "custom_section": {
@@ -758,6 +758,9 @@
       "template_title": "Template",
       "template_hint": "The report skeleton. Upload your own to customize structure.",
       "template_custom_suffix": " (custom)",
+      "template_freeform": "None — free structure",
+      "template_freeform_hint": "The model designs its own sections; your instructions drive the report.",
+      "both_empty_error": "Pick a template or an instruction profile — at least one is required.",
       "template_delete_aria": "Delete template",
       "template_upload": "Upload template",
       "connectors_title": "Data sources",
@@ -825,7 +828,7 @@
       "lia_signal": "Lia signal",
       "empty_title": "No earnings reports yet",
       "empty_sub": "Add tickers to your watchlist and LIA will auto-generate reports as each company releases earnings.",
-      "open_coverage": "Open Coverage",
+      "open_watchlist": "Open Watchlist",
       "filter_all": "All",
       "filter_watchlist": "Watchlist",
       "filter_portfolio": "Portfolio",

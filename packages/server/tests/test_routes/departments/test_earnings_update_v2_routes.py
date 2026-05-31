@@ -152,6 +152,25 @@ def test_settings_put_roundtrip(client_eu_v2):
     assert body["financial_enabled"] is False
 
 
+def test_settings_put_freeform_without_instructions_rejected(client_eu_v2):
+    r = client_eu_v2.put(
+        f"{_BASE}/settings",
+        json={
+            "provider_kind": "anthropic",
+            "model": "claude-sonnet-4-6",
+            "template_id": "freeform",
+            "language": "en",
+            "length": "normal",
+            "reasoning_effort": None,
+            "financial_enabled": True,
+            "calendar_enabled": True,
+            "web_search_enabled": False,
+            "instructions_id": None,
+        },
+    )
+    assert r.status_code == 400, r.text
+
+
 def test_watchlist_add_list_delete(client_eu_v2):
     r = client_eu_v2.post(f"{_BASE}/watchlist", json={"ticker": "MSFT.US"})
     assert r.status_code == 201, r.text

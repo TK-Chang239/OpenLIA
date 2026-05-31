@@ -498,6 +498,11 @@ def build_earnings_update_v2_router(
     ) -> SettingsOut:
         if not eu_v2_enabled():
             raise _engine_disabled()
+        if payload.template_id == "freeform" and not payload.instructions_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pick a template or an instruction profile — at least one is required.",
+            )
         try:
             dto = settings_svc.update_settings(
                 db,
@@ -849,17 +854,20 @@ def build_earnings_update_v2_router(
             raise _engine_disabled()
         broker, cancel_registry = _streaming_state(request)
 
-        run_request = run_svc.build_run_request(
-            db,
-            user_id=user.id,
-            ticker=payload.ticker,
-            trigger_kind="on_demand",
-            fiscal_period=None,
-            report_date=None,
-            release_timing=None,
-            eps_estimate=None,
-            revenue_estimate=None,
-        )
+        try:
+            run_request = run_svc.build_run_request(
+                db,
+                user_id=user.id,
+                ticker=payload.ticker,
+                trigger_kind="on_demand",
+                fiscal_period=None,
+                report_date=None,
+                release_timing=None,
+                eps_estimate=None,
+                revenue_estimate=None,
+            )
+        except run_svc.EmptyBriefError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         report_id = run_svc.start_run_async(
             db,
             user_id=user.id,

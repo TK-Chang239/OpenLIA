@@ -3,7 +3,7 @@ import { Briefcase, Settings as SettingsIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { deleteRun, type RunSummary } from "../../api/earnings-update";
-import { CoverageModal } from "../../components/earnings-update/CoverageModal";
+import { WatchlistModal } from "../../components/earnings-update/WatchlistModal";
 import { EUCabinetView } from "../../components/earnings-update/EUCabinetView";
 import { OnDemandReportModal } from "../../components/earnings-update/OnDemandReportModal";
 import { ReportSettingsModal } from "../../components/earnings-update/ReportSettingsModal";
@@ -70,7 +70,7 @@ export default function EarningsUpdate() {
     useEuSettings();
   const { schedule, byTicker } = useEuSchedule();
 
-  const [coverageOpen, setCoverageOpen] = useState(false);
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [cabinetOpen, setCabinetOpen] = useState(false);
   const [onDemandOpen, setOnDemandOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -183,10 +183,10 @@ export default function EarningsUpdate() {
         <div className="flex-1" />
         <button
           type="button"
-          onClick={() => setCoverageOpen(true)}
+          onClick={() => setWatchlistOpen(true)}
           className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal] text-[12.5px]"
         >
-          <Briefcase size={13} /> {t("earnings.coverage")}
+          <Briefcase size={13} /> {t("earnings.watchlist")}
         </button>
         <button
           type="button"
@@ -249,7 +249,7 @@ export default function EarningsUpdate() {
                 className="animate-feed-fade-up"
                 style={{ animationDelay: "120ms" }}
               >
-                <EuEmptyPage onOpenCoverage={() => setCoverageOpen(true)} />
+                <EuEmptyPage onOpenWatchlist={() => setWatchlistOpen(true)} />
               </div>
             </>
           ) : (
@@ -399,10 +399,10 @@ export default function EarningsUpdate() {
         </div>
       </div>
 
-      <CoverageModal
-        open={coverageOpen}
+      <WatchlistModal
+        open={watchlistOpen}
         entries={entries}
-        onClose={() => setCoverageOpen(false)}
+        onClose={() => setWatchlistOpen(false)}
         onAdd={async (ticker) => {
           await add(ticker);
         }}
