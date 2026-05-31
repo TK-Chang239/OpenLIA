@@ -1,6 +1,15 @@
-import { fetchJson } from "./client";
+import { ApiError, fetchJson } from "./client";
 
 const BASE = "/api/departments/earnings-update/v2";
+
+function resolveUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+  if (!base) return path;
+  const trimmedBase = base.replace(/\/+$/, "");
+  const trimmedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${trimmedBase}${trimmedPath}`;
+}
 
 // ----- Types -----
 
@@ -27,25 +36,25 @@ export interface EuSettings {
   language: string;
   length: ReportLength;
   reasoning_effort: ReasoningEffort;
-  financial_enabled: boolean;
-  calendar_enabled: boolean;
+  enabled_provider_ids: string[];
   web_search_enabled: boolean;
+  instructions_id: string | null;
 }
 
-export interface DataSourceSlot {
+export type DataSourceCategory = "financial" | "news" | "social" | "web_search";
+export type DataSourceRouting = "curated" | "dispatcher" | "model_native";
+
+export interface DataSource {
+  key: string;
+  display_name: string;
+  category: DataSourceCategory;
+  routing: DataSourceRouting;
   available: boolean;
-  provider_label: string | null;
+  enabled: boolean;
   unavailable_reason: string | null;
 }
-export interface OtherConnector {
-  display_name: string;
-  category: string;
-}
 export interface DataSourcesInfo {
-  financial: DataSourceSlot;
-  earnings_calendar: DataSourceSlot;
-  web_search: DataSourceSlot;
-  other_connectors: OtherConnector[];
+  sources: DataSource[];
 }
 
 export const getEuDataSources = (
@@ -228,6 +237,60 @@ export async function uploadTemplate(payload: {
 
 export async function deleteTemplate(id: string): Promise<void> {
   await fetchJson<null>(`${BASE}/templates/${id}`, { method: "DELETE" });
+}
+
+// ----- Instruction profiles -----
+
+export interface EuInstructionsSummary {
+  id: string;
+  name: string;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function listEuInstructions(): Promise<EuInstructionsSummary[]> {
+  return fetchJson<EuInstructionsSummary[]>(`${BASE}/instructions`);
+}
+
+/**
+ * Upload an instruction profile. Multipart: the raw document rides
+ * alongside the display name and the server extracts plain text (any
+ * supported document type — pdf / docx / md / txt). The browser sets
+ * the multipart boundary, so we must NOT set a Content-Type here.
+ */
+export async function uploadEuInstructions(
+  name: string,
+  file: File,
+): Promise<EuInstructionsSummary> {
+  const fd = new FormData();
+  fd.append("name", name);
+  fd.append("file", file, file.name);
+  let res: Response;
+  try {
+    res = await fetch(resolveUrl(`${BASE}/instructions`), {
+      method: "POST",
+      credentials: "include",
+      body: fd,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "network error";
+    throw new ApiError(0, message);
+  }
+  const contentType = res.headers.get("Content-Type") ?? "";
+  const parsedBody = contentType.includes("application/json")
+    ? await res.json().catch(() => null)
+    : null;
+  if (!res.ok) {
+    throw new ApiError(res.status, `HTTP ${res.status} on instructions upload`, parsedBody);
+  }
+  return parsedBody as EuInstructionsSummary;
+}
+
+export async function deleteEuInstructions(id: string): Promise<void> {
+  await fetchJson<null>(`${BASE}/instructions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 // ----- Schedule (read-only) -----

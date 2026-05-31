@@ -144,8 +144,7 @@ async def test_scheduled_run_completes_and_marks_reported(
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=False,
+        enabled_provider_ids=[],
         web_search_enabled=False,
     )
 

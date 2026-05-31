@@ -241,6 +241,44 @@ class ReportEuTemplate(Base):
     )
 
 
+class ReportEuInstructions(Base):
+    """EU v2 instruction profile — free-form analyst methodology.
+
+    Forked from ``ReportV3Instructions`` (same shape, EU-owned table).
+    Distinct from a template: a template defines the report's *shape*
+    (sections, order); an instruction profile is free-form prose guidance
+    fed verbatim into the system prompt. ``body_text`` holds the
+    server-extracted plain text; ``source_doc_blob`` / ``source_doc_mime``
+    keep the original upload for re-extract. ``deleted_at`` drives
+    owner-scoped soft-delete. The ``is_builtin`` / nullable ``user_id``
+    columns mirror ``report_eu_templates`` for parity.
+    """
+
+    __tablename__ = "report_eu_instructions"
+
+    id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    is_builtin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_doc_blob: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    source_doc_mime: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_report_eu_instructions"),
+        Index("ix_report_eu_instructions_user_id", "user_id"),
+    )
+
+
 class ReportEuToolCallLog(Base):
     """Per-turn audit trail of every tool call the engine dispatched.
 
@@ -358,6 +396,7 @@ class EuV2Settings(Base):
     provider_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str] = mapped_column(String(128), nullable=False)
     template_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    instructions_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     language: Mapped[str] = mapped_column(
         String(16), nullable=False, default="en", server_default="en"
     )
@@ -365,11 +404,8 @@ class EuV2Settings(Base):
         String(16), nullable=False, default="normal", server_default="normal"
     )
     reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    financial_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("1")
-    )
-    calendar_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("1")
+    enabled_provider_ids: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
     )
     web_search_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("0")

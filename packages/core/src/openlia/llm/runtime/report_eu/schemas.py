@@ -7,9 +7,11 @@ model cites them inline with standard Markdown footnote syntax
 (``[^web_3]``).
 
 EU v2 deltas vs. v3:
-  - ``RunRequest`` drops ``attachments`` / ``instructions`` (out of
-    scope) and gains ``enabled_connectors`` (which tool groups to
-    build) and ``trigger_context`` (the earnings event covered).
+  - ``RunRequest`` drops ``attachments`` (out of scope) and gains
+    ``enabled_connectors`` (which tool groups to build) and
+    ``trigger_context`` (the earnings event covered). ``instructions``
+    (free-form analyst methodology injected into the system prompt) is
+    supported, same as v3.
   - No revision schemas — EU v2 has no revise flow.
 
 The ``TemplateSpec`` itself is reused verbatim from v2.3 — same Pydantic
@@ -116,16 +118,20 @@ class CitationLogEntry(BaseModel):
 
 
 class EnabledConnectors(BaseModel):
-    """Which connector tool groups the LLM may call this run.
+    """Which data sources the LLM may use this run.
 
-    Per-user global toggles resolved from ``eu_v2_settings``. None are
-    required — all-False yields an output-tools-only catalog and the
-    model writes from the prompt and trigger context alone.
+    ``provider_ids`` are the registry provider ids enabled for routing
+    (``"eodhd"`` -> curated EODHD financial + calendar tools; any other
+    -> dispatcher-routed, added in a later task). ``web_search`` is the
+    model-native web search (not a registry connector).
     """
 
-    financial: bool = True
-    earnings_calendar: bool = True
+    provider_ids: frozenset[str] = frozenset()
     web_search: bool = False
+
+    @property
+    def eodhd(self) -> bool:
+        return "eodhd" in self.provider_ids
 
 
 class TriggerContext(BaseModel):
@@ -151,9 +157,10 @@ class RunRequest(BaseModel):
     """Input to an Earnings Update v2 run.
 
     Forked from report_v3's RunRequest. Differences: no ``attachments``
-    / ``instructions`` (out of scope for EU v2), and two added fields —
+    (out of scope for EU v2), and two added fields —
     ``enabled_connectors`` (which tool groups to build) and
-    ``trigger_context`` (the earnings event being covered).
+    ``trigger_context`` (the earnings event being covered). Free-form
+    ``instructions`` are supported and injected into the system prompt.
 
     ``subject`` is either a ticker (``MSFT.US``) or a free-form earnings
     topic; the template's ``ticker_anchored`` flag decides how to
@@ -178,6 +185,8 @@ class RunRequest(BaseModel):
     reasoning_effort: ReasoningEffort | None = None
     enabled_connectors: EnabledConnectors = Field(default_factory=EnabledConnectors)
     trigger_context: TriggerContext | None = None
+    # Free-form analyst methodology/guidance injected into the system prompt.
+    instructions: str | None = None
 
 
 class CoverMetric(BaseModel):

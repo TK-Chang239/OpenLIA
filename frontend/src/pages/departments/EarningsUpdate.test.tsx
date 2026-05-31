@@ -7,6 +7,15 @@ import * as viewer from "../../components/viewer/FileViewerContext";
 import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
 import EarningsUpdate from "./EarningsUpdate";
 
+vi.mock("../../components/earnings-update/calendar/EuCalendar", () => ({
+  EuCalendar: () => <div data-testid="eu-cal-month" />,
+}));
+
+vi.mock("../../components/earnings-update/OnDemandReportModal", () => ({
+  OnDemandReportModal: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="on-demand-modal-open" /> : null,
+}));
+
 const baseSettings: api.EuSettings = {
   provider_kind: "anthropic",
   model: "claude-sonnet-4-6",
@@ -14,9 +23,9 @@ const baseSettings: api.EuSettings = {
   language: "en",
   length: "normal",
   reasoning_effort: null,
-  financial_enabled: true,
-  calendar_enabled: true,
+  enabled_provider_ids: ["eodhd"],
   web_search_enabled: false,
+  instructions_id: null,
 };
 
 function makeRun(over: Partial<api.RunSummary>): api.RunSummary {
@@ -74,10 +83,10 @@ describe("EarningsUpdatePage (v2)", () => {
     vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([]);
   });
 
-  it("renders topbar with Coverage and Settings buttons", async () => {
+  it("renders topbar with Watchlist and Settings buttons", async () => {
     renderPage();
     expect(
-      await screen.findByRole("button", { name: /coverage/i }),
+      await screen.findByRole("button", { name: /watchlist/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /report settings/i }),
@@ -137,5 +146,32 @@ describe("EarningsUpdatePage (v2)", () => {
     expect(
       await screen.findByTestId("eu-v2-disabled-banner"),
     ).toBeInTheDocument();
+  });
+
+  it("shows the Generate report button and opens the on-demand modal", async () => {
+    renderPage();
+    const btn = await screen.findByRole("button", { name: /generate report/i });
+    fireEvent.click(btn);
+    expect(screen.getByTestId("on-demand-modal-open")).toBeInTheDocument();
+  });
+
+  it("switches to the calendar view via the toggle", async () => {
+    vi.spyOn(api, "fetchRuns").mockResolvedValue([makeRun({})]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /calendar/i }));
+    expect(screen.getByTestId("eu-cal-month")).toBeInTheDocument();
+  });
+
+  it("no longer renders the segmented report filter", async () => {
+    vi.spyOn(api, "fetchRuns").mockResolvedValue([makeRun({})]);
+    renderPage();
+    await screen.findByRole("tab", { name: /stream/i });
+    // Only the two view-toggle tabs (Stream + Calendar) remain — the old
+    // All/Watchlist/Portfolio/Beats/Misses segmented filter is gone.
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(
+      screen.queryByRole("tab", { name: /^watchlist$/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /beats/i })).not.toBeInTheDocument();
   });
 });

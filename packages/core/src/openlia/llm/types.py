@@ -118,6 +118,14 @@ class LLMRequest:
     # that set this must also grow ``max_tokens`` to absorb the thinking
     # budget — reasoning tokens count against the same ceiling.
     reasoning_effort: ReasoningEffort | None = None
+    # Opt-in incremental conversation caching for multi-turn tool-use
+    # loops. When True, caching-capable adapters mark the tools block and
+    # the tail of the message history with a cache breakpoint so each
+    # turn's growing prefix is read from cache on the next turn. Anthropic
+    # acts on it explicitly; OpenAI/OpenRouter cache automatically (no-op);
+    # other adapters ignore it. Default False keeps one-shot callers
+    # (chat, structured output) from paying the cache-write premium.
+    cache_conversation: bool = False
 
 
 @dataclass(frozen=True)

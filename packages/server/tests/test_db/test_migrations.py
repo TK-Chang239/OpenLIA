@@ -130,6 +130,7 @@ EXPECTED_TABLES = {
     "report_eu_citations",
     "report_eu_tool_call_log",
     "report_eu_templates",
+    "report_eu_instructions",
     "eu_v2_watchlist",
     "eu_v2_earnings_schedule",
     "eu_v2_settings",

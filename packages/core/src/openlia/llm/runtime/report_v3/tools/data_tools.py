@@ -26,6 +26,7 @@ from ...report_v2_3.research import (
     ToolExecutionError,
     ToolResult,
     build_eodhd_tools,
+    prune_empty,
 )
 from ...report_v2_3.research.registry import (
     FundamentalsTransport,
@@ -76,11 +77,13 @@ def _wrap(tool: ResearchTool, ledger: CitationLedger) -> ResearchTool:
         )
         # Hand the model a payload that begins with the assigned
         # source_id so it knows what to cite. The raw EODHD payload
-        # stays under ``data``.
+        # stays under ``data``, pruned of value-less fields so the
+        # model's first read (and any cached copy) carries no null or
+        # empty noise — connector-agnostic and strictly lossless.
         annotated_payload: dict[str, Any] = {
             "source_id": entry.source_id,
             "summary": result.summary,
-            "data": result.payload,
+            "data": prune_empty(result.payload),
         }
         return ToolResult(
             payload=annotated_payload,
