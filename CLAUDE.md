@@ -132,12 +132,11 @@ Before implementing any feature, read the relevant spec in `planning/specs/`. Sp
 
 Planning docs are excluded from Python package builds and Docker images.
 
-## Equity Research v2.2 Helper Build Process
+## Equity Research Engine
 
-When building helpers for the v2.2 equity research engine (anything in `packages/core/src/openlia/llm/runtime/report_v2/tools/library_helpers/` or related artifact / template / section_plan files), follow this workflow:
+**v3 (`report_v3`) is the sole equity-research engine**, served at `/equity-research`. The legacy v1, v2, v2.2, and v2.3 engines were removed (PRs #220/#222); do not reintroduce or reference them.
 
-1. **Read `planning/README.md`** first — it lists the 6 design docs in load order.
-2. **Use Option B — just-in-time per-helper design.** Detailed code-design for each helper happens inside that helper's PR, not in a separate upfront doc. Pull formulas from `planning/2026-05-21-equity-research-helpers-design.md`; pull universal schema from `planning/2026-05-21-helper-schema-and-skills.md`.
-3. **Bind every PR to the implementation plan.** `planning/2026-05-22-equity-research-implementation-plan.md` has a per-PR row with: design-doc section refs (§14), audit fixes to apply, acceptance criteria, cross-cutting requirements (§8). The repo's PR template surfaces these as a checklist — fill it in.
-4. **The universal contracts are non-negotiable:** four-tier exposure (L1/L1.5/L2/L3), sub-model schema, ArtifactType registry with DAG validation, Fidelity rendering (HEADLINE/SUMMARY/FULL), Stage 7a materialization. Do not invent helper-specific schemas that bypass these.
-5. **Update `planning/phase-progress.md`** when you merge a PR.
+- **Core:** `packages/core/src/openlia/llm/runtime/report_v3/` — a single-model tool-use loop (one LLM session, one tool loop, one final emit). It reuses shared library submodules from `report_v2_3/` (`schemas`, `research/`, `templates/`) — those are kept **only** as a shared library for v3 and Earnings Update; the rest of `report_v2_3` (its pipeline engine) is gone. Earnings Update v2 (`report_eu/`) is a fork of v3.
+- **Server:** `routes/departments/equity_research_v3.py` + `services/v3_*`. The engine is always on (the old `REPORT_ENGINE_VERSION` gate is retired). DB tables: `report_v3*`.
+- **Frontend:** `pages/departments/EquityResearchV3.tsx` + `components/equity-research-v3/`. The shared `ErComposer` / `WelcomeStage` live under `components/equity-research/`.
+- The generic `runtime/report.py` / `subagent_runner.py` / `reports/` engine and the v1 `reports` table are **not** equity-specific — Morning Briefing and the legacy earnings_update route still use them. Keep them.
