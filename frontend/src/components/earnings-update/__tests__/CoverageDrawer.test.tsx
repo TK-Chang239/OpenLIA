@@ -45,9 +45,11 @@ describe("CoverageDrawer", () => {
     expect(screen.queryByTestId("coverage-bucket-soon")).toBeNull();
   });
 
-  test("stats strip shows Tracked count", () => {
+  test("stats strip shows Tracked and Live-now counts", () => {
     render(<CoverageDrawer {...baseProps()} />);
-    expect(screen.getByTestId("coverage-stats")).toHaveTextContent("2");
+    const stats = screen.getByTestId("coverage-stats");
+    expect(stats).toHaveTextContent("2"); // tracked
+    expect(stats).toHaveTextContent("1"); // live now (one running run)
   });
 
   test("add-ticker calls onAdd with the uppercased symbol", async () => {

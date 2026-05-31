@@ -77,10 +77,9 @@ export function CoverageDrawer({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const clock = now ?? Date.now();
   const buckets = useMemo(
-    () => coverageGroups(entries, byTicker, runs, clock),
-    [entries, byTicker, runs, clock],
+    () => coverageGroups(entries, byTicker, runs, now ?? Date.now()),
+    [entries, byTicker, runs, now],
   );
 
   const trackedCount = entries.length;
@@ -227,7 +226,8 @@ export function CoverageDrawer({
                       {item.reportId && onOpenReport ? (
                         <button
                           type="button"
-                          onClick={() => onOpenReport(item.reportId as string)}
+                          aria-label={t("earnings.coverage.open_report_aria", { ticker: item.entry.ticker })}
+                          onClick={() => onOpenReport(item.reportId!)}
                           className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-feedback-success] hover:underline"
                         >
                           {t("earnings.coverage.open_report")}

@@ -887,6 +887,7 @@
       "stat_this_week": "This wk",
       "stat_live": "Live now",
       "open_report": "Open report",
+      "open_report_aria": "Open report for {{ticker}}",
       "empty": "No tickers tracked yet. Add one above to start coverage.",
       "close_aria": "Close coverage drawer",
       "remove_aria": "Remove {{ticker}} from coverage"

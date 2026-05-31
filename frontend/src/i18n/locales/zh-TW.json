@@ -887,6 +887,7 @@
       "stat_this_week": "本週",
       "stat_live": "進行中",
       "open_report": "開啟報告",
+      "open_report_aria": "開啟 {{ticker}} 報告",
       "empty": "尚未追蹤任何股票。在上方新增一檔以開始追蹤。",
       "close_aria": "關閉追蹤面板",
       "remove_aria": "將 {{ticker}} 從追蹤清單移除"
