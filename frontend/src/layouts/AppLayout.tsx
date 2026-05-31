@@ -84,7 +84,7 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
           className="flex overflow-y-auto pb-14 md:pb-0"
           style={{ scrollbarGutter: "stable" }}
         >
-          <div className="flex-1 min-w-0">
+          <div data-om-content className="flex-1 min-w-0">
             {children ?? <Outlet />}
           </div>
           <FileViewer />

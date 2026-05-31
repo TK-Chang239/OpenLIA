@@ -15,7 +15,6 @@
 
 html.om-anim body[data-om-auto] [data-om-shell="sidebar"] {
   animation: om-side-in 420ms var(--ease-out) both;
-  will-change: transform, opacity;
 }
 
 html.om-anim body[data-om-auto] [data-om-shell="topbar"] {
@@ -28,20 +27,19 @@ html.om-anim body[data-om-auto] [data-om-shell="content"] {
   animation-delay: 160ms;
 }
 
-/* Direct children of the content region cascade in. */
-html.om-anim body[data-om-auto] [data-om-shell="content"] > * {
+/* The page-content wrapper fades up. Scoped to [data-om-content] so
+   sibling overlays in <main> (e.g. FileViewer, which has its own
+   entrance animation) are not caught by the cascade. */
+html.om-anim body[data-om-auto] [data-om-shell="content"] > [data-om-content] {
   animation: om-fade-up 440ms var(--ease-out) both;
+  animation-delay: 260ms;
 }
-html.om-anim body[data-om-auto] [data-om-shell="content"] > *:nth-child(1) { animation-delay: 260ms; }
-html.om-anim body[data-om-auto] [data-om-shell="content"] > *:nth-child(2) { animation-delay: 340ms; }
-html.om-anim body[data-om-auto] [data-om-shell="content"] > *:nth-child(3) { animation-delay: 420ms; }
-html.om-anim body[data-om-auto] [data-om-shell="content"] > *:nth-child(n+4) { animation-delay: 500ms; }
 
 @media (prefers-reduced-motion: reduce) {
   html.om-anim body[data-om-auto] [data-om-shell="sidebar"],
   html.om-anim body[data-om-auto] [data-om-shell="topbar"],
   html.om-anim body[data-om-auto] [data-om-shell="content"],
-  html.om-anim body[data-om-auto] [data-om-shell="content"] > * {
+  html.om-anim body[data-om-auto] [data-om-shell="content"] > [data-om-content] {
     animation: none !important;
   }
 }
