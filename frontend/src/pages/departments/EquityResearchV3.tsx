@@ -384,6 +384,7 @@ export default function EquityResearchV3(): JSX.Element {
       chatTitle: activeSubject ?? "New chat",
       onSelect: handleSelectRun,
       onCreate: handleNewRun,
+      generating: isStreaming,
       renderPopover: (props) => (
         <V3RunsPopover
           activeSessionId={props.activeSessionId}
@@ -400,6 +401,7 @@ export default function EquityResearchV3(): JSX.Element {
     clear,
     handleNewRun,
     handleSelectRun,
+    isStreaming,
     register,
   ]);
 
