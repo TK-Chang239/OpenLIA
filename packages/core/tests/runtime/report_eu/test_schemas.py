@@ -19,8 +19,8 @@ def _template() -> TemplateSpec:
 
 def test_enabled_connectors_defaults():
     c = EnabledConnectors()
-    assert c.financial is True
-    assert c.earnings_calendar is True
+    assert c.provider_ids == frozenset()
+    assert c.eodhd is False
     assert c.web_search is False
 
 

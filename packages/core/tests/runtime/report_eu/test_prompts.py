@@ -44,7 +44,7 @@ def test_prompt_includes_trigger_context():
 def test_prompt_lists_available_connectors():
     prompt = build_system_prompt(
         _req(
-            EnabledConnectors(financial=True, earnings_calendar=False, web_search=True),
+            EnabledConnectors(provider_ids=frozenset({"eodhd"}), web_search=True),
             None,
         )
     )
@@ -55,7 +55,7 @@ def test_prompt_lists_available_connectors():
 def test_prompt_states_no_tools_when_all_off():
     prompt = build_system_prompt(
         _req(
-            EnabledConnectors(financial=False, earnings_calendar=False, web_search=False),
+            EnabledConnectors(provider_ids=frozenset(), web_search=False),
             None,
         )
     )

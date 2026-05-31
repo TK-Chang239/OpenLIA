@@ -38,7 +38,7 @@ def _catalog(connectors: EnabledConnectors):
 
 
 def test_all_off_yields_output_tools_only():
-    cat = _catalog(EnabledConnectors(financial=False, earnings_calendar=False, web_search=False))
+    cat = _catalog(EnabledConnectors(provider_ids=frozenset(), web_search=False))
     names = set(cat.by_name())
     assert {"write_section", "finalize"} <= names
     assert "get_fundamentals" not in names
@@ -46,18 +46,13 @@ def test_all_off_yields_output_tools_only():
     assert cat.native_tools == ()
 
 
-def test_financial_on_adds_data_tools():
-    cat = _catalog(EnabledConnectors(financial=True, earnings_calendar=False, web_search=False))
+def test_eodhd_on_adds_data_and_calendar_tools():
+    cat = _catalog(EnabledConnectors(provider_ids=frozenset({"eodhd"}), web_search=False))
     names = set(cat.by_name())
     assert {"get_fundamentals", "get_historical_prices", "get_company_news"} <= names
-    assert "get_earnings_calendar" not in names
-
-
-def test_calendar_on_adds_calendar_tool():
-    cat = _catalog(EnabledConnectors(financial=False, earnings_calendar=True, web_search=False))
-    assert "get_earnings_calendar" in set(cat.by_name())
+    assert "get_earnings_calendar" in names
 
 
 def test_web_search_on_sets_native_tool():
-    cat = _catalog(EnabledConnectors(financial=False, earnings_calendar=False, web_search=True))
+    cat = _catalog(EnabledConnectors(provider_ids=frozenset(), web_search=True))
     assert cat.native_tools == ("web_search",)

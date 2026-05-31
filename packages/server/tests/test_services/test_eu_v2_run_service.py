@@ -94,7 +94,8 @@ def test_build_run_request_uses_settings_and_trigger(db_session_with_seed):
         revenue_estimate=None,
     )
     assert req.provider_kind == "anthropic"
-    assert req.enabled_connectors.financial is False
+    # calendar_enabled=True with EODHD available -> eodhd provider on
+    assert req.enabled_connectors.eodhd is True
     assert req.enabled_connectors.web_search is True
     assert req.trigger_context.fiscal_period == "Q3 FY26"
     assert req.template.template_id == "eu_default"
@@ -400,8 +401,7 @@ def test_build_run_request_gates_financial_off_without_eodhd(monkeypatch, db_ses
         eps_estimate=None,
         revenue_estimate=None,
     )
-    assert req.enabled_connectors.financial is False
-    assert req.enabled_connectors.earnings_calendar is False
+    assert req.enabled_connectors.eodhd is False
     assert req.enabled_connectors.web_search is True
 
 
@@ -451,7 +451,7 @@ def test_build_run_request_gates_web_search_off_for_incapable_model(
         eps_estimate=None,
         revenue_estimate=None,
     )
-    assert req.enabled_connectors.financial is True
+    assert req.enabled_connectors.eodhd is True
     assert req.enabled_connectors.web_search is False
 
 

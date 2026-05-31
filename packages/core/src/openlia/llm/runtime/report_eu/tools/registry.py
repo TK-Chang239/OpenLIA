@@ -81,13 +81,14 @@ def build_catalog(
     """Assemble the EU v2 catalog from the user's connector toggles.
 
     Output tools (write_section, set_cover, emit_chart, finalize) are
-    always present. Data tools, the earnings-calendar tool, and native
-    web search are each gated by ``enabled_connectors``.
+    always present. The EODHD data tools plus the earnings-calendar tool
+    are gated by ``enabled_connectors.eodhd``; native web search is
+    gated by ``enabled_connectors.web_search``.
     """
     output = build_output_tools(workspace=workspace)
     core: list[ResearchTool] = [*output]
 
-    if enabled_connectors.financial:
+    if enabled_connectors.eodhd:
         core.extend(
             build_data_tools(
                 ledger=ledger,
@@ -96,7 +97,6 @@ def build_catalog(
                 news=transports.news,
             )
         )
-    if enabled_connectors.earnings_calendar:
         core.append(
             build_earnings_calendar_tool(
                 ledger=ledger,

@@ -43,7 +43,7 @@ def _runner_with_fake(request: RunRequest, responses):
 @pytest.mark.asyncio
 async def test_runner_writes_then_finalizes():
     """All connectors off: turn 1 writes quick_take, turn 2 finalizes."""
-    req = _req(EnabledConnectors(financial=False, earnings_calendar=False, web_search=False))
+    req = _req(EnabledConnectors(provider_ids=frozenset(), web_search=False))
     script = [
         script_tool_calls(
             ("write_section", {"section_id": "quick_take", "markdown": "Quick take body."})
@@ -59,7 +59,7 @@ async def test_runner_writes_then_finalizes():
 @pytest.mark.asyncio
 async def test_runner_all_off_catalog_excludes_data_tools():
     """With every connector off the model is offered only output tools."""
-    req = _req(EnabledConnectors(financial=False, earnings_calendar=False, web_search=False))
+    req = _req(EnabledConnectors(provider_ids=frozenset(), web_search=False))
     script = [
         script_tool_calls(("write_section", {"section_id": "quick_take", "markdown": "body."})),
         script_tool_calls(("finalize", {})),
@@ -76,7 +76,7 @@ async def test_runner_all_off_catalog_excludes_data_tools():
 
 @pytest.mark.asyncio
 async def test_runner_financial_on_offers_data_tools():
-    req = _req(EnabledConnectors(financial=True, earnings_calendar=True, web_search=False))
+    req = _req(EnabledConnectors(provider_ids=frozenset({"eodhd"}), web_search=False))
     script = [
         script_tool_calls(("write_section", {"section_id": "quick_take", "markdown": "body."})),
         script_tool_calls(("finalize", {})),
@@ -91,7 +91,7 @@ async def test_runner_financial_on_offers_data_tools():
 @pytest.mark.asyncio
 async def test_runner_text_turn_without_finalize_fails():
     """Model ends a turn with text and no tool call before finalize ⇒ failed."""
-    req = _req(EnabledConnectors(financial=False, earnings_calendar=False, web_search=False))
+    req = _req(EnabledConnectors(provider_ids=frozenset(), web_search=False))
     script = [script_text("All done, here is the report.")]
     runner, session, _ = _runner_with_fake(req, script)
     result = await runner.run(session=session)
@@ -102,7 +102,7 @@ async def test_runner_text_turn_without_finalize_fails():
 @pytest.mark.asyncio
 async def test_runner_max_turns_without_finalize_fails():
     """max_turns reached without a finalize call ⇒ failed."""
-    req = _req(EnabledConnectors(financial=False, earnings_calendar=False, web_search=False))
+    req = _req(EnabledConnectors(provider_ids=frozenset(), web_search=False))
     session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
     # Three non-finalizing tool-call turns, but the runner stops after two.
     script = [
@@ -121,7 +121,7 @@ async def test_runner_max_turns_without_finalize_fails():
 @pytest.mark.asyncio
 async def test_runner_cancellation_yields_failed():
     """A cancelled token ⇒ terminal failed status with a cancel message."""
-    req = _req(EnabledConnectors(financial=False, earnings_calendar=False, web_search=False))
+    req = _req(EnabledConnectors(provider_ids=frozenset(), web_search=False))
     script = [script_tool_calls(("finalize", {}))]
     runner, session, _ = _runner_with_fake(req, script)
     token = CancelToken()

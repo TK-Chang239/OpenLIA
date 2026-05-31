@@ -118,16 +118,20 @@ class CitationLogEntry(BaseModel):
 
 
 class EnabledConnectors(BaseModel):
-    """Which connector tool groups the LLM may call this run.
+    """Which data sources the LLM may use this run.
 
-    Per-user global toggles resolved from ``eu_v2_settings``. None are
-    required — all-False yields an output-tools-only catalog and the
-    model writes from the prompt and trigger context alone.
+    ``provider_ids`` are the registry provider ids enabled for routing
+    (``"eodhd"`` -> curated EODHD financial + calendar tools; any other
+    -> dispatcher-routed, added in a later task). ``web_search`` is the
+    model-native web search (not a registry connector).
     """
 
-    financial: bool = True
-    earnings_calendar: bool = True
+    provider_ids: frozenset[str] = frozenset()
     web_search: bool = False
+
+    @property
+    def eodhd(self) -> bool:
+        return "eodhd" in self.provider_ids
 
 
 class TriggerContext(BaseModel):
