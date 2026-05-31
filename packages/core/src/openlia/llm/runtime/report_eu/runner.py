@@ -37,7 +37,7 @@ from ..report_v2_3.research import (
 )
 from .events import CancelToken, EventEmitter, NullEmitter
 from .ledger import CitationLedger
-from .prompts import build_system_prompt
+from .prompts import ConnectorPromptInfo, build_system_prompt
 from .schemas import RunRequest, RunResult
 from .session import LLMSession
 from .tools import build_catalog
@@ -127,7 +127,8 @@ class Runner:
             },
         )
 
-        system_prompt = build_system_prompt(request)
+        connector_tools = _connector_prompt_info(catalog)
+        system_prompt = build_system_prompt(request, connector_tools=connector_tools)
         tool_schemas = catalog.core_schemas()
         tools_by_name = catalog.by_name()
 
@@ -264,6 +265,27 @@ class Runner:
                 f"without calling finalize(). Partial work preserved."
             ),
         )
+
+
+def _connector_prompt_info(catalog: Any) -> tuple[ConnectorPromptInfo, ...]:
+    """Derive per-connector prompt info from the catalog's dispatcher tools.
+
+    Dispatcher tools have ``<provider>__<tool>`` names; curated EODHD tools
+    have plain names and are skipped (the EODHD block covers them). Tools
+    are grouped by provider prefix into one ``ConnectorPromptInfo`` each,
+    preserving first-seen provider order.
+    """
+    grouped: dict[str, list[tuple[str, str]]] = {}
+    for descriptor in catalog.descriptors:
+        name = descriptor.name
+        if "__" not in name:
+            continue
+        provider = name.split("__", 1)[0]
+        grouped.setdefault(provider, []).append((name, descriptor.description))
+    return tuple(
+        ConnectorPromptInfo(label=provider, tools=tuple(tools))
+        for provider, tools in grouped.items()
+    )
 
 
 def _initial_user_turn(request: RunRequest) -> Message:

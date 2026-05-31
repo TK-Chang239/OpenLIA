@@ -1,4 +1,7 @@
-from openlia.llm.runtime.report_eu.prompts import build_system_prompt
+from openlia.llm.runtime.report_eu.prompts import (
+    ConnectorPromptInfo,
+    build_system_prompt,
+)
 from openlia.llm.runtime.report_eu.schemas import (
     EnabledConnectors,
     RunRequest,
@@ -60,6 +63,40 @@ def test_prompt_states_no_tools_when_all_off():
         )
     )
     assert "no data tools" in prompt.lower() or "without tools" in prompt.lower()
+
+
+def test_prompt_lists_connector_tools_alongside_eodhd():
+    prompt = build_system_prompt(
+        _req(
+            EnabledConnectors(provider_ids=frozenset({"eodhd"})),
+            None,
+        ),
+        connector_tools=(
+            ConnectorPromptInfo(
+                label="newsapi_ai",
+                tools=(("newsapi_ai__search", "Search news"),),
+            ),
+        ),
+    )
+    assert "get_fundamentals" in prompt
+    assert "newsapi_ai" in prompt
+    assert "newsapi_ai__search" in prompt
+    assert "Search news" in prompt
+
+
+def test_prompt_no_connector_block_when_only_eodhd():
+    prompt = build_system_prompt(_req(EnabledConnectors(provider_ids=frozenset({"eodhd"})), None))
+    assert "get_fundamentals" in prompt
+    assert "__" not in prompt
+    assert "no data tools" not in prompt.lower()
+
+
+def test_prompt_fallback_when_no_connectors_and_no_tools():
+    prompt = build_system_prompt(
+        _req(EnabledConnectors(provider_ids=frozenset(), web_search=False), None),
+        connector_tools=(),
+    )
+    assert "no data tools" in prompt.lower()
 
 
 def test_prompt_lists_template_sections():
