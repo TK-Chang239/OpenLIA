@@ -114,6 +114,25 @@ EXPECTED_TABLES = {
     "er_v2_3_run_state",
     # --- v2.3 per-stage model assignments (PR14, 2026-05-23) ---
     "er_v2_3_model_assignments",
+    # --- v3 single-model engine (PR 2026-05-27) ---
+    "report_v3",
+    "report_v3_sections",
+    "report_v3_charts",
+    "report_v3_citations",
+    "report_v3_tool_call_log",
+    "report_v3_templates",
+    "report_v3_instructions",
+    "report_v3_revisions",
+    # --- Earnings Update v2 engine (PR 2026-05-29) ---
+    "report_eu",
+    "report_eu_sections",
+    "report_eu_charts",
+    "report_eu_citations",
+    "report_eu_tool_call_log",
+    "report_eu_templates",
+    "eu_v2_watchlist",
+    "eu_v2_earnings_schedule",
+    "eu_v2_settings",
 }
 
 
