@@ -41,9 +41,7 @@ def _run_dcf_math(args: dict[str, Any]) -> dict[str, Any]:
     shares_outstanding = float(args.get("shares_outstanding", 0.0))
 
     if len(growth_path) != len(margin_path):
-        raise ToolExecutionError(
-            "revenue_growth_path and margin_path must have equal length."
-        )
+        raise ToolExecutionError("revenue_growth_path and margin_path must have equal length.")
     if not growth_path:
         raise ToolExecutionError("revenue_growth_path must be non-empty.")
     if wacc <= terminal_growth:
@@ -69,9 +67,7 @@ def _run_dcf_math(args: dict[str, Any]) -> dict[str, Any]:
 
     enterprise_value = pv_explicit + pv_terminal
     equity_value = enterprise_value - net_debt
-    fair_value_per_share = (
-        equity_value / shares_outstanding if shares_outstanding > 0 else None
-    )
+    fair_value_per_share = equity_value / shares_outstanding if shares_outstanding > 0 else None
 
     return {
         "enterprise_value": enterprise_value,

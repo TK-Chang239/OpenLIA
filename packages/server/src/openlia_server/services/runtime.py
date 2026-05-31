@@ -123,22 +123,12 @@ def _resolve_web_search_for(*, resolved: ResolvedModel) -> WebSearchResolution:
 def select_report_runner_class(
     *, department_id: str
 ) -> type[ReportRunner] | type[SubagentReportRunner]:
-    """Route equity_research to WavedReportRunnerHost or SubagentReportRunner when flagged.
+    """Route a department to its report runner class.
 
-    Priority:
-    1. ``equity_research`` + ``OPENLIA_REPORT_V2_ENABLED`` not explicitly disabled →
-       ``WavedReportRunnerHost`` (waved six-wave runner). Default-on since 2026-05-18;
-       opt out by setting ``OPENLIA_REPORT_V2_ENABLED=false`` (or ``0`` / ``no``).
-    2. ``OPENLIA_USE_SUBAGENT_RUNNER=1`` + ``equity_research`` (and v2 explicitly disabled) →
-       ``SubagentReportRunner``.
-    3. Default for other departments → classic ``ReportRunner``.
+    ``OPENLIA_USE_SUBAGENT_RUNNER=1`` + ``equity_research`` selects the
+    ``SubagentReportRunner``; all departments otherwise use the classic
+    ``ReportRunner``.
     """
-    v2_flag = os.environ.get("OPENLIA_REPORT_V2_ENABLED", "").strip().lower()
-    v2_disabled = v2_flag in ("false", "0", "no", "off")
-    if department_id == "equity_research" and not v2_disabled:
-        from openlia_server.services.runtime_report_v2 import WavedReportRunnerHost
-
-        return WavedReportRunnerHost  # type: ignore[return-value]
     if os.environ.get("OPENLIA_USE_SUBAGENT_RUNNER") == "1" and department_id == "equity_research":
         return SubagentReportRunner
     return ReportRunner
@@ -416,24 +406,6 @@ def _build_report_runner_with_registry(
         )
 
     runner_cls = select_report_runner_class(department_id=department_id)
-    # Lazy import — safe at runtime (call-site, not module load) so any
-    # import cycle has already resolved. select_report_runner_class is the
-    # authoritative routing decision; we just need the class to compare.
-    from openlia_server.services.runtime_report_v2 import (
-        WavedReportRunnerHost as _WavedHost,
-    )
-
-    if runner_cls is _WavedHost:
-        return _WavedHost(
-            prompts=prompts,
-            tools=tools,
-            resolve=resolve,
-            registry=registry,
-            flagship_provider_factory=_provider_factory,
-            subagent_provider_factory=_provider_factory,
-            provider_factory=_provider_factory,
-            trace=_trace,
-        )
     if runner_cls is SubagentReportRunner:
         # SubagentReportRunner expects resolve(...role=...). The classic
         # resolve() doesn't accept role. Build a role-aware closure that

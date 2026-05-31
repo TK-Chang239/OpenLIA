@@ -121,15 +121,11 @@ def _build_full_run_script(req: RunRequest) -> list:
 
 
 @pytest.mark.asyncio
-async def test_render_html_round_trips_through_persistence(
-    create_tables, db_session: Session
-):
+async def test_render_html_round_trips_through_persistence(create_tables, db_session: Session):
     user = _make_user(db_session)
     req = _request()
 
-    session = LLMSession.create(
-        provider_kind="anthropic", model="claude-sonnet-4-6"
-    )
+    session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
     fake = FakeLLMProvider(scripted_responses=_build_full_run_script(req))
     session.attach_adapter(fake)
     runner = Runner(max_turns=30, transports_factory=_fake_transports)
@@ -143,9 +139,7 @@ async def test_render_html_round_trips_through_persistence(
     )
     db_session.flush()
 
-    rendered = render_svc.render_html(
-        db=db_session, user_id=user.id, report_id=outcome.report_id
-    )
+    rendered = render_svc.render_html(db=db_session, user_id=user.id, report_id=outcome.report_id)
     html = rendered.html
 
     # Cover
@@ -163,27 +157,21 @@ async def test_render_html_round_trips_through_persistence(
     assert "[^eodhd_1]" not in html
 
     # Chart embedded as data URL
-    assert "src=\"data:image/png;base64," in html
+    assert 'src="data:image/png;base64,' in html
 
     # Bibliography section present with EODHD entry
     assert 'class="v3-bibliography"' in html
     assert "EODHD" in html
 
     # rendered_url persisted on the Chart row
-    _, _, charts, _ = svc.get_run(
-        db=db_session, user_id=user.id, report_id=outcome.report_id
-    )
+    _, _, charts, _ = svc.get_run(db=db_session, user_id=user.id, report_id=outcome.report_id)
     growth_row = next(c for c in charts if c.chart_id == "growth")
     assert growth_row.rendered_url is not None
     assert growth_row.rendered_url.startswith("data:image/png;base64,")
 
 
 @pytest.mark.asyncio
-async def test_render_html_unknown_report_raises_not_found(
-    create_tables, db_session: Session
-):
+async def test_render_html_unknown_report_raises_not_found(create_tables, db_session: Session):
     user = _make_user(db_session)
     with pytest.raises(svc.ReportNotFoundError):
-        render_svc.render_html(
-            db=db_session, user_id=user.id, report_id=str(uuid.uuid4())
-        )
+        render_svc.render_html(db=db_session, user_id=user.id, report_id=str(uuid.uuid4()))

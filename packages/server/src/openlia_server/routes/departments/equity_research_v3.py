@@ -26,7 +26,6 @@ errors bubble as 500.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -478,7 +477,10 @@ def _engine_disabled() -> HTTPException:
 
 
 def _engine_enabled() -> bool:
-    return os.environ.get(_ENV_FLAG, "").strip().lower() == _ENABLED_VALUE
+    # v3 is now the sole equity-research engine and is always enabled. The
+    # REPORT_ENGINE_VERSION flag is retained only for backward compatibility:
+    # any value (including unset) keeps v3 on.
+    return True
 
 
 def _streaming_state(request: Request) -> tuple[EventBroker, dict[str, CancelToken]]:
@@ -720,9 +722,7 @@ def build_equity_research_v3_router(
                 raise HTTPException(
                     status_code=400,
                     detail={
-                        "errors": [
-                            {"filename": e.filename, "reason": e.reason} for e in errors
-                        ]
+                        "errors": [{"filename": e.filename, "reason": e.reason} for e in errors]
                     },
                 )
             attachments = prepare_v3_attachments(uploads)
@@ -1050,11 +1050,7 @@ def build_equity_research_v3_router(
         if errors:
             raise HTTPException(
                 status_code=400,
-                detail={
-                    "errors": [
-                        {"filename": e.filename, "reason": e.reason} for e in errors
-                    ]
-                },
+                detail={"errors": [{"filename": e.filename, "reason": e.reason} for e in errors]},
             )
         try:
             row = instructions_svc.create_instructions_from_upload(
@@ -1148,9 +1144,7 @@ def build_equity_research_v3_router(
         # same methodology as the original run. Freeform parents resolve
         # to the sections-less spec (so no-template reports are
         # revisable); a since-deleted profile degrades to no instructions.
-        template, instructions = _resolve_revision_shape(
-            db=db, user_id=user.id, parent=parent
-        )
+        template, instructions = _resolve_revision_shape(db=db, user_id=user.id, parent=parent)
 
         run_request = RunRequest(
             subject=parent.subject,

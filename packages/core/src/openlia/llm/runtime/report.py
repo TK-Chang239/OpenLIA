@@ -690,19 +690,10 @@ def _required_rail_labels(request: ReportRequest) -> list[str] | None:
     Carry-over wiring from PR 0.0: makes enforce_required_rail template-driven.
     Returns None when no spec is available (existing skip behaviour preserved).
     """
-    spec_dict = getattr(request, "framework_template_spec", None)
-    if not isinstance(spec_dict, dict):
-        return None
-    try:
-        from openlia.llm.runtime.report_v2.template_v2.spec import TemplateSpecV2
-
-        spec = TemplateSpecV2.model_validate(spec_dict)
-        if spec.rail is None:
-            return None
-        return spec.rail.required_quick_stats  # may itself be None
-    except (ValueError, TypeError, KeyError, AttributeError, LookupError):
-        # Narrowed from bare Exception: malformed spec must never crash the runner.
-        return None
+    # The template-driven required-rail feature was supplied by the removed v2
+    # engine via framework_template_spec. No surviving caller sets that field,
+    # so there is no spec to load and the historical skip behaviour applies.
+    return None
 
 
 def _default_frameworks_root() -> Path:

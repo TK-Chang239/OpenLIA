@@ -106,9 +106,7 @@ async def start_run(
         created_at=created_at,
         completed_at=None,
         reasoning_effort=(
-            request.reasoning_effort.value
-            if request.reasoning_effort is not None
-            else None
+            request.reasoning_effort.value if request.reasoning_effort is not None else None
         ),
     )
     db.add(row)
@@ -167,11 +165,7 @@ def get_run(
 def _latest_sections(db: DBSession, report_id: str) -> list[ReportV3Section]:
     """One row per section_id at its highest version, sorted by
     section_index for renderer-friendly ordering."""
-    rows = list(
-        db.scalars(
-            select(ReportV3Section).where(ReportV3Section.report_id == report_id)
-        )
-    )
+    rows = list(db.scalars(select(ReportV3Section).where(ReportV3Section.report_id == report_id)))
     latest: dict[str, ReportV3Section] = {}
     for row in rows:
         current = latest.get(row.section_id)
@@ -181,11 +175,7 @@ def _latest_sections(db: DBSession, report_id: str) -> list[ReportV3Section]:
 
 
 def _latest_charts(db: DBSession, report_id: str) -> list[ReportV3Chart]:
-    rows = list(
-        db.scalars(
-            select(ReportV3Chart).where(ReportV3Chart.report_id == report_id)
-        )
-    )
+    rows = list(db.scalars(select(ReportV3Chart).where(ReportV3Chart.report_id == report_id)))
     latest: dict[str, ReportV3Chart] = {}
     for row in rows:
         current = latest.get(row.chart_id)
@@ -275,9 +265,7 @@ def start_run_async(
         created_at=created_at,
         completed_at=None,
         reasoning_effort=(
-            request.reasoning_effort.value
-            if request.reasoning_effort is not None
-            else None
+            request.reasoning_effort.value if request.reasoning_effort is not None else None
         ),
     )
     db.add(row)

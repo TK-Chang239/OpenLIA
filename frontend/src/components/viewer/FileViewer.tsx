@@ -168,14 +168,8 @@ export function FileViewer(): JSX.Element | null {
             }
             initialSaved={current.initialSaved}
             // SaveToRepoButton supports v1 (POST /api/repo/items) and
-            // v3 (POST /api/repo/v3-runs). v2.2 and v2.3 use their own
-            // save flows on their respective cards, not the header,
-            // so hide the header save button for those source kinds.
-            hideSaveToRepoButton={
-              current.hideSaveToRepoButton ??
-              (current.source.kind === "v2_report" ||
-                current.source.kind === "v23_report")
-            }
+            // v3 (POST /api/repo/v3-runs).
+            hideSaveToRepoButton={current.hideSaveToRepoButton ?? false}
             onClose={close}
             closeButtonRef={closeButtonRef}
           />

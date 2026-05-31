@@ -87,9 +87,7 @@ def _fake_transports() -> DataTransports:
             {"date": from_date, "close": 1.0},
             {"date": to_date, "close": 2.0},
         ],
-        news=lambda ticker, limit: [
-            {"title": "headline", "url": f"https://x.test/{ticker}"}
-        ],
+        news=lambda ticker, limit: [{"title": "headline", "url": f"https://x.test/{ticker}"}],
     )
 
 
@@ -198,9 +196,7 @@ async def test_start_run_persists_all_five_tables(create_tables, db_session: Ses
     # Tool call log — at least the EODHD call landed
     log_rows = list(
         db_session.scalars(
-            select(ReportV3ToolCallLog).where(
-                ReportV3ToolCallLog.report_id == outcome.report_id
-            )
+            select(ReportV3ToolCallLog).where(ReportV3ToolCallLog.report_id == outcome.report_id)
         )
     )
     assert any(r.tool_name == "get_company_news" for r in log_rows)
@@ -306,9 +302,7 @@ async def test_delete_run_cascades_to_children(create_tables, db_session: Sessio
     assert (
         list(
             db_session.scalars(
-                select(ReportV3Section).where(
-                    ReportV3Section.report_id == outcome.report_id
-                )
+                select(ReportV3Section).where(ReportV3Section.report_id == outcome.report_id)
             )
         )
         == []
@@ -351,9 +345,7 @@ async def test_citation_display_index_orders_by_first_appearance(
     }
     for sid in section_ids:
         md = markdowns.get(sid, "body [^eodhd_1].")
-        script.append(
-            script_tool_calls(("write_section", {"section_id": sid, "markdown": md}))
-        )
+        script.append(script_tool_calls(("write_section", {"section_id": sid, "markdown": md})))
     script.append(script_tool_calls(("finalize", {})))
 
     runner, session = _runner_with(script)
@@ -364,9 +356,7 @@ async def test_citation_display_index_orders_by_first_appearance(
 
     citations = list(
         db_session.scalars(
-            select(ReportV3Citation).where(
-                ReportV3Citation.report_id == outcome.report_id
-            )
+            select(ReportV3Citation).where(ReportV3Citation.report_id == outcome.report_id)
         )
     )
     by_source = {c.source_id: c for c in citations}
@@ -435,9 +425,7 @@ async def test_set_cover_persists_cover_json(create_tables, db_session: Session)
 
 
 @pytest.mark.asyncio
-async def test_run_without_set_cover_leaves_cover_json_null(
-    create_tables, db_session: Session
-):
+async def test_run_without_set_cover_leaves_cover_json_null(create_tables, db_session: Session):
     user = _make_user(db_session)
     req = _request()
     # _happy_path_script never calls set_cover; cover_json should stay NULL.
@@ -458,9 +446,7 @@ async def test_run_without_set_cover_leaves_cover_json_null(
 
 
 @pytest.mark.asyncio
-async def test_reasoning_effort_persists_on_report_row(
-    create_tables, db_session: Session
-):
+async def test_reasoning_effort_persists_on_report_row(create_tables, db_session: Session):
     from openlia.llm.types import ReasoningEffort
 
     user = _make_user(db_session)
@@ -476,9 +462,7 @@ async def test_reasoning_effort_persists_on_report_row(
 
 
 @pytest.mark.asyncio
-async def test_reasoning_effort_null_when_request_omits_it(
-    create_tables, db_session: Session
-):
+async def test_reasoning_effort_null_when_request_omits_it(create_tables, db_session: Session):
     user = _make_user(db_session)
     req = _request()  # defaults to reasoning_effort=None
     runner, session = _runner_with(_happy_path_script(req))

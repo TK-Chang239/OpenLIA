@@ -26,7 +26,6 @@ from openlia.llm.runtime.report_v3 import (
     EventBroker,
     Language,
     LLMSession,
-    PriorCitation,
     PriorSection,
     ReportLength,
     ReviseContext,
@@ -113,9 +112,7 @@ def _request(template) -> RunRequest:
 
 
 @pytest.mark.asyncio
-async def test_revision_writes_new_version_for_touched_section(
-    create_tables, db_session: Session
-):
+async def test_revision_writes_new_version_for_touched_section(create_tables, db_session: Session):
     user = _make_user(db_session)
     parent = _seed_completed_report(db_session, user)
     template = get_builtin(ReportType.INITIATION)

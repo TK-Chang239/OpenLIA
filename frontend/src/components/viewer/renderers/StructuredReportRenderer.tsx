@@ -4,27 +4,18 @@ import { fetchCapabilities } from "../../../api/capabilities";
 import { ReportRenderer } from "../../report/ReportRenderer";
 import { RendererError, RendererLoading } from "./RendererStates";
 import { type FileSource } from "../FileViewerContext";
-import { V23ReportRenderer } from "./V23ReportRenderer";
-import { V2ReportRenderer } from "./V2ReportRenderer";
 import { V3ReportRenderer } from "./V3ReportRenderer";
 import { EUV2ReportRenderer } from "./EUV2ReportRenderer";
 
 type Status = "loading" | "ok" | "error";
 
 /**
- * Dispatcher for "report"-kind FileViewer entries. v1 reports load a
- * structured schema and render with v1's ReportRenderer; v2.2 carries
- * a single HTML payload through V2ReportRenderer; v2.3 adapts its
- * structured RunPayload to ReportSchema and uses the same renderer.
- * FileViewer chrome (header, tabs, close) is shared across all paths.
+ * Dispatcher for "report"-kind FileViewer entries. v1 reports (e.g.
+ * Morning Briefing) load a structured schema and render with v1's
+ * ReportRenderer; v3 and Earnings-Update v2 each have a dedicated
+ * renderer. FileViewer chrome (header, tabs, close) is shared.
  */
 export function StructuredReportRenderer({ source }: { source: FileSource }): JSX.Element {
-  if (source.kind === "v2_report") {
-    return <V2ReportRenderer source={source} />;
-  }
-  if (source.kind === "v23_report") {
-    return <V23ReportRenderer source={source} />;
-  }
   if (source.kind === "v3_report") {
     return <V3ReportRenderer source={source} />;
   }

@@ -67,9 +67,7 @@ def _request() -> RunRequest:
 
 
 def _runner_with_fake(responses) -> tuple[Runner, LLMSession, FakeLLMProvider]:
-    session = LLMSession.create(
-        provider_kind="anthropic", model="claude-sonnet-4-6"
-    )
+    session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
     fake = FakeLLMProvider(scripted_responses=responses)
     session.attach_adapter(fake)
     runner = Runner(max_turns=20)
@@ -207,9 +205,7 @@ def test_write_section_rejects_unknown_section_id():
     workspace, _ = _fresh_workspace()
     tools = {t.name: t for t in build_output_tools(workspace=workspace)}
     with pytest.raises(RuntimeError) as excinfo:
-        tools["write_section"].execute(
-            {"section_id": "not_a_section", "markdown": "x"}
-        )
+        tools["write_section"].execute({"section_id": "not_a_section", "markdown": "x"})
     assert "Unknown section_id" in str(excinfo.value)
 
 
@@ -347,9 +343,7 @@ def test_set_cover_rejects_invalid_metric_tone():
 def test_set_cover_propagates_to_run_result():
     workspace, _ = _fresh_workspace()
     tools = {t.name: t for t in build_output_tools(workspace=workspace)}
-    tools["set_cover"].execute(
-        {"tagline": "Best-in-class operator", "rating": "Overweight"}
-    )
+    tools["set_cover"].execute({"tagline": "Best-in-class operator", "rating": "Overweight"})
     result = workspace.to_result(status="completed")
     assert result.cover is not None
     assert result.cover.tagline == "Best-in-class operator"
@@ -542,7 +536,8 @@ async def test_runner_returns_structured_error_for_unknown_tool():
     assert result.status == "completed"
     # The tool message for the unknown call should have been added.
     error_msgs = [
-        m for m in fake.captured_requests[-1].messages
+        m
+        for m in fake.captured_requests[-1].messages
         if m.role == "tool" and "Unknown tool" in m.content
     ]
     assert error_msgs, "Expected the unknown-tool error to be replayed back to the model"
@@ -560,9 +555,7 @@ async def test_runner_feeds_web_citation_ids_back_to_model():
         script_tool_call(
             name="write_section",
             arguments={"section_id": section_ids[0], "markdown": f"{section_ids[0]} body."},
-            citations=(
-                Citation(id="c1", kind="web", url="https://snow.test/q1", title="SNOW Q1"),
-            ),
+            citations=(Citation(id="c1", kind="web", url="https://snow.test/q1", title="SNOW Q1"),),
         ),
     ]
     for sid in section_ids[1:]:
@@ -578,11 +571,7 @@ async def test_runner_feeds_web_citation_ids_back_to_model():
     assert result.status == "completed"
 
     # Turn 2's request must carry the web-citation notice as a user message.
-    turn2_user_msgs = [
-        m.content
-        for m in fake.captured_requests[1].messages
-        if m.role == "user"
-    ]
+    turn2_user_msgs = [m.content for m in fake.captured_requests[1].messages if m.role == "user"]
     notice = next((c for c in turn2_user_msgs if "[^web_1]" in c), None)
     assert notice is not None, "Expected a web-citation notice on the next turn"
     assert "SNOW Q1" in notice
@@ -718,9 +707,7 @@ async def test_runner_fails_clearly_on_image_attachment_without_vision():
         size_bytes=10,
     )
     runner, session, _ = _runner_with_fake([])
-    session.capabilities = Capabilities(
-        web_search_native=True, vision=False, pdf_native=False
-    )
+    session.capabilities = Capabilities(web_search_native=True, vision=False, pdf_native=False)
     result = await runner.run(_request_with_attachments([att]), session=session)
     assert result.status == "failed"
     assert "Attachment cannot be used" in result.message

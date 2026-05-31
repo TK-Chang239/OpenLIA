@@ -32,18 +32,12 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     # pipeline_runs: soft-delete + retention columns.
     with op.batch_alter_table("pipeline_runs", schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True)
-        )
-        batch_op.add_column(
-            sa.Column("expired_at", sa.DateTime(timezone=True), nullable=True)
-        )
+        batch_op.add_column(sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True))
+        batch_op.add_column(sa.Column("expired_at", sa.DateTime(timezone=True), nullable=True))
 
     # repo_items: polymorphic pointer — exactly one of (report_id, pipeline_run_id).
     with op.batch_alter_table("repo_items", schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column("pipeline_run_id", sa.String(length=36), nullable=True)
-        )
+        batch_op.add_column(sa.Column("pipeline_run_id", sa.String(length=36), nullable=True))
         batch_op.alter_column("report_id", existing_type=sa.String(length=36), nullable=True)
         batch_op.create_foreign_key(
             "fk_repo_items_pipeline_run_id",
