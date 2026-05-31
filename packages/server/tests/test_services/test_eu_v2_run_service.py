@@ -63,7 +63,11 @@ def _seed_eu_default(db) -> None:
 
 
 @pytest.fixture
-def db_session_with_seed(db_session):
+def db_session_with_seed(db_session, monkeypatch):
+    # Make EODHD availability deterministic instead of depending on an
+    # ambient env key (which only happens to be present when the whole
+    # suite runs). Tests that need EODHD *absent* delenv it themselves.
+    monkeypatch.setenv("EODHD_API_KEY", "test-eodhd-key")
     _seed_eu_default(db_session)
     return db_session
 
