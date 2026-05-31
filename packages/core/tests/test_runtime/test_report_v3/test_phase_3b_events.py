@@ -243,9 +243,7 @@ async def test_runner_emits_run_cancelled_when_token_flipped_before_first_turn()
     emitter = ListEmitter()
     cancel_token = CancelToken()
     cancel_token.cancel()  # pre-cancel so the first turn check trips
-    result = await runner.run(
-        req, session=session, emitter=emitter, cancel_token=cancel_token
-    )
+    result = await runner.run(req, session=session, emitter=emitter, cancel_token=cancel_token)
     assert result.status == "failed"
     assert "cancelled" in result.message
     types = [e.type for e in emitter.events]

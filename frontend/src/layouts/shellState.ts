@@ -10,13 +10,6 @@ function titleCase(segment: string): string {
 
 const STATIC_ROOTS: Record<string, { label: string; labelKey: string }> = {
   "/settings": { label: "Settings", labelKey: "nav.settings" },
-  // v3 equity-research lives at its own route but shares the
-  // "Equity Research" breadcrumb label with the v1/v2 page so the
-  // top-left reads "Equity Research / <subject>" consistently.
-  "/equity-research-v3": {
-    label: "Equity Research",
-    labelKey: "nav.equity_research",
-  },
 };
 
 /** Returns breadcrumb segments as i18n keys (e.g. ``nav.home``).

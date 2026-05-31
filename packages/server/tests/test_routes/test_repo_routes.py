@@ -120,9 +120,7 @@ def test_v3_save_unknown_returns_404(client, user_factory, login_as):
     assert resp.status_code == 404
 
 
-def test_v3_save_other_users_report_returns_404(
-    client, user_factory, login_as, db_session
-):
+def test_v3_save_other_users_report_returns_404(client, user_factory, login_as, db_session):
     owner = user_factory()
     intruder = user_factory()
     r = _v3_report_factory(db_session)(user_id=owner.id)
@@ -143,7 +141,5 @@ def test_v3_list_excludes_v1_and_v2_saves(
     # /v3-runs only returns v3 ids
     assert client.get("/repo/v3-runs").json()["saved_report_ids"] == [v3.id]
     # /items still returns v1 (existing surface unchanged)
-    v1_items = [
-        i for i in client.get("/repo/items").json()["items"] if i["report_id"] == v1.id
-    ]
+    v1_items = [i for i in client.get("/repo/items").json()["items"] if i["report_id"] == v1.id]
     assert len(v1_items) == 1

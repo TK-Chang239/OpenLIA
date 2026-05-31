@@ -51,10 +51,6 @@ export function ViewerHeader({
         ) : null}
         {source.kind === "report" ? (
           <ReportDownloadButton reportId={source.reportId} />
-        ) : source.kind === "v2_report" ? (
-          <ReportDownloadButton reportId={source.runId} engine="v2" />
-        ) : source.kind === "v23_report" ? (
-          <ReportDownloadButton reportId={source.runId} engine="v23" />
         ) : source.kind === "v3_report" ? (
           <ReportDownloadButton reportId={source.reportId} engine="v3" />
         ) : (

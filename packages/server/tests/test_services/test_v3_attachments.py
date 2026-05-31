@@ -51,9 +51,7 @@ def test_prepare_v3_attachments_preserves_order_and_ids(monkeypatch, tmp_path):
 
 def test_prepare_v3_attachments_leaves_image_text_none(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENLIA_ATTACHMENTS_DIR", str(tmp_path / "att"))
-    uploads = [
-        FileUpload(filename="chart.png", mime_type="image/png", content=b"\x89PNG\r\n")
-    ]
+    uploads = [FileUpload(filename="chart.png", mime_type="image/png", content=b"\x89PNG\r\n")]
     out = prepare_v3_attachments(uploads)
     # Images are not text-extracted; the runtime reads raw bytes instead.
     assert out[0].extracted_text is None
