@@ -41,3 +41,24 @@ def test_run_request_carries_connectors_and_trigger():
     )
     assert req.enabled_connectors.web_search is True
     assert req.trigger_context.fiscal_period == "Q3 FY26"
+
+
+def test_run_request_carries_instructions():
+    req = RunRequest(
+        subject="MSFT.US Q3 FY26 earnings",
+        template=_template(),
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        instructions="Favor FCF. Skip web search.",
+    )
+    assert req.instructions == "Favor FCF. Skip web search."
+
+
+def test_run_request_instructions_default_none():
+    req = RunRequest(
+        subject="MSFT.US Q3 FY26 earnings",
+        template=_template(),
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+    )
+    assert req.instructions is None
