@@ -135,7 +135,20 @@ export function EuCalendar({ schedule, runs, onOpenReport }: Props) {
             <div
               key={cell.dateKey}
               data-testid={`eu-cal-cell-${cell.dateKey}`}
+              role={clickable ? "button" : undefined}
+              aria-label={clickable ? cell.dateKey : undefined}
+              tabIndex={clickable ? 0 : undefined}
               onClick={clickable ? () => setOpenDay(cell.dateKey) : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setOpenDay(cell.dateKey);
+                      }
+                    }
+                  : undefined
+              }
               className={`min-h-[92px] p-1.5 flex flex-col gap-1 bg-[--color-bg-elevated] ${
                 cell.inMonth ? "" : "opacity-40"
               } ${clickable ? "cursor-pointer hover:bg-[--color-surface-hover]" : ""}`}
@@ -174,7 +187,7 @@ export function EuCalendar({ schedule, runs, onOpenReport }: Props) {
       <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-3">
         <Legend dot={STATUS_DOT.live} label={t("earnings.calendar.legend_live")} />
         <Legend dot={STATUS_DOT.reported} label={t("earnings.calendar.legend_reported")} />
-        <Legend dot={STATUS_DOT.scheduled} label={t("earnings.calendar.legend_pre_market")} />
+        <Legend dot={STATUS_DOT.scheduled} label={t("earnings.calendar.legend_scheduled")} />
       </div>
       <p className="font-mono text-[10px] tracking-[0.08em] text-[--color-text-tertiary] mt-2">
         {t("earnings.calendar.watchlist_only")}
