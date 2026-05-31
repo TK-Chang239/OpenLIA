@@ -14,8 +14,7 @@ const baseSettings: api.EuSettings = {
   language: "en",
   length: "normal",
   reasoning_effort: null,
-  financial_enabled: true,
-  calendar_enabled: true,
+  enabled_provider_ids: ["eodhd"],
   web_search_enabled: false,
   instructions_id: null,
 };
