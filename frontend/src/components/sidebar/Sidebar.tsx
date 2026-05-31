@@ -49,6 +49,7 @@ export function Sidebar(): JSX.Element {
 
   return (
     <nav
+      data-om-shell="sidebar"
       aria-label={t("nav.main_navigation")}
       className={[
         "hidden md:flex flex-col h-screen bg-sidebar-bg",
