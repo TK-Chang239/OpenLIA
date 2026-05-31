@@ -24,7 +24,7 @@ from typing import Any
 
 from openlia.llm.runtime.report_v3 import DataTransports
 
-from .v2_3_wiring import _trim_eodhd_fundamentals
+from .eodhd_payload import trim_eodhd_fundamentals
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def build_v3_transports() -> DataTransports | None:
             payload = raw[0]
         else:
             return {"value": raw}
-        return _trim_eodhd_fundamentals(payload)
+        return trim_eodhd_fundamentals(payload)
 
     def prices(ticker: str, from_date: str, to_date: str) -> list[dict[str, Any]]:
         rows = client.get_eod_historical_stock_market_data(

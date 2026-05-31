@@ -34,14 +34,11 @@ def upgrade() -> None:
         )
         batch.create_check_constraint(
             "ck_er_user_configs_reasoning_effort",
-            "report_reasoning_effort IS NULL OR "
-            "report_reasoning_effort IN ('off','medium','high')",
+            "report_reasoning_effort IS NULL OR report_reasoning_effort IN ('off','medium','high')",
         )
 
 
 def downgrade() -> None:
     with op.batch_alter_table("er_user_configs") as batch:
-        batch.drop_constraint(
-            "ck_er_user_configs_reasoning_effort", type_="check"
-        )
+        batch.drop_constraint("ck_er_user_configs_reasoning_effort", type_="check")
         batch.drop_column("report_reasoning_effort")

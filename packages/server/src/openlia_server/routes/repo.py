@@ -242,9 +242,7 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> None:
-        svc.unsave_v2_run_from_repo(
-            db, user_id=user.id, pipeline_run_id=pipeline_run_id
-        )
+        svc.unsave_v2_run_from_repo(db, user_id=user.id, pipeline_run_id=pipeline_run_id)
 
     @router.get("/v2-runs", response_model=RepoV2SavedListOut)
     def list_v2_saved_ep(
@@ -268,9 +266,7 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
         user: User = require_auth,
     ) -> RepoItemOut:
         try:
-            item = svc.save_v3_report_to_repo(
-                db, user_id=user.id, v3_report_id=body.v3_report_id
-            )
+            item = svc.save_v3_report_to_repo(db, user_id=user.id, v3_report_id=body.v3_report_id)
         except LookupError as exc:
             raise HTTPException(
                 status_code=404,
@@ -284,9 +280,7 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> None:
-        svc.unsave_v3_report_from_repo(
-            db, user_id=user.id, v3_report_id=v3_report_id
-        )
+        svc.unsave_v3_report_from_repo(db, user_id=user.id, v3_report_id=v3_report_id)
 
     @router.get("/v3-runs", response_model=RepoV3SavedListOut)
     def list_v3_saved_ep(

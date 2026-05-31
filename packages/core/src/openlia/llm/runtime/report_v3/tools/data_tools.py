@@ -66,9 +66,7 @@ def _wrap(tool: ResearchTool, ledger: CitationLedger) -> ResearchTool:
         except ToolExecutionError:
             raise
         except Exception as exc:
-            raise ToolExecutionError(
-                f"{tool.name} failed: {exc!s}"
-            ) from exc
+            raise ToolExecutionError(f"{tool.name} failed: {exc!s}") from exc
 
         entry = ledger.append(
             tool_name=tool.name,

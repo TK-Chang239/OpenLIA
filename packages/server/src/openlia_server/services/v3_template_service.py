@@ -14,11 +14,10 @@ template-loading code path.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-
-import re
 
 from openlia.llm.runtime.report_v2_3.templates.spec import SectionSpec
 from openlia.llm.runtime.report_v3 import TemplateSpec
@@ -27,7 +26,6 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.report_v3 import ReportV3Template
 from openlia_server.services.template_parser import ParsedTemplate, parse_template
-
 
 _SLUG_SAFE_RE = re.compile(r"[^a-z0-9_]")
 
@@ -75,9 +73,7 @@ def list_templates(*, db: DBSession, user_id: str) -> list[TemplateSummary]:
     """All built-ins + this user's non-deleted uploads, name-sorted."""
     stmt = select(ReportV3Template).where(ReportV3Template.deleted_at.is_(None))
     rows = db.execute(stmt).scalars().all()
-    visible = [
-        row for row in rows if row.is_builtin or row.user_id == user_id
-    ]
+    visible = [row for row in rows if row.is_builtin or row.user_id == user_id]
     visible.sort(key=lambda r: (not r.is_builtin, r.name.lower()))
     return [
         TemplateSummary(
@@ -119,8 +115,7 @@ def _compile_v3_template_spec(
     doc_fm = parsed.document_frontmatter or {}
     name = str(doc_fm.get("name") or default_name).strip() or default_name
     shape_description = str(
-        doc_fm.get("shape_description")
-        or f"{name} — user-uploaded equity research template."
+        doc_fm.get("shape_description") or f"{name} — user-uploaded equity research template."
     ).strip()
     ticker_anchored = bool(doc_fm.get("ticker_anchored", True))
     default_length_raw = doc_fm.get("default_length")

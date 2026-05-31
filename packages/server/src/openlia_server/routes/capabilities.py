@@ -1,9 +1,9 @@
-"""GET /capabilities — expose the v2.2 capability manifest to the frontend."""
+"""GET /capabilities — expose the engine capability manifest to the frontend."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter
-from openlia.llm.runtime.report_v2.capability_manifest import load_manifest
+from openlia.llm.runtime.capability_manifest import load_manifest
 
 router = APIRouter()
 

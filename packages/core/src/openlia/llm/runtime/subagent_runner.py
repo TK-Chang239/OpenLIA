@@ -132,20 +132,10 @@ def _threading_caps_from_request(request: Any) -> tuple[int | None, int | None]:
     threading block declared in the template YAML.
     Returns (None, None) when no spec / no threading block (uses function defaults).
     """
-    spec_dict = getattr(request, "framework_template_spec", None)
-    if not isinstance(spec_dict, dict):
-        return None, None
-    try:
-        from openlia.llm.runtime.report_v2.template_v2.spec import TemplateSpecV2
-
-        spec = TemplateSpecV2.model_validate(spec_dict)
-        t = spec.threading
-        if t is None:
-            return None, None
-        return t.summary_word_cap, t.facts_cap
-    except (ValueError, TypeError, KeyError, AttributeError, LookupError):
-        # Narrowed from bare Exception: malformed spec must never crash the runner.
-        return None, None
+    # The template-driven threading caps were supplied by the removed v2 engine
+    # via framework_template_spec. No surviving caller sets that field, so the
+    # function defaults (returned as None, None) always apply.
+    return None, None
 
 
 class SubagentReportRunner:

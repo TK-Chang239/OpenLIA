@@ -74,10 +74,8 @@ export const DEPARTMENT_NAV: readonly NavEntry[] = [
     label: "Equity Research",
     labelKey: "nav.equity_research",
     icon: TrendingUp,
-    // v3 is the active engine. The /equity-research route (v1/v2.3
-    // monolith) is still reachable by direct link until those
-    // engines get removed; the sidebar always sends users to v3.
-    path: "/equity-research-v3",
+    // v3 is the sole engine, served at /equity-research.
+    path: "/equity-research",
     departmentId: "equity_research",
   },
   {

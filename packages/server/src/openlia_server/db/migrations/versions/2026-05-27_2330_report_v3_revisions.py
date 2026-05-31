@@ -74,9 +74,7 @@ def upgrade() -> None:
                 nullable=True,
             )
         )
-        batch.add_column(
-            sa.Column("version", sa.Integer(), nullable=False, server_default="1")
-        )
+        batch.add_column(sa.Column("version", sa.Integer(), nullable=False, server_default="1"))
         batch.drop_constraint(
             "uq_report_v3_sections_report_id_section_id",
             type_="unique",
@@ -101,9 +99,7 @@ def upgrade() -> None:
                 nullable=True,
             )
         )
-        batch.add_column(
-            sa.Column("version", sa.Integer(), nullable=False, server_default="1")
-        )
+        batch.add_column(sa.Column("version", sa.Integer(), nullable=False, server_default="1"))
         batch.drop_constraint(
             "uq_report_v3_charts_report_id_chart_id",
             type_="unique",

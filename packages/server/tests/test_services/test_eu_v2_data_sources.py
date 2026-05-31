@@ -44,8 +44,12 @@ def test_financial_available_via_connector(monkeypatch, db_session):
     monkeypatch.delenv("EODHD_API_KEY", raising=False)
     db_session.add(
         Connector(
-            id="c-eodhd", provider_id="eodhd", source="built_in",
-            category="financial", launch={}, secrets={"EODHD_API_KEY": "db"},
+            id="c-eodhd",
+            provider_id="eodhd",
+            source="built_in",
+            category="financial",
+            launch={},
+            secrets={"EODHD_API_KEY": "db"},
             status="validated",
         )
     )
@@ -57,14 +61,18 @@ def test_financial_available_via_connector(monkeypatch, db_session):
 def test_web_search_follows_model_capability(monkeypatch, db_session):
     monkeypatch.delenv("EODHD_API_KEY", raising=False)
     yes = eu_v2_data_sources.compute_data_sources(
-        db_session, user_id="local",
-        provider_kind="anthropic", model="claude-sonnet-4-6",
+        db_session,
+        user_id="local",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
     )
     assert yes.web_search.available is True
     assert yes.web_search.provider_label == "claude-sonnet-4-6"
     no = eu_v2_data_sources.compute_data_sources(
-        db_session, user_id="local",
-        provider_kind="anthropic", model="claude-haiku-4-5-20251001",
+        db_session,
+        user_id="local",
+        provider_kind="anthropic",
+        model="claude-haiku-4-5-20251001",
     )
     assert no.web_search.available is False
     assert no.web_search.unavailable_reason == "model_no_web_search"
@@ -72,16 +80,39 @@ def test_web_search_follows_model_capability(monkeypatch, db_session):
 
 def test_other_connectors_excludes_eodhd_lists_rest(monkeypatch, db_session):
     monkeypatch.delenv("EODHD_API_KEY", raising=False)
-    db_session.add_all([
-        Connector(id="c-eodhd", provider_id="eodhd", source="built_in",
-                  category="financial", launch={}, secrets={}, status="validated"),
-        Connector(id="c-fmp", provider_id="fmp", source="built_in",
-                  category="financial", launch={}, secrets={}, status="validated",
-                  display_name="FMP"),
-        Connector(id="c-news", provider_id="newsapi_ai", source="built_in",
-                  category="news", launch={}, secrets={}, status="pending",
-                  display_name="News"),
-    ])
+    db_session.add_all(
+        [
+            Connector(
+                id="c-eodhd",
+                provider_id="eodhd",
+                source="built_in",
+                category="financial",
+                launch={},
+                secrets={},
+                status="validated",
+            ),
+            Connector(
+                id="c-fmp",
+                provider_id="fmp",
+                source="built_in",
+                category="financial",
+                launch={},
+                secrets={},
+                status="validated",
+                display_name="FMP",
+            ),
+            Connector(
+                id="c-news",
+                provider_id="newsapi_ai",
+                source="built_in",
+                category="news",
+                launch={},
+                secrets={},
+                status="pending",
+                display_name="News",
+            ),
+        ]
+    )
     db_session.commit()
     ds = eu_v2_data_sources.compute_data_sources(db_session, user_id="local")
     names = {c.display_name for c in ds.other_connectors}
@@ -93,9 +124,14 @@ def test_web_search_uses_persisted_model_without_override(monkeypatch, db_sessio
     now = datetime.now(UTC)
     db_session.add(
         User(
-            id="local", email="local@test.example", display_name="local",
-            password_hash=None, is_admin=False, is_disabled=False,
-            created_at=now, updated_at=now,
+            id="local",
+            email="local@test.example",
+            display_name="local",
+            password_hash=None,
+            is_admin=False,
+            is_disabled=False,
+            created_at=now,
+            updated_at=now,
         )
     )
     db_session.flush()
