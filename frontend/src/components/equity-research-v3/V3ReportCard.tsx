@@ -351,7 +351,7 @@ function StatusPill({
         data-testid="er-v3-report-card-revising"
         className={`${base} border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-secondary]`}
       >
-        <span aria-hidden="true" className="h-[5px] w-[5px] animate-pulse rounded-full bg-[--color-text-secondary]" />
+        <span aria-hidden="true" className="h-[5px] w-[5px] motion-safe:animate-pulse rounded-full bg-[--color-text-secondary]" />
         Revising
       </span>
     );
