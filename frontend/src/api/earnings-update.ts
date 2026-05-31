@@ -36,26 +36,25 @@ export interface EuSettings {
   language: string;
   length: ReportLength;
   reasoning_effort: ReasoningEffort;
-  financial_enabled: boolean;
-  calendar_enabled: boolean;
+  enabled_provider_ids: string[];
   web_search_enabled: boolean;
   instructions_id: string | null;
 }
 
-export interface DataSourceSlot {
+export type DataSourceCategory = "financial" | "news" | "social" | "web_search";
+export type DataSourceRouting = "curated" | "dispatcher" | "model_native";
+
+export interface DataSource {
+  key: string;
+  display_name: string;
+  category: DataSourceCategory;
+  routing: DataSourceRouting;
   available: boolean;
-  provider_label: string | null;
+  enabled: boolean;
   unavailable_reason: string | null;
 }
-export interface OtherConnector {
-  display_name: string;
-  category: string;
-}
 export interface DataSourcesInfo {
-  financial: DataSourceSlot;
-  earnings_calendar: DataSourceSlot;
-  web_search: DataSourceSlot;
-  other_connectors: OtherConnector[];
+  sources: DataSource[];
 }
 
 export const getEuDataSources = (

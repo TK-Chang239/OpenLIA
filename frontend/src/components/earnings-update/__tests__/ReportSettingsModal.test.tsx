@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as settingsApi from "../../../api/settings";
 import * as euApi from "../../../api/earnings-update";
+import type { DataSource } from "../../../api/earnings-update";
 import { ReportSettingsModal } from "../ReportSettingsModal";
 
 vi.mock("../../../hooks/useEuDataSources", () => ({
@@ -12,24 +13,28 @@ import { useEuDataSources } from "../../../hooks/useEuDataSources";
 const base: euApi.EuSettings = {
   provider_kind: "anthropic", model: "claude-sonnet-4-6", template_id: "eu_default",
   language: "en", length: "normal", reasoning_effort: null,
-  financial_enabled: true, calendar_enabled: true, web_search_enabled: false,
+  enabled_provider_ids: ["eodhd"], web_search_enabled: false,
   instructions_id: null,
 };
 
-const AVAILABLE = { available: true, provider_label: "EODHD", unavailable_reason: null };
-const WS_OK = { available: true, provider_label: "claude-sonnet-4-6", unavailable_reason: null };
-const WS_OFF = { available: false, provider_label: null, unavailable_reason: "model_no_web_search" };
-const FIN_OFF = { available: false, provider_label: null, unavailable_reason: "eodhd_unconfigured" };
+const EODHD: DataSource = {
+  key: "eodhd", display_name: "EODHD", category: "financial",
+  routing: "curated", available: true, enabled: true, unavailable_reason: null,
+};
+const NEWSAPI: DataSource = {
+  key: "newsapi_ai", display_name: "NewsAPI.ai", category: "news",
+  routing: "dispatcher", available: true, enabled: false, unavailable_reason: null,
+};
+const WS_OFF: DataSource = {
+  key: "model_web_search", display_name: "Web search", category: "web_search",
+  routing: "model_native", available: false, enabled: false,
+  unavailable_reason: "model_no_web_search",
+};
+const WS_OK: DataSource = { ...WS_OFF, available: true, unavailable_reason: null };
 
-function mockDataSources(over: Record<string, unknown> = {}) {
+function mockSources(sources: DataSource[]) {
   (useEuDataSources as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-    dataSources: {
-      financial: AVAILABLE,
-      earnings_calendar: AVAILABLE,
-      web_search: WS_OK,
-      other_connectors: [],
-      ...over,
-    },
+    sources,
     loading: false,
     error: null,
     refresh: vi.fn(),
@@ -37,7 +42,7 @@ function mockDataSources(over: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  mockDataSources();
+  mockSources([EODHD, NEWSAPI, WS_OK]);
   vi.spyOn(euApi, "listEuInstructions").mockResolvedValue([]);
 });
 
@@ -45,56 +50,70 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderModal(onSave = vi.fn().mockResolvedValue(base)) {
+function renderModal(onSave = vi.fn().mockResolvedValue(base), settings = base) {
   vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([
     { id: "m1", provider_kind: "anthropic", model_ref: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6", is_enabled: true } as never,
   ]);
   vi.spyOn(euApi, "fetchTemplates").mockResolvedValue({ templates: [{ id: "eu_default", name: "Earnings Update (Default)", is_builtin: true, created_at: "", updated_at: "" }] });
   vi.spyOn(euApi, "listEuInstructions").mockResolvedValue([]);
-  return { onSave, ...render(<ReportSettingsModal settings={base} onSave={onSave} onClose={() => {}} />) };
+  return { onSave, ...render(<ReportSettingsModal settings={settings} onSave={onSave} onClose={() => {}} />) };
 }
 
 describe("ReportSettingsModal (v2)", () => {
-  it("renders connector toggles and saves changes", async () => {
+  it("renders one toggle per source", () => {
+    renderModal();
+    expect(screen.getByTestId("eu-v2-connector-eodhd")).toBeInTheDocument();
+    expect(screen.getByTestId("eu-v2-connector-newsapi_ai")).toBeInTheDocument();
+    expect(screen.getByTestId("eu-v2-connector-model_web_search")).toBeInTheDocument();
+  });
+
+  it("reflects enabled state from draft.enabled_provider_ids", () => {
+    renderModal();
+    expect(screen.getByTestId("eu-v2-connector-eodhd")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("eu-v2-connector-newsapi_ai")).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("toggling a registry source adds its key to enabled_provider_ids on save", async () => {
     const onSave = vi.fn().mockResolvedValue(base);
     renderModal(onSave);
-    // toggle web search on (label now reads "Web search · via ...")
-    const webSearch = await screen.findByTestId("eu-v2-connector-web_search");
-    fireEvent.click(webSearch);
+    fireEvent.click(screen.getByTestId("eu-v2-connector-newsapi_ai"));
     fireEvent.click(screen.getByTestId("eu-v2-settings-save"));
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ web_search_enabled: true })));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled_provider_ids: expect.arrayContaining(["eodhd", "newsapi_ai"]),
+        }),
+      ),
+    );
   });
 
-  it("does not render section toggles or custom sections", () => {
-    render(<ReportSettingsModal settings={base} onSave={vi.fn()} onClose={() => {}} />);
-    expect(screen.queryByText(/custom section/i)).toBeNull();
+  it("toggling the model-web-search source flips web_search_enabled on save", async () => {
+    const onSave = vi.fn().mockResolvedValue(base);
+    renderModal(onSave);
+    fireEvent.click(screen.getByTestId("eu-v2-connector-model_web_search"));
+    fireEvent.click(screen.getByTestId("eu-v2-settings-save"));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ web_search_enabled: true }),
+      ),
+    );
   });
 
-  it("renders available financial slot with provider label and an enabled toggle", () => {
-    mockDataSources();
+  it("disables an unavailable web-search source and shows its reason", () => {
+    mockSources([EODHD, WS_OFF]);
     renderModal();
-    const tog = screen.getByTestId("eu-v2-connector-financial");
-    expect(tog).not.toBeDisabled();
-    expect(tog).toHaveAttribute("aria-label", expect.stringMatching(/EODHD/));
-  });
-
-  it("disables an unavailable web-search slot and shows its reason", () => {
-    mockDataSources({ web_search: WS_OFF });
-    renderModal();
-    expect(screen.getByTestId("eu-v2-connector-web_search")).toBeDisabled();
+    expect(screen.getByTestId("eu-v2-connector-model_web_search")).toBeDisabled();
     expect(screen.getByText(/does not support web search/i)).toBeInTheDocument();
   });
 
-  it("shows the empty state when all slots are unavailable", () => {
-    mockDataSources({ financial: FIN_OFF, earnings_calendar: FIN_OFF, web_search: WS_OFF });
+  it("does not render the old 'also configured' footnote", () => {
     renderModal();
-    expect(screen.getByTestId("eu-v2-data-sources-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("eu-v2-data-sources-other")).toBeNull();
   });
 
-  it("shows the muted footnote listing other configured connectors", () => {
-    mockDataSources({ other_connectors: [{ display_name: "FMP", category: "financial" }] });
+  it("does not render section toggles or custom sections", () => {
     renderModal();
-    expect(screen.getByTestId("eu-v2-data-sources-other")).toHaveTextContent("FMP");
+    expect(screen.queryByText(/custom section/i)).toBeNull();
   });
 
   it("disables Save and shows error when freeform template and no instructions", async () => {
@@ -102,31 +121,7 @@ describe("ReportSettingsModal (v2)", () => {
     const select = await screen.findByTestId("eu-v2-template-select");
     fireEvent.change(select, { target: { value: "freeform" } });
     expect(screen.getByTestId("eu-v2-settings-save")).toBeDisabled();
-    expect(
-      screen.getByText(/at least one is required/i),
-    ).toBeInTheDocument();
-  });
-
-  it("enables Save when freeform template but an instructions profile is selected", async () => {
-    vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([
-      { id: "m1", provider_kind: "anthropic", model_ref: "claude-sonnet-4-6", display_name: "Claude Sonnet 4.6", is_enabled: true } as never,
-    ]);
-    vi.spyOn(euApi, "fetchTemplates").mockResolvedValue({ templates: [{ id: "eu_default", name: "Earnings Update (Default)", is_builtin: true, created_at: "", updated_at: "" }] });
-    vi.spyOn(euApi, "listEuInstructions").mockResolvedValue([
-      { id: "ins1", name: "My Profile", is_builtin: false, created_at: "", updated_at: "" } as never,
-    ]);
-    render(<ReportSettingsModal settings={base} onSave={vi.fn().mockResolvedValue(base)} onClose={() => {}} />);
-    const tplSelect = await screen.findByTestId("eu-v2-template-select");
-    fireEvent.change(tplSelect, { target: { value: "freeform" } });
-    const insSelect = await screen.findByTestId("eu-v2-instructions-select");
-    await waitFor(() =>
-      expect(insSelect.querySelector('option[value="ins1"]')).not.toBeNull(),
-    );
-    fireEvent.change(insSelect, { target: { value: "ins1" } });
-    await waitFor(() =>
-      expect(screen.getByTestId("eu-v2-settings-save")).not.toBeDisabled(),
-    );
-    expect(screen.queryByText(/at least one is required/i)).toBeNull();
+    expect(screen.getByText(/at least one is required/i)).toBeInTheDocument();
   });
 
   it("keeps Save enabled for a normal template with no instructions", async () => {

@@ -125,8 +125,7 @@ def test_settings_get_returns_defaults(client_eu_v2):
     r = client_eu_v2.get(f"{_BASE}/settings")
     assert r.status_code == 200
     body = r.json()
-    assert body["financial_enabled"] is True
-    assert body["calendar_enabled"] is True
+    assert body["enabled_provider_ids"] == ["eodhd"]
     assert body["web_search_enabled"] is False
 
 
@@ -140,8 +139,7 @@ def test_settings_put_roundtrip(client_eu_v2):
             "language": "en",
             "length": "concise",
             "reasoning_effort": "high",
-            "financial_enabled": False,
-            "calendar_enabled": False,
+            "enabled_provider_ids": [],
             "web_search_enabled": True,
         },
     )
@@ -149,7 +147,7 @@ def test_settings_put_roundtrip(client_eu_v2):
     body = r.json()
     assert body["length"] == "concise"
     assert body["web_search_enabled"] is True
-    assert body["financial_enabled"] is False
+    assert body["enabled_provider_ids"] == []
 
 
 def test_settings_put_freeform_without_instructions_rejected(client_eu_v2):
@@ -162,8 +160,7 @@ def test_settings_put_freeform_without_instructions_rejected(client_eu_v2):
             "language": "en",
             "length": "normal",
             "reasoning_effort": None,
-            "financial_enabled": True,
-            "calendar_enabled": True,
+            "enabled_provider_ids": ["eodhd"],
             "web_search_enabled": False,
             "instructions_id": None,
         },
@@ -295,23 +292,53 @@ def test_data_sources_503_when_disabled(client_eu_v2_disabled):
     assert r.status_code == 503
 
 
-def test_data_sources_financial_unavailable_without_eodhd(client_eu_v2, monkeypatch):
+def _ds_by_key(body):
+    return {s["key"]: s for s in body["sources"]}
+
+
+def test_data_sources_eodhd_unavailable_without_eodhd(client_eu_v2, monkeypatch):
     monkeypatch.delenv("EODHD_API_KEY", raising=False)
     r = client_eu_v2.get(f"{_BASE}/data-sources")
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["financial"]["available"] is False
-    assert body["financial"]["unavailable_reason"] == "eodhd_unconfigured"
-    assert body["earnings_calendar"]["available"] is False
-    assert body["other_connectors"] == []
+    by_key = _ds_by_key(r.json())
+    eodhd = by_key["eodhd"]
+    assert eodhd["available"] is False
+    assert eodhd["routing"] == "curated"
+    assert eodhd["unavailable_reason"] == "eodhd_unconfigured"
+    assert "model_web_search" in by_key
 
 
-def test_data_sources_financial_available_with_env(client_eu_v2, monkeypatch):
+def test_data_sources_eodhd_available_with_env(client_eu_v2, monkeypatch):
     monkeypatch.setenv("EODHD_API_KEY", "k")
     r = client_eu_v2.get(f"{_BASE}/data-sources")
-    body = r.json()
-    assert body["financial"]["available"] is True
-    assert body["financial"]["provider_label"] == "EODHD"
+    eodhd = _ds_by_key(r.json())["eodhd"]
+    assert eodhd["available"] is True
+    assert eodhd["display_name"] == "EODHD"
+
+
+def test_data_sources_lists_validated_connectors(client_eu_v2, monkeypatch):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    from openlia_server.db.models.connectors import Connector
+
+    with session_mod.SessionLocal() as s:
+        s.add(
+            Connector(
+                id="c-news",
+                provider_id="newsapi_ai",
+                source="built_in",
+                category="news",
+                launch={},
+                secrets={},
+                status="validated",
+                display_name="News API",
+            )
+        )
+        s.commit()
+    r = client_eu_v2.get(f"{_BASE}/data-sources")
+    by_key = _ds_by_key(r.json())
+    assert "newsapi_ai" in by_key
+    assert by_key["newsapi_ai"]["routing"] == "dispatcher"
+    assert by_key["newsapi_ai"]["display_name"] == "News API"
 
 
 def test_data_sources_web_search_query_override(client_eu_v2, monkeypatch):
@@ -320,9 +347,9 @@ def test_data_sources_web_search_query_override(client_eu_v2, monkeypatch):
         f"{_BASE}/data-sources",
         params={"provider_kind": "anthropic", "model": "claude-sonnet-4-6"},
     )
-    body = r.json()
-    assert body["web_search"]["available"] is True
-    assert body["web_search"]["provider_label"] == "claude-sonnet-4-6"
+    ws = _ds_by_key(r.json())["model_web_search"]
+    assert ws["available"] is True
+    assert ws["routing"] == "model_native"
 
 
 def test_resolve_eu_transports_bridges_connector_key(client_eu_v2, monkeypatch):

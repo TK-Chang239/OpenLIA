@@ -95,8 +95,7 @@ class SettingsOut(BaseModel):
     language: str
     length: str
     reasoning_effort: str | None
-    financial_enabled: bool
-    calendar_enabled: bool
+    enabled_provider_ids: list[str]
     web_search_enabled: bool
     instructions_id: str | None
 
@@ -109,22 +108,18 @@ class InstructionsOut(BaseModel):
     updated_at: datetime
 
 
-class DataSourceSlotOut(BaseModel):
+class DataSourceOut(BaseModel):
+    key: str
+    display_name: str
+    category: str
+    routing: str
     available: bool
-    provider_label: str | None
+    enabled: bool
     unavailable_reason: str | None
 
 
-class OtherConnectorOut(BaseModel):
-    display_name: str
-    category: str
-
-
 class DataSourcesOut(BaseModel):
-    financial: DataSourceSlotOut
-    earnings_calendar: DataSourceSlotOut
-    web_search: DataSourceSlotOut
-    other_connectors: list[OtherConnectorOut]
+    sources: list[DataSourceOut]
 
 
 class SettingsUpdateIn(BaseModel):
@@ -134,8 +129,7 @@ class SettingsUpdateIn(BaseModel):
     language: str = Field(..., min_length=1)
     length: str = Field(..., min_length=1)
     reasoning_effort: str | None = None
-    financial_enabled: bool
-    calendar_enabled: bool
+    enabled_provider_ids: list[str]
     web_search_enabled: bool
     instructions_id: str | None = None
 
@@ -274,11 +268,15 @@ class CancelOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _slot_out(slot: eu_v2_data_sources.DataSourceSlot) -> DataSourceSlotOut:
-    return DataSourceSlotOut(
-        available=slot.available,
-        provider_label=slot.provider_label,
-        unavailable_reason=slot.unavailable_reason,
+def _data_source_out(s: eu_v2_data_sources.DataSource) -> DataSourceOut:
+    return DataSourceOut(
+        key=s.key,
+        display_name=s.display_name,
+        category=s.category,
+        routing=s.routing,
+        available=s.available,
+        enabled=s.enabled,
+        unavailable_reason=s.unavailable_reason,
     )
 
 
@@ -462,8 +460,7 @@ def build_earnings_update_v2_router(
             language=dto.language,
             length=dto.length,
             reasoning_effort=dto.reasoning_effort,
-            financial_enabled=dto.financial_enabled,
-            calendar_enabled=dto.calendar_enabled,
+            enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
             instructions_id=dto.instructions_id,
         )
@@ -480,15 +477,7 @@ def build_earnings_update_v2_router(
         ds = eu_v2_data_sources.compute_data_sources(
             db, user_id=user.id, provider_kind=provider_kind, model=model
         )
-        return DataSourcesOut(
-            financial=_slot_out(ds.financial),
-            earnings_calendar=_slot_out(ds.earnings_calendar),
-            web_search=_slot_out(ds.web_search),
-            other_connectors=[
-                OtherConnectorOut(display_name=c.display_name, category=c.category)
-                for c in ds.other_connectors
-            ],
-        )
+        return DataSourcesOut(sources=[_data_source_out(s) for s in ds.sources])
 
     @router.put("/settings", response_model=SettingsOut)
     def put_settings(
@@ -513,8 +502,7 @@ def build_earnings_update_v2_router(
                 language=payload.language,
                 length=payload.length,
                 reasoning_effort=payload.reasoning_effort,
-                financial_enabled=payload.financial_enabled,
-                calendar_enabled=payload.calendar_enabled,
+                enabled_provider_ids=payload.enabled_provider_ids,
                 web_search_enabled=payload.web_search_enabled,
                 instructions_id=payload.instructions_id,
             )
@@ -529,8 +517,7 @@ def build_earnings_update_v2_router(
             language=dto.language,
             length=dto.length,
             reasoning_effort=dto.reasoning_effort,
-            financial_enabled=dto.financial_enabled,
-            calendar_enabled=dto.calendar_enabled,
+            enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
             instructions_id=dto.instructions_id,
         )

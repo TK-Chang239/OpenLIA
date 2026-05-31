@@ -9,6 +9,9 @@ release it is covering and which tools it may call before it calls any.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
+
 from .schemas import (
     EnabledConnectors,
     Language,
@@ -31,7 +34,23 @@ _LENGTH_TARGETS: dict[ReportLength, str] = {
 }
 
 
-def build_system_prompt(request: RunRequest) -> str:
+@dataclass(frozen=True)
+class ConnectorPromptInfo:
+    """One enabled dispatcher connector's tools, for the prompt block.
+
+    ``label`` is the provider label (e.g. ``"newsapi_ai"``); ``tools`` is
+    a tuple of ``(tool_name, description)`` pairs the model may call.
+    """
+
+    label: str
+    tools: tuple[tuple[str, str], ...]
+
+
+def build_system_prompt(
+    request: RunRequest,
+    *,
+    connector_tools: Sequence[ConnectorPromptInfo] = (),
+) -> str:
     """Compose the EU v2 system prompt for one run.
 
     Two structural modes, decided by whether the template carries any
@@ -54,7 +73,7 @@ def build_system_prompt(request: RunRequest) -> str:
         instructions_block=_render_instructions_block(request.instructions),
         trigger_block=_render_trigger_block(request.trigger_context),
         structure_block=_render_structure_block(template),
-        connectors_block=_render_connectors_block(request.enabled_connectors),
+        connectors_block=_render_connectors_block(request.enabled_connectors, connector_tools),
     )
 
 
@@ -136,7 +155,10 @@ human-readable `title`. Write at least one section before calling
 `finalize`."""
 
 
-def _render_connectors_block(connectors: EnabledConnectors) -> str:
+def _render_connectors_block(
+    connectors: EnabledConnectors,
+    connector_tools: Sequence[ConnectorPromptInfo] = (),
+) -> str:
     """List the tool groups available this run.
 
     When all connectors are off, state explicitly that no data tools are
@@ -144,17 +166,19 @@ def _render_connectors_block(connectors: EnabledConnectors) -> str:
     knowledge rather than waiting on a disabled tool.
     """
     available: list[str] = []
-    if connectors.financial:
+    if connectors.eodhd:
         available.append(
-            "  - Financial data (EODHD): `get_fundamentals`, "
-            "`get_historical_prices`, `get_company_news`. Pull reported "
-            "line items, price action, and recent headlines."
+            "  - Financial data & earnings calendar (EODHD): "
+            "`get_fundamentals`, `get_historical_prices`, "
+            "`get_company_news`, `get_earnings_calendar`. Pull reported "
+            "line items, price action, and recent headlines; confirm the "
+            "release and pull consensus estimates to score the print "
+            "against."
         )
-    if connectors.earnings_calendar:
+    for info in connector_tools:
+        tool_lines = "\n".join(f"    - {name}: {description}" for name, description in info.tools)
         available.append(
-            "  - Earnings calendar (EODHD): `get_earnings_calendar`. "
-            "Confirm the release and pull consensus estimates to score "
-            "the print against."
+            f"  - {info.label} (additional connector tools you may call for context):\n{tool_lines}"
         )
     if connectors.web_search:
         available.append(
