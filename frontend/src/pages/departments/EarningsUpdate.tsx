@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Briefcase, Settings as SettingsIcon } from "lucide-react";
+import {
+  Briefcase,
+  FileBarChart,
+  Search,
+  Settings as SettingsIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { deleteRun, type RunSummary } from "../../api/earnings-update";
@@ -7,20 +12,20 @@ import { WatchlistModal } from "../../components/earnings-update/WatchlistModal"
 import { EUCabinetView } from "../../components/earnings-update/EUCabinetView";
 import { OnDemandReportModal } from "../../components/earnings-update/OnDemandReportModal";
 import { ReportSettingsModal } from "../../components/earnings-update/ReportSettingsModal";
+import { EuCalendar } from "../../components/earnings-update/calendar/EuCalendar";
 import { EuBigCard } from "../../components/earnings-update/feed/EuBigCard";
 import { EuEmptyPage } from "../../components/earnings-update/feed/EuEmptyPage";
 import {
   EuFeedSection,
   EuSectionEmpty,
 } from "../../components/earnings-update/feed/EuFeedSection";
-import { EuFilterStrip } from "../../components/earnings-update/feed/EuFilterStrip";
 import { EuHero } from "../../components/earnings-update/feed/EuHero";
 import { EuReportRow } from "../../components/earnings-update/feed/EuReportRow";
 import { EuUpNextCard } from "../../components/earnings-update/feed/EuUpNextCard";
+import { EuViewToggle, type EuView } from "../../components/earnings-update/feed/EuViewToggle";
 import {
-  applyFilter,
   groupReports,
-  type FeedFilter,
+  searchReports,
 } from "../../components/earnings-update/feed/feedHelpers";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
 import { useEuRuns } from "../../hooks/useEuRuns";
@@ -75,7 +80,7 @@ export default function EarningsUpdate() {
   const [onDemandOpen, setOnDemandOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [live, setLive] = useState<LiveCard | null>(null);
-  const [filter, setFilter] = useState<FeedFilter>("all");
+  const [view, setView] = useState<EuView>("stream");
   const [search, setSearch] = useState("");
 
   const fv = useFileViewer();
@@ -107,20 +112,15 @@ export default function EarningsUpdate() {
     void refreshRuns();
   }, [refreshWatchlist, refreshRuns]);
 
-  // When a live run completes, refresh the feed so the finished report
-  // appears in the regular list, then keep the live card linkable.
   useEffect(() => {
     if (stream.status === "completed") {
       void refreshRuns();
     }
   }, [stream.status, refreshRuns]);
 
-  const filtered = useMemo(
-    () => applyFilter(runs, filter, { watchlist: entries, search }),
-    [runs, filter, entries, search],
-  );
-
+  const filtered = useMemo(() => searchReports(runs, search), [runs, search]);
   const groups = useMemo(() => groupReports(filtered), [filtered]);
+  const searching = search.trim().length > 0;
 
   const todayReports = useMemo(
     () =>
@@ -143,6 +143,24 @@ export default function EarningsUpdate() {
       return !Number.isNaN(ts) && now - ts < WEEK_MS;
     }).length;
   }, [runs]);
+
+  const upcomingThisWeek = useMemo(() => {
+    const now = Date.now();
+    return schedule.filter((s) => {
+      if (s.status !== "pending") return false;
+      const ts = new Date(s.scheduled_run_at).getTime();
+      return !Number.isNaN(ts) && ts - now < WEEK_MS && ts >= now;
+    }).length;
+  }, [schedule]);
+
+  const liveCount = useMemo(() => {
+    // Exclude the active live card's run so it isn't counted twice once it
+    // shows up in the runs list as "running".
+    const running = runs.filter(
+      (r) => r.status === "running" && r.report_id !== live?.reportId,
+    ).length;
+    return running + (live ? 1 : 0);
+  }, [runs, live]);
 
   const disabled = runsDisabled || settingsDisabled;
   const hasError = Boolean(watchlistError || runsError);
@@ -176,17 +194,36 @@ export default function EarningsUpdate() {
 
   return (
     <div className="flex flex-col h-full">
-      <header className="h-[52px] flex items-center gap-3.5 px-6 flex-shrink-0 border-b border-[--color-border-subtle]">
+      <header className="h-[52px] flex items-center gap-3 px-6 flex-shrink-0 border-b border-[--color-border-subtle]">
         <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
           {t("earnings.title")}
         </h1>
         <div className="flex-1" />
+        {liveCount > 0 ? (
+          <span
+            data-testid="eu-live-pill"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[--color-accent-subtle] font-mono text-[10px] tracking-[0.08em] uppercase text-[--color-feedback-success]"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] animate-live-pulse" />
+            {t("earnings.live_pill", { count: liveCount })}
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={() => setWatchlistOpen(true)}
           className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal] text-[12.5px]"
         >
           <Briefcase size={13} /> {t("earnings.watchlist")}
+          <span className="font-mono text-[10px] text-[--color-text-tertiary]">
+            {entries.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setOnDemandOpen(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] hover:bg-[--color-accent-hover] transition-colors duration-[--duration-normal] text-[12.5px] font-medium"
+        >
+          <FileBarChart size={13} /> {t("earnings.generate_report")}
         </button>
         <button
           type="button"
@@ -238,17 +275,12 @@ export default function EarningsUpdate() {
               <div className="animate-feed-fade-up">
                 <EuHero
                   reportsThisWeek={null}
-                  beats={null}
-                  misses={null}
-                  avgSurprise={null}
-                  avgLatency={null}
+                  trackedTickers={null}
+                  upcomingThisWeek={null}
                   watchlistEmpty
                 />
               </div>
-              <div
-                className="animate-feed-fade-up"
-                style={{ animationDelay: "120ms" }}
-              >
+              <div className="animate-feed-fade-up" style={{ animationDelay: "120ms" }}>
                 <EuEmptyPage onOpenWatchlist={() => setWatchlistOpen(true)} />
               </div>
             </>
@@ -257,143 +289,151 @@ export default function EarningsUpdate() {
               <div className="animate-feed-fade-up">
                 <EuHero
                   reportsThisWeek={runs.length === 0 ? null : reportsThisWeek}
-                  beats={null}
-                  misses={null}
-                  avgSurprise={null}
-                  avgLatency={null}
+                  trackedTickers={entries.length}
+                  upcomingThisWeek={upcomingThisWeek}
                   watchlistEmpty={entries.length === 0}
                 />
               </div>
+
               <div
-                className="animate-feed-fade-up"
+                className="animate-feed-fade-up flex items-center gap-2 flex-wrap mb-[22px]"
                 style={{ animationDelay: "80ms" }}
               >
-                <EuFilterStrip
-                  filter={filter}
-                  onFilterChange={setFilter}
-                  search={search}
-                  onSearchChange={setSearch}
-                  onAdHoc={() => setOnDemandOpen(true)}
-                />
-              </div>
-
-              <div
-                className="animate-feed-fade-up"
-                style={{ animationDelay: "160ms" }}
-              >
-                <EuFeedSection
-                  label={t("earnings.today")}
-                  count={todayReports.length + (live ? 1 : 0)}
-                >
-                  {live ? (
-                    <div className="mb-2">
-                      <EuBigCard
-                        ticker={live.ticker}
-                        title={liveTitle}
-                        status={stream.status === "completed" ? "complete" : "streaming"}
-                        reportId={stream.status === "completed" ? live.reportId : null}
-                        onOpen={openReport}
-                      />
-                    </div>
-                  ) : null}
-                  {heroToday ? (
-                    <div className="mb-2">
-                      <EuBigCard
-                        ticker={heroToday.ticker}
-                        title={heroToday.subject}
-                        stamp={formatHeroStamp(heroToday.created_at)}
-                        status="complete"
-                        reportId={heroToday.report_id}
-                        onOpen={openReport}
-                      />
-                    </div>
-                  ) : null}
-                  {todayReports.length === 0 && !live ? (
-                    <EuSectionEmpty
-                      message={
-                        filter === "all"
-                          ? t("earnings.no_prints_today")
-                          : t("earnings.no_matching_prints_today")
-                      }
+                <EuViewToggle view={view} onChange={setView} />
+                <div className="flex-1" />
+                {view === "stream" ? (
+                  <div className="inline-flex items-center gap-2 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-[--color-bg-elevated] min-w-[220px]">
+                    <Search size={13} className="text-[--color-text-tertiary]" />
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder={t("earnings.feed.search_placeholder")}
+                      aria-label={t("earnings.feed.search_aria")}
+                      className="border-0 bg-transparent outline-none text-[13px] text-[--color-text-primary] w-full placeholder:text-[--color-text-tertiary]"
                     />
-                  ) : null}
-                  {restToday.length > 0 ? (
-                    <div className="flex flex-col gap-2">
-                      {restToday.map((r) => (
-                        <EuReportRow
-                          key={r.report_id}
-                          report={r}
-                          onOpen={openReport}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </EuFeedSection>
+                  </div>
+                ) : null}
               </div>
 
-              <div
-                className="animate-feed-fade-up"
-                style={{ animationDelay: "240ms" }}
-              >
-                <EuFeedSection
-                  label={t("earnings.up_next_24h")}
-                  count={upNext.length}
-                >
-                  {upNext.length === 0 ? (
-                    <EuSectionEmpty
-                      message={t("earnings.no_upcoming_earnings")}
-                    />
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {upNext.map((u) => (
-                        <EuUpNextCard key={u.id} entry={u} />
-                      ))}
-                    </div>
-                  )}
-                </EuFeedSection>
-              </div>
-
-              <div
-                className="animate-feed-fade-up"
-                style={{ animationDelay: "320ms" }}
-              >
-                <EuFeedSection
-                  label={t("earnings.earlier_this_week")}
-                  count={groups.earlierThisWeek.length}
-                >
-                  {groups.earlierThisWeek.length === 0 ? (
-                    <EuSectionEmpty
-                      message={
-                        filter === "all"
-                          ? t("earnings.no_prints_this_week")
-                          : t("earnings.no_matching_prints")
-                      }
-                    />
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {groups.earlierThisWeek.map((r) => (
-                        <EuReportRow
-                          key={r.report_id}
-                          report={r}
-                          onOpen={openReport}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </EuFeedSection>
-              </div>
-
-              {runs.length > 0 ? (
-                <div className="mt-7 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setCabinetOpen(true)}
-                    className="font-mono text-[11px] tracking-[0.12em] uppercase text-[--color-text-secondary] hover:text-[--color-text-primary]"
-                  >
-                    {t("earnings.view_all_reports")}
-                  </button>
+              {view === "calendar" ? (
+                <div className="animate-feed-fade-up" style={{ animationDelay: "120ms" }}>
+                  <EuCalendar
+                    schedule={schedule}
+                    runs={runs}
+                    onOpenReport={openReport}
+                  />
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div
+                    className="animate-feed-fade-up"
+                    style={{ animationDelay: "160ms" }}
+                  >
+                    <EuFeedSection
+                      label={t("earnings.today")}
+                      count={todayReports.length + (live ? 1 : 0)}
+                    >
+                      {live ? (
+                        <div className="mb-2">
+                          <EuBigCard
+                            ticker={live.ticker}
+                            title={liveTitle}
+                            status={stream.status === "completed" ? "complete" : "streaming"}
+                            reportId={stream.status === "completed" ? live.reportId : null}
+                            onOpen={openReport}
+                          />
+                        </div>
+                      ) : null}
+                      {heroToday ? (
+                        <div className="mb-2">
+                          <EuBigCard
+                            ticker={heroToday.ticker}
+                            title={heroToday.subject}
+                            stamp={formatHeroStamp(heroToday.created_at)}
+                            status="complete"
+                            reportId={heroToday.report_id}
+                            onOpen={openReport}
+                          />
+                        </div>
+                      ) : null}
+                      {todayReports.length === 0 && !live ? (
+                        <EuSectionEmpty
+                          message={
+                            searching
+                              ? t("earnings.no_matching_prints_today")
+                              : t("earnings.no_prints_today")
+                          }
+                        />
+                      ) : null}
+                      {restToday.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                          {restToday.map((r) => (
+                            <EuReportRow key={r.report_id} report={r} onOpen={openReport} />
+                          ))}
+                        </div>
+                      ) : null}
+                    </EuFeedSection>
+                  </div>
+
+                  <div
+                    className="animate-feed-fade-up"
+                    style={{ animationDelay: "240ms" }}
+                  >
+                    <EuFeedSection
+                      label={t("earnings.up_next_24h")}
+                      count={upNext.length}
+                    >
+                      {upNext.length === 0 ? (
+                        <EuSectionEmpty message={t("earnings.no_upcoming_earnings")} />
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {upNext.map((u) => (
+                            <EuUpNextCard key={u.id} entry={u} />
+                          ))}
+                        </div>
+                      )}
+                    </EuFeedSection>
+                  </div>
+
+                  <div
+                    className="animate-feed-fade-up"
+                    style={{ animationDelay: "320ms" }}
+                  >
+                    <EuFeedSection
+                      label={t("earnings.earlier_this_week")}
+                      count={groups.earlierThisWeek.length}
+                    >
+                      {groups.earlierThisWeek.length === 0 ? (
+                        <EuSectionEmpty
+                          message={
+                            searching
+                              ? t("earnings.no_matching_prints")
+                              : t("earnings.no_prints_this_week")
+                          }
+                        />
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {groups.earlierThisWeek.map((r) => (
+                            <EuReportRow key={r.report_id} report={r} onOpen={openReport} />
+                          ))}
+                        </div>
+                      )}
+                    </EuFeedSection>
+                  </div>
+
+                  {runs.length > 0 ? (
+                    <div className="mt-7 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setCabinetOpen(true)}
+                        className="font-mono text-[11px] tracking-[0.12em] uppercase text-[--color-text-secondary] hover:text-[--color-text-primary]"
+                      >
+                        {t("earnings.view_all_reports")}
+                      </button>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </>
           )}
         </div>
