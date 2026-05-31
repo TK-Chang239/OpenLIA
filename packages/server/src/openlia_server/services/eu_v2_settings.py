@@ -28,8 +28,7 @@ class EuSettingsDTO:
     language: str
     length: str
     reasoning_effort: str | None
-    financial_enabled: bool
-    calendar_enabled: bool
+    enabled_provider_ids: frozenset[str]
     web_search_enabled: bool
     instructions_id: str | None
 
@@ -43,8 +42,7 @@ def _row_to_dto(row: EuV2Settings) -> EuSettingsDTO:
         language=row.language,
         length=row.length,
         reasoning_effort=row.reasoning_effort,
-        financial_enabled=row.financial_enabled,
-        calendar_enabled=row.calendar_enabled,
+        enabled_provider_ids=frozenset(row.enabled_provider_ids or []),
         web_search_enabled=row.web_search_enabled,
         instructions_id=row.instructions_id,
     )
@@ -62,8 +60,7 @@ def get_settings(db: Session, *, user_id: str) -> EuSettingsDTO:
             language=_DEFAULT_LANGUAGE,
             length=_DEFAULT_LENGTH,
             reasoning_effort=None,
-            financial_enabled=True,
-            calendar_enabled=True,
+            enabled_provider_ids=frozenset({"eodhd"}),
             web_search_enabled=False,
             instructions_id=None,
         )
@@ -80,8 +77,7 @@ def update_settings(
     language: str,
     length: str,
     reasoning_effort: str | None,
-    financial_enabled: bool,
-    calendar_enabled: bool,
+    enabled_provider_ids: frozenset[str] | list[str],
     web_search_enabled: bool,
     instructions_id: str | None = None,
 ) -> EuSettingsDTO:
@@ -97,6 +93,8 @@ def update_settings(
             f"reasoning_effort must be one of {valid_display}, got {reasoning_effort!r}"
         )
 
+    provider_ids_sorted = sorted(set(enabled_provider_ids))
+
     now = datetime.now(UTC)
     row = db.get(EuV2Settings, user_id)
     if row is None:
@@ -108,8 +106,7 @@ def update_settings(
             language=language,
             length=length,
             reasoning_effort=reasoning_effort,
-            financial_enabled=financial_enabled,
-            calendar_enabled=calendar_enabled,
+            enabled_provider_ids=provider_ids_sorted,
             web_search_enabled=web_search_enabled,
             instructions_id=instructions_id,
             created_at=now,
@@ -123,8 +120,7 @@ def update_settings(
         row.language = language
         row.length = length
         row.reasoning_effort = reasoning_effort
-        row.financial_enabled = financial_enabled
-        row.calendar_enabled = calendar_enabled
+        row.enabled_provider_ids = provider_ids_sorted
         row.web_search_enabled = web_search_enabled
         row.instructions_id = instructions_id
         row.updated_at = now

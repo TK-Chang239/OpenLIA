@@ -154,13 +154,11 @@ def build_run_request(
 
     eodhd_available = resolve_eodhd_api_key(db) is not None
     caps = capabilities_for(provider_kind=settings.provider_kind, model=settings.model)
-    provider_ids = (
-        frozenset({"eodhd"})
-        if (settings.financial_enabled or settings.calendar_enabled) and eodhd_available
-        else frozenset()
-    )
+    providers = set(settings.enabled_provider_ids)
+    if "eodhd" in providers and not eodhd_available:
+        providers.discard("eodhd")
     connectors = EnabledConnectors(
-        provider_ids=provider_ids,
+        provider_ids=frozenset(providers),
         web_search=settings.web_search_enabled and caps.web_search_native,
     )
     trigger_context = TriggerContext(

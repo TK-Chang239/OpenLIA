@@ -78,8 +78,7 @@ def test_build_run_request_uses_settings_and_trigger(db_session_with_seed):
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=True,
     )
     req = svc.build_run_request(
@@ -94,7 +93,7 @@ def test_build_run_request_uses_settings_and_trigger(db_session_with_seed):
         revenue_estimate=None,
     )
     assert req.provider_kind == "anthropic"
-    # calendar_enabled=True with EODHD available -> eodhd provider on
+    # eodhd provider enabled with EODHD available -> eodhd provider on
     assert req.enabled_connectors.eodhd is True
     assert req.enabled_connectors.web_search is True
     assert req.trigger_context.fiscal_period == "Q3 FY26"
@@ -112,8 +111,7 @@ def test_build_run_request_subject_falls_back_to_ticker(db_session_with_seed):
         language="en",
         length="normal",
         reasoning_effort="high",
-        financial_enabled=True,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=False,
     )
     req = svc.build_run_request(
@@ -150,8 +148,7 @@ def test_build_run_request_resolves_selected_instructions(db_session_with_seed):
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=False,
+        enabled_provider_ids=[],
         web_search_enabled=False,
         instructions_id=profile.id,
     )
@@ -179,8 +176,7 @@ def test_build_run_request_instructions_none_when_unset(db_session_with_seed):
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=False,
+        enabled_provider_ids=[],
         web_search_enabled=False,
     )
     req = svc.build_run_request(
@@ -215,8 +211,7 @@ def test_build_run_request_freeform_with_instructions(db_session_with_seed):
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=False,
+        enabled_provider_ids=[],
         web_search_enabled=False,
         instructions_id=profile.id,
     )
@@ -246,8 +241,7 @@ def test_build_run_request_freeform_without_instructions_raises(db_session_with_
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=False,
+        enabled_provider_ids=[],
         web_search_enabled=False,
         instructions_id=None,
     )
@@ -303,8 +297,7 @@ async def test_start_run_async_completes_and_persists(db_session_with_seed, db_s
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=False,
-        calendar_enabled=False,
+        enabled_provider_ids=[],
         web_search_enabled=False,
     )
     request = svc.build_run_request(
@@ -386,8 +379,7 @@ def test_build_run_request_gates_financial_off_without_eodhd(monkeypatch, db_ses
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=True,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=True,
     )
     req = eu_v2_run_service.build_run_request(
@@ -436,8 +428,7 @@ def test_build_run_request_gates_web_search_off_for_incapable_model(
         language="en",
         length="normal",
         reasoning_effort=None,
-        financial_enabled=True,
-        calendar_enabled=True,
+        enabled_provider_ids=["eodhd"],
         web_search_enabled=True,
     )
     req = eu_v2_run_service.build_run_request(

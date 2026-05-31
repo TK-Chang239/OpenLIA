@@ -125,8 +125,7 @@ def test_settings_get_returns_defaults(client_eu_v2):
     r = client_eu_v2.get(f"{_BASE}/settings")
     assert r.status_code == 200
     body = r.json()
-    assert body["financial_enabled"] is True
-    assert body["calendar_enabled"] is True
+    assert body["enabled_provider_ids"] == ["eodhd"]
     assert body["web_search_enabled"] is False
 
 
@@ -140,8 +139,7 @@ def test_settings_put_roundtrip(client_eu_v2):
             "language": "en",
             "length": "concise",
             "reasoning_effort": "high",
-            "financial_enabled": False,
-            "calendar_enabled": False,
+            "enabled_provider_ids": [],
             "web_search_enabled": True,
         },
     )
@@ -149,7 +147,7 @@ def test_settings_put_roundtrip(client_eu_v2):
     body = r.json()
     assert body["length"] == "concise"
     assert body["web_search_enabled"] is True
-    assert body["financial_enabled"] is False
+    assert body["enabled_provider_ids"] == []
 
 
 def test_settings_put_freeform_without_instructions_rejected(client_eu_v2):
@@ -162,8 +160,7 @@ def test_settings_put_freeform_without_instructions_rejected(client_eu_v2):
             "language": "en",
             "length": "normal",
             "reasoning_effort": None,
-            "financial_enabled": True,
-            "calendar_enabled": True,
+            "enabled_provider_ids": ["eodhd"],
             "web_search_enabled": False,
             "instructions_id": None,
         },

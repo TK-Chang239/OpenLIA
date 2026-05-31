@@ -95,8 +95,7 @@ class SettingsOut(BaseModel):
     language: str
     length: str
     reasoning_effort: str | None
-    financial_enabled: bool
-    calendar_enabled: bool
+    enabled_provider_ids: list[str]
     web_search_enabled: bool
     instructions_id: str | None
 
@@ -134,8 +133,7 @@ class SettingsUpdateIn(BaseModel):
     language: str = Field(..., min_length=1)
     length: str = Field(..., min_length=1)
     reasoning_effort: str | None = None
-    financial_enabled: bool
-    calendar_enabled: bool
+    enabled_provider_ids: list[str]
     web_search_enabled: bool
     instructions_id: str | None = None
 
@@ -462,8 +460,7 @@ def build_earnings_update_v2_router(
             language=dto.language,
             length=dto.length,
             reasoning_effort=dto.reasoning_effort,
-            financial_enabled=dto.financial_enabled,
-            calendar_enabled=dto.calendar_enabled,
+            enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
             instructions_id=dto.instructions_id,
         )
@@ -513,8 +510,7 @@ def build_earnings_update_v2_router(
                 language=payload.language,
                 length=payload.length,
                 reasoning_effort=payload.reasoning_effort,
-                financial_enabled=payload.financial_enabled,
-                calendar_enabled=payload.calendar_enabled,
+                enabled_provider_ids=payload.enabled_provider_ids,
                 web_search_enabled=payload.web_search_enabled,
                 instructions_id=payload.instructions_id,
             )
@@ -529,8 +525,7 @@ def build_earnings_update_v2_router(
             language=dto.language,
             length=dto.length,
             reasoning_effort=dto.reasoning_effort,
-            financial_enabled=dto.financial_enabled,
-            calendar_enabled=dto.calendar_enabled,
+            enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
             instructions_id=dto.instructions_id,
         )
