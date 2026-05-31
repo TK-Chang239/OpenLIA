@@ -171,4 +171,54 @@ describe("useV3RunStream", () => {
     expect(url).toBe("/api/departments/equity-research/v3/runs/run-1/cancel");
     expect(init.method).toBe("POST");
   });
+
+  it("counts citations from tool.completed frames that carry a source_id", async () => {
+    const { result } = renderHook(() => useV3RunStream("run-1"));
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
+    const source = FakeEventSource.instances[0];
+
+    act(() => {
+      source.dispatch("run.started", { subject: "RKLB.US", model: "x" });
+      source.dispatch("tool.completed", { turn: 0, tool_name: "web_search", ok: true, source_id: "web_1" });
+      source.dispatch("tool.completed", { turn: 1, tool_name: "calc", ok: true });
+      source.dispatch("tool.completed", { turn: 2, tool_name: "web_search", ok: true, source_id: "web_2" });
+    });
+
+    expect(result.current.citationsSeen).toBe(2);
+  });
+
+  it("tracks elapsedSeconds only after run.started and freezes it on a terminal frame", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-31T00:00:00Z"));
+    try {
+      const { result } = renderHook(() => useV3RunStream("run-1"));
+      const source = FakeEventSource.instances[0];
+
+      expect(result.current.elapsedSeconds).toBeNull();
+
+      act(() => {
+        source.dispatch("run.started", { subject: "RKLB.US", model: "x" });
+      });
+      act(() => {
+        vi.setSystemTime(new Date("2026-05-31T00:00:03Z"));
+        vi.advanceTimersByTime(3000);
+      });
+      expect(result.current.elapsedSeconds).toBeGreaterThanOrEqual(3);
+
+      act(() => {
+        vi.setSystemTime(new Date("2026-05-31T00:00:05Z"));
+        source.dispatch("run.completed", { section_count: 6, chart_count: 1, citation_count: 5 });
+      });
+      const frozen = result.current.elapsedSeconds;
+      expect(frozen).toBeGreaterThanOrEqual(5);
+
+      act(() => {
+        vi.setSystemTime(new Date("2026-05-31T00:00:09Z"));
+        vi.advanceTimersByTime(4000);
+      });
+      expect(result.current.elapsedSeconds).toBe(frozen);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
