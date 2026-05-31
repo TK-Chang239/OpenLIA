@@ -30,7 +30,7 @@ export function V3ActivityFeed({ events }: { events: V3Event[] }): JSX.Element {
         <ol className="m-0 flex list-none flex-col gap-[5px] p-0">
           {visible.map((e, idx) => (
             <li
-              key={`${e.type}-${ordered.length - visible.length + idx}`}
+              key={ordered.length - visible.length + idx}
               data-testid="er-v3-activity-row"
               className="flex items-baseline gap-[8px] font-mono text-[11px] leading-[1.5] text-[--color-text-secondary] motion-safe:animate-[cardIn_240ms_var(--ease-out)]"
             >
