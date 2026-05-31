@@ -77,13 +77,16 @@ def build_catalog(
     workspace: RunWorkspace,
     transports: EuDataTransports,
     enabled_connectors: EnabledConnectors,
+    dispatcher: object | None = None,
 ) -> ToolCatalog:
-    """Assemble the EU v2 catalog from the user's connector toggles.
+    """Assemble the EU v2 hybrid catalog from the user's connector toggles.
 
     Output tools (write_section, set_cover, emit_chart, finalize) are
-    always present. The EODHD data tools plus the earnings-calendar tool
-    are gated by ``enabled_connectors.eodhd``; native web search is
-    gated by ``enabled_connectors.web_search``.
+    always present. The curated EODHD data tools plus the earnings-calendar
+    tool are gated by ``enabled_connectors.eodhd``. Every other enabled
+    connector is routed through ``dispatcher`` (when provided) as
+    dispatcher-backed tools. Native web search is gated by
+    ``enabled_connectors.web_search``.
     """
     output = build_output_tools(workspace=workspace)
     core: list[ResearchTool] = [*output]
@@ -101,6 +104,17 @@ def build_catalog(
             build_earnings_calendar_tool(
                 ledger=ledger,
                 earnings_calendar=transports.earnings_calendar,
+            )
+        )
+
+    if dispatcher is not None:
+        from .dispatcher_tools import build_dispatcher_tools
+
+        core.extend(
+            build_dispatcher_tools(
+                ledger=ledger,
+                dispatcher=dispatcher,
+                enabled_provider_ids=enabled_connectors.provider_ids,
             )
         )
 
