@@ -872,6 +872,25 @@
       "pop_est_eps": "預估 EPS",
       "pop_est_rev": "營收",
       "pop_empty": "當日無財報"
+    },
+    "coverage": {
+      "title": "追蹤清單",
+      "eyebrow": "財報更新 · 追蹤",
+      "bucket_live": "進行中",
+      "bucket_soon": "即將公布",
+      "bucket_reported": "已公布",
+      "bucket_queued": "排程中",
+      "when_live": "進行中 · 財報會議中",
+      "when_done": "完成",
+      "when_awaiting": "等待排程",
+      "stat_tracked": "追蹤中",
+      "stat_this_week": "本週",
+      "stat_live": "進行中",
+      "open_report": "開啟報告",
+      "open_report_aria": "開啟 {{ticker}} 報告",
+      "empty": "尚未追蹤任何股票。在上方新增一檔以開始追蹤。",
+      "close_aria": "關閉追蹤面板",
+      "remove_aria": "將 {{ticker}} 從追蹤清單移除"
     }
   },
   "macro": {
