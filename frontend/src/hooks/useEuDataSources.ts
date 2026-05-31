@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { getEuDataSources, type DataSourcesInfo } from "../api/earnings-update";
+import { getEuDataSources, type DataSource } from "../api/earnings-update";
 
 export function useEuDataSources(providerKind: string, model: string) {
-  const [dataSources, setDataSources] = useState<DataSourcesInfo | null>(null);
+  const [sources, setSources] = useState<DataSource[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -11,7 +11,7 @@ export function useEuDataSources(providerKind: string, model: string) {
     setLoading(true);
     try {
       const info = await getEuDataSources({ provider_kind: providerKind, model });
-      setDataSources(info);
+      setSources(info.sources);
       setError(null);
     } catch (e) {
       setError(e as Error);
@@ -24,5 +24,5 @@ export function useEuDataSources(providerKind: string, model: string) {
     void refresh();
   }, [refresh]);
 
-  return { dataSources, loading, error, refresh };
+  return { sources, loading, error, refresh };
 }

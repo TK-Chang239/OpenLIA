@@ -6,7 +6,7 @@ import { useEuSettings } from "../useEuSettings";
 const base: api.EuSettings = {
   provider_kind: "anthropic", model: "claude-sonnet-4-6", template_id: "eu_default",
   language: "en", length: "normal", reasoning_effort: null,
-  financial_enabled: true, calendar_enabled: true, web_search_enabled: false,
+  enabled_provider_ids: ["eodhd"], web_search_enabled: false,
   instructions_id: null,
 };
 

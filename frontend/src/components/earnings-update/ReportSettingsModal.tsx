@@ -7,13 +7,13 @@
  * reasoning effort. Keeps the v1 modal chrome — Radix dialog, header,
  * scrollable body, footer Save/Cancel — for visual continuity.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
-  DataSourceSlot,
+  DataSource,
   EuInstructionsSummary,
   EuSettings,
   ReasoningEffort,
@@ -53,12 +53,14 @@ function Toggle({
   onClick,
   testId,
   label,
+  ariaLabel,
   disabled = false,
 }: {
   on: boolean;
   onClick: () => void;
   testId: string;
-  label: string;
+  label: ReactNode;
+  ariaLabel?: string;
   disabled?: boolean;
 }) {
   return (
@@ -77,7 +79,7 @@ function Toggle({
         type="button"
         role="switch"
         aria-checked={on}
-        aria-label={label}
+        aria-label={ariaLabel}
         data-testid={testId}
         disabled={disabled}
         onClick={disabled ? undefined : onClick}
@@ -105,7 +107,7 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [instructions, setInstructions] = useState<EuInstructionsSummary[]>([]);
   const { templates, upload, remove } = useEuTemplates();
-  const { dataSources } = useEuDataSources(draft.provider_kind, draft.model);
+  const { sources } = useEuDataSources(draft.provider_kind, draft.model);
 
   const refreshInstructions = useCallback(async () => {
     setInstructions(await listEuInstructions());
@@ -183,10 +185,6 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
       const sanitized: EuSettings = {
         ...draft,
         instructions_id: draft.instructions_id ?? null,
-        financial_enabled: draft.financial_enabled && !!dataSources?.financial.available,
-        calendar_enabled:
-          draft.calendar_enabled && !!dataSources?.earnings_calendar.available,
-        web_search_enabled: draft.web_search_enabled && !!dataSources?.web_search.available,
       };
       await onSave(sanitized);
       onClose();
@@ -195,43 +193,64 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
     }
   }
 
-  function slotLabel(
-    base: string,
-    slot: DataSourceSlot | undefined,
-    isWebSearch: boolean,
-  ): string {
-    if (!slot?.available || !slot.provider_label) return base;
-    const provider = isWebSearch
-      ? t("earnings.settings_modal.ds_via", { provider: slot.provider_label })
-      : slot.provider_label;
-    return `${base} · ${provider}`;
+  const isWebSearchSource = (s: DataSource) =>
+    s.routing === "model_native" || s.key === "model_web_search";
+
+  function sourceEnabled(s: DataSource): boolean {
+    return isWebSearchSource(s)
+      ? draft.web_search_enabled
+      : draft.enabled_provider_ids.includes(s.key);
   }
 
-  function reasonText(slot: DataSourceSlot | undefined): string | null {
-    if (!slot || slot.available || !slot.unavailable_reason) return null;
-    const key = `earnings.settings_modal.ds_reason_${slot.unavailable_reason}`;
+  function toggleSource(s: DataSource): void {
+    if (isWebSearchSource(s)) {
+      setDraft((d) => ({ ...d, web_search_enabled: !d.web_search_enabled }));
+      return;
+    }
+    setDraft((d) => {
+      const has = d.enabled_provider_ids.includes(s.key);
+      return {
+        ...d,
+        enabled_provider_ids: has
+          ? d.enabled_provider_ids.filter((k) => k !== s.key)
+          : [...d.enabled_provider_ids, s.key],
+      };
+    });
+  }
+
+  function reasonText(s: DataSource): string | null {
+    if (s.available || !s.unavailable_reason) return null;
+    const key = `earnings.settings_modal.ds_reason_${s.unavailable_reason}`;
     const resolved = t(key);
     // i18next returns the key itself when the translation is missing.
     return resolved !== key ? resolved : t("earnings.settings_modal.ds_reason_unknown");
   }
 
-  function renderSlot(
-    base: string,
-    slot: DataSourceSlot | undefined,
-    enabled: boolean,
-    onToggle: () => void,
-    testId: string,
-    isWebSearch = false,
-  ) {
-    const reason = reasonText(slot);
+  function categoryLabel(category: DataSource["category"]): string {
+    const key = `earnings.settings_modal.ds_category_${category}`;
+    const resolved = t(key);
+    return resolved !== key ? resolved : category;
+  }
+
+  function renderSource(s: DataSource) {
+    const reason = reasonText(s);
+    const label = (
+      <span className="flex items-center gap-2">
+        <span>{s.display_name}</span>
+        <span className="inline-flex items-center rounded-full bg-[--color-surface-hover] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] text-[--color-text-tertiary]">
+          {categoryLabel(s.category)}
+        </span>
+      </span>
+    );
     return (
-      <div key={testId}>
+      <div key={s.key}>
         <Toggle
-          on={enabled && !!slot?.available}
-          onClick={onToggle}
-          testId={testId}
-          label={slotLabel(base, slot, isWebSearch)}
-          disabled={!slot?.available}
+          on={sourceEnabled(s) && s.available}
+          onClick={() => toggleSource(s)}
+          testId={`eu-v2-connector-${s.key}`}
+          label={label}
+          ariaLabel={s.display_name}
+          disabled={!s.available}
         />
         {reason ? (
           <p className="px-4 pb-3 -mt-1 text-[12px] text-[--color-text-tertiary] leading-[1.4]">
@@ -409,10 +428,7 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
                 {t("earnings.settings_modal.connectors_hint")}
               </p>
-              {dataSources &&
-              !dataSources.financial.available &&
-              !dataSources.earnings_calendar.available &&
-              !dataSources.web_search.available ? (
+              {sources && sources.length === 0 ? (
                 <p
                   data-testid="eu-v2-data-sources-empty"
                   className="text-[13px] text-[--color-text-tertiary] leading-[1.5] border border-[--color-border-subtle] rounded-lg px-4 py-3"
@@ -421,46 +437,9 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
                 </p>
               ) : (
                 <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden divide-y divide-[--color-border-subtle]">
-                  {renderSlot(
-                    t("earnings.settings_modal.connector_financial"),
-                    dataSources?.financial,
-                    draft.financial_enabled,
-                    () =>
-                      setDraft((d) => ({ ...d, financial_enabled: !d.financial_enabled })),
-                    "eu-v2-connector-financial",
-                  )}
-                  {renderSlot(
-                    t("earnings.settings_modal.connector_calendar"),
-                    dataSources?.earnings_calendar,
-                    draft.calendar_enabled,
-                    () =>
-                      setDraft((d) => ({ ...d, calendar_enabled: !d.calendar_enabled })),
-                    "eu-v2-connector-calendar",
-                  )}
-                  {renderSlot(
-                    t("earnings.settings_modal.connector_web_search"),
-                    dataSources?.web_search,
-                    draft.web_search_enabled,
-                    () =>
-                      setDraft((d) => ({
-                        ...d,
-                        web_search_enabled: !d.web_search_enabled,
-                      })),
-                    "eu-v2-connector-web_search",
-                    true,
-                  )}
+                  {(sources ?? []).map((s) => renderSource(s))}
                 </div>
               )}
-              {dataSources && dataSources.other_connectors.length > 0 ? (
-                <p
-                  data-testid="eu-v2-data-sources-other"
-                  className="mt-3 text-[12px] text-[--color-text-tertiary] leading-[1.5]"
-                >
-                  {t("earnings.settings_modal.ds_other_configured", {
-                    names: dataSources.other_connectors.map((c) => c.display_name).join(", "),
-                  })}
-                </p>
-              ) : null}
             </section>
 
             <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
