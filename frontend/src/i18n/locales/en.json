@@ -872,6 +872,25 @@
       "pop_est_eps": "Est. EPS",
       "pop_est_rev": "Rev.",
       "pop_empty": "No earnings on this day"
+    },
+    "coverage": {
+      "title": "Tracking list",
+      "eyebrow": "Earnings Update · Coverage",
+      "bucket_live": "Live now",
+      "bucket_soon": "Reporting soon",
+      "bucket_reported": "Reported",
+      "bucket_queued": "Queued",
+      "when_live": "Live · Call in progress",
+      "when_done": "Done",
+      "when_awaiting": "Awaiting schedule",
+      "stat_tracked": "Tracked",
+      "stat_this_week": "This wk",
+      "stat_live": "Live now",
+      "open_report": "Open report",
+      "open_report_aria": "Open report for {{ticker}}",
+      "empty": "No tickers tracked yet. Add one above to start coverage.",
+      "close_aria": "Close coverage drawer",
+      "remove_aria": "Remove {{ticker}} from coverage"
     }
   },
   "macro": {
