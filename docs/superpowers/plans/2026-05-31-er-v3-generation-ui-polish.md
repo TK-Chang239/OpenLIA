@@ -1514,3 +1514,9 @@ git commit -m "fix(er-v3): generation UI polish — manual-pass adjustments"
 - **Backward compatibility:** `V3ReportCard.phase` defaults to `"ready"` and `detail` remains the ready-phase data source, so the original `V3ReportCard` tests pass unchanged.
 - **Type consistency:** `V3CardLive`/`V3CardPhase` (Task 3) match the `live` object built in `V3ChatThread` (Task 4) and the `stream` fields added in `useV3RunStream` (Task 1: `citationsSeen`, `elapsedSeconds`). `summarizePayload` is defined once (Task 2) and removed from `V3ChatThread` (Task 4).
 - **No engine changes:** all live data comes from existing SSE event types; `citationsSeen` derives from `tool.completed.source_id` already present in the stream.
+
+## Implementation deviations (recorded post-build)
+
+- **Content entrance scoped to a wrapper, not `nth-child`.** `<main data-om-shell="content">` has two direct children (the page-content wrapper and `<FileViewer />`). To avoid animating the FileViewer (which has its own entrance), `AppLayout` tags the inner wrapper `data-om-content` and `motion-shell.css` targets `[data-om-shell="content"] > [data-om-content]` with a single 260ms delay instead of the planned `> *` nth-child stagger.
+- **`will-change` dropped.** The planned `will-change: transform, opacity` on the sidebar rule was removed — browsers reliably promote layers on animation start, and an asymmetric hint on one of three shell elements added nothing.
+- **Task 7 stream-field wiring landed early.** Passing `citationsSeen`/`elapsedSeconds` from the page into `V3ChatThread` (Task 7 Step 1) was committed alongside the Task 4 follow-up to keep the typecheck green; only the `generating` registry publish remained for Task 7.
