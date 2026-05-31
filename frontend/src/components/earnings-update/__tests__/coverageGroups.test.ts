@@ -75,4 +75,15 @@ describe("coverageGroups", () => {
     const g = coverageGroups([], new Map(), [], NOW);
     expect(g.map((b) => b.key)).toEqual(["live", "soon", "reported", "queued"]);
   });
+
+  test("a failed run with no completed run → 'queued'", () => {
+    const g = coverageGroups([entry("GOOG")], new Map(), [run("GOOG", "failed")], NOW);
+    expect(bucket(g, "queued")?.items.map((i) => i.entry.ticker)).toEqual(["GOOG"]);
+  });
+
+  test("pending exactly 7 days out → 'queued' (boundary exclusive)", () => {
+    const byTicker = new Map([["AMZN", sched("AMZN", 7)]]);
+    const g = coverageGroups([entry("AMZN")], byTicker, [], NOW);
+    expect(bucket(g, "queued")?.items.map((i) => i.entry.ticker)).toEqual(["AMZN"]);
+  });
 });

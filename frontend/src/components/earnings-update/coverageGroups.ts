@@ -50,6 +50,7 @@ function classify(
 
   const completed = runs
     .filter((r) => r.ticker === ticker && r.status === "completed")
+    // ISO 8601/UTC (Z-suffixed) timestamps from the API are lexicographically sortable.
     .sort((a, b) => (b.completed_at ?? b.created_at).localeCompare(a.completed_at ?? a.created_at))[0];
   if (completed) {
     return {
