@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EuScheduleEntry, WatchlistEntry } from "../../../api/earnings-update";
-import { CoverageModal } from "../CoverageModal";
+import { WatchlistModal } from "../WatchlistModal";
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -37,9 +37,9 @@ const defaultProps = {
   onRemove: async (_id: string) => {},
 };
 
-describe("CoverageModal", () => {
+describe("WatchlistModal", () => {
   it("renders the ticker and company name", () => {
-    render(<CoverageModal {...defaultProps} />);
+    render(<WatchlistModal {...defaultProps} />);
     expect(screen.getByText("AAPL")).toBeInTheDocument();
     expect(screen.getByText("Apple Inc.")).toBeInTheDocument();
   });
@@ -48,34 +48,34 @@ describe("CoverageModal", () => {
     const byTicker = new Map<string, EuScheduleEntry>([
       ["AAPL", makeScheduleEntry()],
     ]);
-    render(<CoverageModal {...defaultProps} nextReleaseByTicker={byTicker} />);
-    expect(screen.getByTestId("coverage-next-date")).toHaveTextContent(/Sep 15/);
-    expect(screen.getByTestId("coverage-timing-badge")).toHaveTextContent(/Post-Market/i);
+    render(<WatchlistModal {...defaultProps} nextReleaseByTicker={byTicker} />);
+    expect(screen.getByTestId("watchlist-next-date")).toHaveTextContent(/Sep 15/);
+    expect(screen.getByTestId("watchlist-timing-badge")).toHaveTextContent(/Post-Market/i);
   });
 
   it("shows pre-market badge for pre_market timing", () => {
     const byTicker = new Map<string, EuScheduleEntry>([
       ["AAPL", makeScheduleEntry({ release_timing: "pre_market" })],
     ]);
-    render(<CoverageModal {...defaultProps} nextReleaseByTicker={byTicker} />);
-    expect(screen.getByTestId("coverage-timing-badge")).toHaveTextContent(/Pre-Market/i);
+    render(<WatchlistModal {...defaultProps} nextReleaseByTicker={byTicker} />);
+    expect(screen.getByTestId("watchlist-timing-badge")).toHaveTextContent(/Pre-Market/i);
   });
 
   it("shows neutral no-upcoming-date when ticker is absent from nextReleaseByTicker", () => {
     const byTicker = new Map<string, EuScheduleEntry>();
-    render(<CoverageModal {...defaultProps} nextReleaseByTicker={byTicker} />);
-    expect(screen.getByTestId("coverage-next-date")).toHaveTextContent(/No upcoming date/i);
-    expect(screen.queryByTestId("coverage-timing-badge")).not.toBeInTheDocument();
+    render(<WatchlistModal {...defaultProps} nextReleaseByTicker={byTicker} />);
+    expect(screen.getByTestId("watchlist-next-date")).toHaveTextContent(/No upcoming date/i);
+    expect(screen.queryByTestId("watchlist-timing-badge")).not.toBeInTheDocument();
   });
 
   it("shows neutral no-upcoming-date when nextReleaseByTicker is omitted", () => {
-    render(<CoverageModal {...defaultProps} />);
-    expect(screen.getByTestId("coverage-next-date")).toHaveTextContent(/No upcoming date/i);
-    expect(screen.queryByTestId("coverage-timing-badge")).not.toBeInTheDocument();
+    render(<WatchlistModal {...defaultProps} />);
+    expect(screen.getByTestId("watchlist-next-date")).toHaveTextContent(/No upcoming date/i);
+    expect(screen.queryByTestId("watchlist-timing-badge")).not.toBeInTheDocument();
   });
 
   it("does not render when open is false", () => {
-    render(<CoverageModal {...defaultProps} open={false} />);
+    render(<WatchlistModal {...defaultProps} open={false} />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

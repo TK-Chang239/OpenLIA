@@ -75,10 +75,10 @@ describe("EarningsUpdatePage (v2)", () => {
     vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([]);
   });
 
-  it("renders topbar with Coverage and Settings buttons", async () => {
+  it("renders topbar with Watchlist and Settings buttons", async () => {
     renderPage();
     expect(
-      await screen.findByRole("button", { name: /coverage/i }),
+      await screen.findByRole("button", { name: /watchlist/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /report settings/i }),
