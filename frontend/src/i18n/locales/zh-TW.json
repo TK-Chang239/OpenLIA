@@ -639,7 +639,7 @@
   },
   "earnings": {
     "title": "財報更新",
-    "coverage": "覆蓋名單",
+    "watchlist": "觀察清單",
     "settings": "設定",
     "report_settings_aria": "報告設定",
     "load_failed": "無法載入財報資料，請再試一次。",
@@ -681,13 +681,13 @@
       "adding": "新增中...",
       "add": "新增"
     },
-    "coverage_modal": {
-      "aria": "覆蓋名單",
-      "title": "覆蓋名單",
+    "watchlist_modal": {
+      "aria": "觀察清單",
+      "title": "觀察清單",
       "subtitle": "於財報發布時自動生成報告",
       "close_aria": "關閉",
-      "close_modal_aria": "關閉覆蓋名單視窗",
-      "empty": "覆蓋名單為空，請新增代號以開始追蹤財報。",
+      "close_modal_aria": "關閉觀察清單視窗",
+      "empty": "觀察清單為空，請新增代號以開始追蹤財報。",
       "remove_ticker_aria": "移除 {{ticker}}"
     },
     "custom_section": {
@@ -825,7 +825,7 @@
       "lia_signal": "Lia 訊號",
       "empty_title": "尚無財報",
       "empty_sub": "請將代號加入觀察名單，LIA 會於各公司發布財報時自動生成報告。",
-      "open_coverage": "開啟覆蓋名單",
+      "open_watchlist": "開啟觀察清單",
       "filter_all": "全部",
       "filter_watchlist": "觀察名單",
       "filter_portfolio": "投資組合",

@@ -2,10 +2,10 @@ import { Briefcase } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface Props {
-  onOpenCoverage: () => void;
+  onOpenWatchlist: () => void;
 }
 
-export function EuEmptyPage({ onOpenCoverage }: Props) {
+export function EuEmptyPage({ onOpenWatchlist }: Props) {
   const { t } = useTranslation();
   return (
     <div
@@ -20,10 +20,10 @@ export function EuEmptyPage({ onOpenCoverage }: Props) {
       </p>
       <button
         type="button"
-        onClick={onOpenCoverage}
+        onClick={onOpenWatchlist}
         className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] transition-colors duration-[--duration-normal]"
       >
-        <Briefcase size={14} /> {t("earnings.feed.open_coverage")}
+        <Briefcase size={14} /> {t("earnings.feed.open_watchlist")}
       </button>
     </div>
   );
