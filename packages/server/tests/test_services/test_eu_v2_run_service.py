@@ -578,8 +578,9 @@ def test_build_eu_dispatcher_routes_validated_non_eodhd(db_session):
     assert dispatcher is not None
     names = {c["name"] for c in dispatcher.candidate_tools()}
     assert "newsapi_ai__quote" in names
-    # eodhd is enabled here so its dispatcher tools are not blocked either.
-    assert "eodhd__quote" in names
+    # EODHD is always blocked from the dispatcher (served by the curated
+    # path), even when enabled — so its tools are never enumerated here.
+    assert not any(n.startswith("eodhd__") for n in names)
 
 
 def test_build_eu_dispatcher_blocks_disabled_provider(db_session):
