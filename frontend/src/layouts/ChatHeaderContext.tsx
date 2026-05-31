@@ -35,6 +35,10 @@ export interface ChatHeaderValue {
    *  surface v3 runs in the same breadcrumb dropdown without polluting
    *  the shared chat-sessions list. */
   renderPopover?: (props: ChatHeaderPopoverProps) => ReactNode;
+  /** When true, the TopBar renders a GENERATING pill. ER v3 sets this
+   *  while a run streams so the page-level generating state is visible
+   *  in the shell chrome. */
+  generating?: boolean;
 }
 
 interface RegistryShape {
