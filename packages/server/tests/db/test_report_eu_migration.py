@@ -60,7 +60,10 @@ def test_migration_downgrade_drops_tables(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{db}")
     cfg = _alembic_config(str(db))
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    # Downgrade to the revision just before the EU v2 tables migration
+    # (eae15acd2745). A relative "-1" is ambiguous now that head is a merge
+    # of two branches, so target the EU migration's parent explicitly.
+    command.downgrade(cfg, "eae15acd2745-1")
 
     engine = create_engine(f"sqlite:///{db}")
     names = set(inspect(engine).get_table_names())
