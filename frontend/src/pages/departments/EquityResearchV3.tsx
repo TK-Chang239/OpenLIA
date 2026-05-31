@@ -120,10 +120,25 @@ function pillLabelFor(s: V3SettingsValue): string {
 // to a safe constant.
 const V3_MODE_FOR_SHARED_CHROME = "stock_initiation" as const;
 
+/** Opts the page into the shell entrance choreography (see
+ *  motion-shell.css). Exported for testing. */
+export function useOmEntranceChoreography(): void {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("om-anim");
+    document.body.setAttribute("data-om-auto", "");
+    return () => {
+      root.classList.remove("om-anim");
+      document.body.removeAttribute("data-om-auto");
+    };
+  }, []);
+}
+
 export default function EquityResearchV3(): JSX.Element {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const reportIdFromUrl = searchParams.get("id") ?? null;
+  useOmEntranceChoreography();
 
   const [prompt, setPrompt] = useState("");
   const [settings, setSettings] = useState<V3SettingsValue>(() => loadSettings());
