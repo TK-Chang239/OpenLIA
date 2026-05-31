@@ -144,17 +144,14 @@ def _render_connectors_block(connectors: EnabledConnectors) -> str:
     knowledge rather than waiting on a disabled tool.
     """
     available: list[str] = []
-    if connectors.financial:
+    if connectors.eodhd:
         available.append(
-            "  - Financial data (EODHD): `get_fundamentals`, "
-            "`get_historical_prices`, `get_company_news`. Pull reported "
-            "line items, price action, and recent headlines."
-        )
-    if connectors.earnings_calendar:
-        available.append(
-            "  - Earnings calendar (EODHD): `get_earnings_calendar`. "
-            "Confirm the release and pull consensus estimates to score "
-            "the print against."
+            "  - Financial data & earnings calendar (EODHD): "
+            "`get_fundamentals`, `get_historical_prices`, "
+            "`get_company_news`, `get_earnings_calendar`. Pull reported "
+            "line items, price action, and recent headlines; confirm the "
+            "release and pull consensus estimates to score the print "
+            "against."
         )
     if connectors.web_search:
         available.append(
