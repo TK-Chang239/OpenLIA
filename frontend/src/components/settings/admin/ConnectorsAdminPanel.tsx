@@ -129,14 +129,14 @@ export function ConnectorsAdminPanel(): JSX.Element {
             onClick={() => { setAddingMcp(true); setAdding(false); }}
             className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
           >
-            Add MCP connector
+            {t('settings.connectors.add_mcp')}
           </button>
           <button
             type="button"
             onClick={() => { setAdding(true); setAddingMcp(false); }}
             className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
           >
-            Add connector (advanced)
+            {t('settings.connectors.add_advanced')}
           </button>
         </div>
       </header>
