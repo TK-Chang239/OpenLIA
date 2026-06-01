@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
 import {
+  saveEuRunToRepo,
   saveToRepo,
   saveV2RunToRepo,
   saveV3RunToRepo,
+  unsaveEuRunFromRepo,
   unsaveFromRepo,
   unsaveV2RunFromRepo,
   unsaveV3RunFromRepo,
@@ -14,8 +16,9 @@ export type SaveToRepoVariant = "chip" | "viewer-header";
 
 /** Which engine produced the artifact. Selects the right repo
  *  endpoint (``/items`` for v1, ``/v2-runs`` for v2.2, ``/v3-runs``
- *  for v3) and the right SavedReportsContext bucket. */
-export type SaveToRepoEngine = "v1" | "v2" | "v3";
+ *  for v3, ``/eu-runs`` for Earnings Update v2) and the right
+ *  SavedReportsContext bucket. */
+export type SaveToRepoEngine = "v1" | "v2" | "v3" | "eu";
 
 export interface SaveToRepoButtonProps {
   reportId: string;
@@ -70,6 +73,8 @@ export function SaveToRepoButton({
         } else if (engine === "v3") {
           await unsaveV3RunFromRepo(reportId);
           ctx?.markV3Unsaved(reportId);
+        } else if (engine === "eu") {
+          await unsaveEuRunFromRepo(reportId);
         } else {
           await unsaveFromRepo(reportId);
           ctx?.markUnsaved(reportId);
@@ -84,6 +89,8 @@ export function SaveToRepoButton({
         } else if (engine === "v3") {
           await saveV3RunToRepo(reportId);
           ctx?.markV3Saved(reportId);
+        } else if (engine === "eu") {
+          await saveEuRunToRepo(reportId);
         } else {
           await saveToRepo(reportId);
           ctx?.markSaved(reportId);
