@@ -47,6 +47,8 @@ const saveToRepo = vi.fn();
 const unsaveFromRepo = vi.fn();
 const saveV3RunToRepo = vi.fn();
 const unsaveV3RunFromRepo = vi.fn();
+const saveEuRunToRepo = vi.fn();
+const unsaveEuRunFromRepo = vi.fn();
 const deleteReport = vi.fn();
 const deleteV3Run = vi.fn();
 
@@ -58,6 +60,8 @@ vi.mock("../../api/repo", async () => {
     unsaveFromRepo: (...a: unknown[]) => unsaveFromRepo(...a),
     saveV3RunToRepo: (...a: unknown[]) => saveV3RunToRepo(...a),
     unsaveV3RunFromRepo: (...a: unknown[]) => unsaveV3RunFromRepo(...a),
+    saveEuRunToRepo: (...a: unknown[]) => saveEuRunToRepo(...a),
+    unsaveEuRunFromRepo: (...a: unknown[]) => unsaveEuRunFromRepo(...a),
   };
 });
 
@@ -359,6 +363,27 @@ describe("Repository page", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
     await waitFor(() => {
       expect(unsaveV3RunFromRepo).toHaveBeenCalledWith(SAMPLE_V3_ROW.report_id);
+    });
+    expect(unsaveFromRepo).not.toHaveBeenCalled();
+  });
+
+  it("removes an eu_v2 row via unsaveEuRunFromRepo, not the v1 unsave", async () => {
+    listRepoItemsFiltered.mockReset();
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [SAMPLE_EU_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    unsaveEuRunFromRepo.mockResolvedValueOnce(undefined);
+    renderPage();
+    const removeBtn = await screen.findByRole("button", {
+      name: new RegExp(`Remove ${SAMPLE_EU_ROW.filename}`),
+    });
+    fireEvent.click(removeBtn);
+    fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
+    await waitFor(() => {
+      expect(unsaveEuRunFromRepo).toHaveBeenCalledWith(SAMPLE_EU_ROW.report_id);
     });
     expect(unsaveFromRepo).not.toHaveBeenCalled();
   });

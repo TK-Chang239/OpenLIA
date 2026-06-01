@@ -7,8 +7,10 @@ import {
   fetchRepoFacets,
   saveToRepo,
   saveV3RunToRepo,
+  saveEuRunToRepo,
   unsaveFromRepo,
   unsaveV3RunFromRepo,
+  unsaveEuRunFromRepo,
   type RepoFacets,
   type RepoRow,
 } from "../api/repo";
@@ -183,6 +185,10 @@ export default function Repository(): JSX.Element {
       if (row.engine === "v3") {
         await deleteV3Run(row.report_id);
         savedReports?.markV3Unsaved(row.report_id);
+      } else if (row.engine === "eu_v2") {
+        // EU has no hard-delete endpoint; mirror remove (unsave only).
+        await unsaveEuRunFromRepo(row.report_id);
+        savedReports?.markEuUnsaved(row.report_id);
       } else {
         await deleteReport(row.report_id);
         savedReports?.markUnsaved(row.report_id);
@@ -211,6 +217,9 @@ export default function Repository(): JSX.Element {
       if (row.engine === "v3") {
         await unsaveV3RunFromRepo(row.report_id);
         savedReports?.markV3Unsaved(row.report_id);
+      } else if (row.engine === "eu_v2") {
+        await unsaveEuRunFromRepo(row.report_id);
+        savedReports?.markEuUnsaved(row.report_id);
       } else {
         await unsaveFromRepo(row.report_id);
         savedReports?.markUnsaved(row.report_id);
@@ -225,6 +234,9 @@ export default function Repository(): JSX.Element {
               if (row.engine === "v3") {
                 await saveV3RunToRepo(row.report_id);
                 savedReports?.markV3Saved(row.report_id);
+              } else if (row.engine === "eu_v2") {
+                await saveEuRunToRepo(row.report_id);
+                savedReports?.markEuSaved(row.report_id);
               } else {
                 await saveToRepo(row.report_id);
                 savedReports?.markSaved(row.report_id);
