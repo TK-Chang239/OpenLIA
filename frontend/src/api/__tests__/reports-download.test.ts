@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { downloadReportBlob, DownloadError, parseFilenameFromHeader } from "../reports";
+import {
+  downloadReportBlob,
+  DownloadError,
+  euHtmlUrl,
+  parseFilenameFromHeader,
+} from "../reports";
 
 describe("parseFilenameFromHeader", () => {
   it("extracts the basic filename quoted parameter", () => {
@@ -18,6 +23,20 @@ describe("parseFilenameFromHeader", () => {
 
   it("returns fallback when header is missing", () => {
     expect(parseFilenameFromHeader(null, "fallback.pdf")).toBe("fallback.pdf");
+  });
+});
+
+describe("euHtmlUrl", () => {
+  it("builds the EU v2 standalone HTML endpoint", () => {
+    expect(euHtmlUrl("abc")).toBe(
+      "/api/departments/earnings-update/v2/runs/abc/html"
+    );
+  });
+
+  it("encodes the report id", () => {
+    expect(euHtmlUrl("a / b")).toBe(
+      "/api/departments/earnings-update/v2/runs/a%20%2F%20b/html"
+    );
   });
 });
 
@@ -63,6 +82,38 @@ describe("downloadReportBlob", () => {
       expect.objectContaining({ credentials: "include" })
     );
     expect(result.filename).toBe("Acme.docx");
+  });
+
+  it("fetches the EU v2 pdf endpoint for engine=eu", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue(
+      new Response(new Blob(["%PDF"]), {
+        status: 200,
+        headers: { "content-disposition": 'attachment; filename="EU.pdf"' },
+      })
+    );
+    globalThis.fetch = fakeFetch as unknown as typeof fetch;
+
+    await downloadReportBlob("abc", "pdf", "eu");
+    expect(fakeFetch).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/runs/abc/pdf",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("fetches the EU v2 docx endpoint for engine=eu", async () => {
+    const fakeFetch = vi.fn().mockResolvedValue(
+      new Response(new Blob(["PK"]), {
+        status: 200,
+        headers: { "content-disposition": 'attachment; filename="EU.docx"' },
+      })
+    );
+    globalThis.fetch = fakeFetch as unknown as typeof fetch;
+
+    await downloadReportBlob("abc", "docx", "eu");
+    expect(fakeFetch).toHaveBeenCalledWith(
+      "/api/departments/earnings-update/v2/runs/abc/docx",
+      expect.objectContaining({ credentials: "include" })
+    );
   });
 
   it("throws DownloadError with server detail on non-2xx JSON response", async () => {
