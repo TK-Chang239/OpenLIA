@@ -15,6 +15,7 @@ from typing import ClassVar
 from sqlalchemy import (
     DateTime,  # kept for TypeDecorator impl
     MetaData,
+    Text,
     func,
     types,
 )
@@ -63,6 +64,51 @@ class UTCDateTime(types.TypeDecorator):
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+
+class EncryptedJSON(types.TypeDecorator):
+    """JSON dict column encrypted at rest with Fernet.
+
+    Stores ciphertext as `Text`; the Python-side value is always a plaintext
+    `dict`. Read tolerates legacy plaintext JSON (rows written before
+    encryption was introduced, or inserted out-of-band) as a safety net.
+
+    `secrets_crypto` is imported lazily inside the methods so importing this
+    module (which every ORM model does) does not pull in the key/cipher
+    machinery or the bootstrap import chain until a value is actually
+    encrypted or decrypted.
+    """
+
+    impl = Text
+    cache_ok = True
+
+    def process_bind_param(self, value: dict | None, dialect) -> str | None:
+        if value is None:
+            return None
+        import json
+
+        from openlia_server.db.secrets_crypto import encrypt
+
+        return encrypt(json.dumps(value))
+
+    def process_result_value(self, value: str | None, dialect) -> dict:
+        if value is None or value == "":
+            return {}
+        import json
+
+        from openlia_server.db.secrets_crypto import SecretDecryptError, decrypt
+
+        try:
+            return json.loads(decrypt(value))
+        except SecretDecryptError as dec_err:
+            # Safety net: a pre-encryption plaintext-JSON row decrypts as
+            # InvalidToken; if the raw value parses as JSON, return it. A real
+            # ciphertext under the wrong key is not valid JSON, so re-raise the
+            # clear decrypt error instead of a confusing JSON error.
+            try:
+                return json.loads(value)
+            except (ValueError, TypeError):
+                raise dec_err from None
 
 
 class Base(DeclarativeBase):

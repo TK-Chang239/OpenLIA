@@ -24,7 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openlia_server.db.base import Base, UTCDateTime
+from openlia_server.db.base import Base, EncryptedJSON, UTCDateTime
 
 
 class Connector(Base):
@@ -39,7 +39,7 @@ class Connector(Base):
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     launch: Mapped[dict] = mapped_column(JSON, nullable=False)
     secrets: Mapped[dict] = mapped_column(
-        JSON, nullable=False, default=dict, server_default=text("'{}'")
+        EncryptedJSON, nullable=False, default=dict, server_default=text("'{}'")
     )
     cached_tools: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     cached_python_callables: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)

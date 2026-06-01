@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -11,6 +12,26 @@ from typing import Any
 import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _test_encryption_key():
+    """Pin a stable Fernet key for the whole test session so tests that write
+    encrypted connector secrets never touch the real ~/.openlia/secret.key.
+    Function-scoped tests that need a different key still override via
+    monkeypatch.setenv + secrets_crypto.reset_cache()."""
+    from cryptography.fernet import Fernet
+    from openlia_server.db import secrets_crypto as _sc
+
+    prev = os.environ.get("OPENLIA_SECRET_KEY")
+    os.environ["OPENLIA_SECRET_KEY"] = Fernet.generate_key().decode()
+    _sc.reset_cache()
+    yield
+    if prev is None:
+        os.environ.pop("OPENLIA_SECRET_KEY", None)
+    else:
+        os.environ["OPENLIA_SECRET_KEY"] = prev
+    _sc.reset_cache()
 
 
 @pytest.fixture

@@ -205,8 +205,8 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
         <fieldset className="space-y-1">
           <legend className="text-xs text-text-secondary">Detected secrets</legend>
           <p className="text-[10px] text-text-secondary">
-            Stored on the server, never sent to the LLM. Toggle off anything that
-            is not a secret.
+            Stored encrypted on the server, never sent to the LLM. Toggle off
+            anything that is not a secret.
           </p>
           {chips.map((c) => (
             <div key={c.suggestedKey} className="flex items-center gap-2">
