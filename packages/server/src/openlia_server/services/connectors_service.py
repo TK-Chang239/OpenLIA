@@ -231,6 +231,15 @@ async def _validate_launch(
                     }
                 )
 
+        if selected_mode.get("kind") in ("cli_mcp", "remote_mcp") and not tools:
+            return ValidationFailure(
+                error=(
+                    "Connected to the MCP server but it returned no tools. "
+                    "The server may be unauthorized (check the API key) or may "
+                    "expose nothing usable."
+                ),
+            )
+
         python_callables: list[dict[str, Any]] = []
         if selected_mode.get("kind") == "python_lib":
             module_name = selected_mode.get("import_module", "")

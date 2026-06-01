@@ -404,3 +404,49 @@ async def test_install_builtin_rejects_second_install_of_same_template(
 
     rows = db_session.query(Connector).filter(Connector.provider_id == "firecrawl").all()
     assert len(rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# _validate_launch: require >= 1 tool for cli_mcp / remote_mcp
+# ---------------------------------------------------------------------------
+
+
+from openlia_server.services import connectors_service as cs  # noqa: E402
+
+
+class _FakeTransport:
+    def __init__(self, tools: list[dict]) -> None:
+        self._tools = tools
+
+    async def list_tools(self) -> list[dict]:
+        return self._tools
+
+    async def aclose(self) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_validate_launch_fails_when_remote_mcp_returns_no_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cs, "_build_transport", lambda connector_id, mode, secrets: _FakeTransport([])
+    )
+    launch = {"modes": [{"kind": "remote_mcp", "url": "https://x/mcp", "headers": {}}]}
+    result = await cs._validate_launch(launch, {})
+    assert isinstance(result, cs.ValidationFailure)
+    assert "no tools" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_validate_launch_passes_when_cli_mcp_returns_a_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool = {"name": "quote", "description": "", "input_schema": {}}
+    monkeypatch.setattr(
+        cs, "_build_transport", lambda connector_id, mode, secrets: _FakeTransport([tool])
+    )
+    launch = {"modes": [{"kind": "cli_mcp", "argv": ["uvx", "srv"], "env_keys": []}]}
+    result = await cs._validate_launch(launch, {})
+    assert isinstance(result, cs.ValidationOk)
+    assert result.tools == [tool]
