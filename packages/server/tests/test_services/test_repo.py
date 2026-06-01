@@ -170,3 +170,99 @@ def test_v3_save_is_isolated_from_v1_save(db_session):
     v3_rows = [r for r in rows if r.v3_report_id is not None]
     assert len(v1_rows) == 1 and v1_rows[0].report_id == v1.id
     assert len(v3_rows) == 1 and v3_rows[0].v3_report_id == v3.id
+
+
+# ---------------------------------------------------------------------------
+# EU v2 polymorphic target
+# ---------------------------------------------------------------------------
+
+
+def _eu_report(db_session, user_id: str):
+    from openlia_server.db.models.report_eu import ReportEu
+
+    r = ReportEu(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        subject="RKLB.US",
+        ticker="RKLB.US",
+        trigger_kind="on_demand",
+        fiscal_date=None,
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        provider_kind="anthropic",
+        model="m",
+        status="completed",
+        error_message=None,
+        created_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+        cover_json=None,
+        reasoning_effort=None,
+    )
+    db_session.add(r)
+    db_session.commit()
+    return r
+
+
+def test_save_eu_creates_entry(db_session):
+    u = _user(db_session, "eu-save")
+    r = _eu_report(db_session, u.id)
+    item = svc.save_eu_report_to_repo(db_session, user_id=u.id, eu_report_id=r.id)
+    assert item.id is not None
+    assert item.eu_v2_report_id == r.id
+    assert item.report_id is None
+    assert item.pipeline_run_id is None
+    assert item.v3_report_id is None
+
+
+def test_save_eu_is_idempotent(db_session):
+    u = _user(db_session, "eu-idem")
+    r = _eu_report(db_session, u.id)
+    a = svc.save_eu_report_to_repo(db_session, user_id=u.id, eu_report_id=r.id)
+    b = svc.save_eu_report_to_repo(db_session, user_id=u.id, eu_report_id=r.id)
+    assert a.id == b.id
+    assert len(svc.list_items(db_session, user_id=u.id)) == 1
+
+
+def test_is_eu_report_saved(db_session):
+    u = _user(db_session, "eu-issaved")
+    r = _eu_report(db_session, u.id)
+    assert svc.is_eu_report_saved(db_session, user_id=u.id, eu_report_id=r.id) is False
+    svc.save_eu_report_to_repo(db_session, user_id=u.id, eu_report_id=r.id)
+    assert svc.is_eu_report_saved(db_session, user_id=u.id, eu_report_id=r.id) is True
+
+
+def test_unsave_eu_removes_entry(db_session):
+    u = _user(db_session, "eu-unsave")
+    r = _eu_report(db_session, u.id)
+    svc.save_eu_report_to_repo(db_session, user_id=u.id, eu_report_id=r.id)
+    svc.unsave_eu_report_from_repo(db_session, user_id=u.id, eu_report_id=r.id)
+    assert svc.is_eu_report_saved(db_session, user_id=u.id, eu_report_id=r.id) is False
+
+
+def test_save_eu_raises_on_missing_report(db_session):
+    u = _user(db_session, "eu-missing")
+    with pytest.raises(LookupError):
+        svc.save_eu_report_to_repo(db_session, user_id=u.id, eu_report_id="nope")
+
+
+def test_save_eu_raises_when_owned_by_other_user(db_session):
+    owner = _user(db_session, "eu-owner")
+    intruder = _user(db_session, "eu-intruder")
+    r = _eu_report(db_session, owner.id)
+    with pytest.raises(LookupError):
+        svc.save_eu_report_to_repo(db_session, user_id=intruder.id, eu_report_id=r.id)
+
+
+def test_saved_eu_report_appears_in_filtered_listing(db_session):
+    """A saved EU report shows up in the Repository-page listing tagged
+    with the eu_v2 engine so the frontend opens it as an eu_v2_report."""
+    u = _user(db_session, "eu-listing")
+    r = _eu_report(db_session, u.id)
+    svc.save_eu_report_to_repo(db_session, user_id=u.id, eu_report_id=r.id)
+    rows = svc.list_items_filtered(db_session, user_id=u.id)
+    eu_rows = [row for row in rows if row.engine == "eu_v2"]
+    assert len(eu_rows) == 1
+    assert eu_rows[0].target_id == r.id
+    assert eu_rows[0].department == "earnings_update"
+    assert eu_rows[0].title == r.subject
