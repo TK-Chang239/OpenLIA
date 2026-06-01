@@ -92,6 +92,44 @@ class EmptyBriefError(ValueError):
     """
 
 
+class ReportNotFoundError(LookupError):
+    """The requested report_eu row doesn't exist or isn't owned by the user."""
+
+
+def get_report_row(*, db: DBSession, user_id: str, report_id: str) -> ReportEu:
+    row = db.get(ReportEu, report_id)
+    if row is None or row.user_id != user_id:
+        raise ReportNotFoundError(f"EU report {report_id} not found")
+    return row
+
+
+def get_run(
+    *, db: DBSession, user_id: str, report_id: str
+) -> tuple[ReportEu, list[ReportEuSection], list[ReportEuChart], list[ReportEuCitation]]:
+    """Load a report_eu row + its ordered sections/charts/citations."""
+    from sqlalchemy import select as _select
+
+    row = get_report_row(db=db, user_id=user_id, report_id=report_id)
+    sections = list(
+        db.execute(
+            _select(ReportEuSection)
+            .where(ReportEuSection.report_id == report_id)
+            .order_by(ReportEuSection.section_index.asc())
+        ).scalars()
+    )
+    charts = list(
+        db.execute(_select(ReportEuChart).where(ReportEuChart.report_id == report_id)).scalars()
+    )
+    citations = list(
+        db.execute(
+            _select(ReportEuCitation)
+            .where(ReportEuCitation.report_id == report_id)
+            .order_by(ReportEuCitation.display_index.asc())
+        ).scalars()
+    )
+    return row, sections, charts, citations
+
+
 def _freeform_template_spec() -> TemplateSpec:
     """A sections-less template for instructions-only runs.
 
@@ -584,10 +622,13 @@ def _resolve_transports(transports: EuDataTransports | None) -> EuDataTransports
 __all__ = [
     "EU_FREEFORM_TEMPLATE_ID",
     "EmptyBriefError",
+    "ReportNotFoundError",
     "build_eu_dispatcher",
     "build_run_request",
     "cancel_run",
     "cleanup_orphaned_running_rows",
+    "get_report_row",
+    "get_run",
     "persist_result",
     "start_run_async",
 ]
