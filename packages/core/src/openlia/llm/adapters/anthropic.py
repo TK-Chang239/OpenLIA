@@ -340,8 +340,13 @@ class AnthropicAdapter(LLMProvider):
                                         "tool_use_id": block.get("tool_use_id", ""),
                                         "content": block.get("content"),
                                     }
-                                elif btype in ("thinking", "redacted_thinking"):
-                                    content_by_index[idx] = {"type": btype, "thinking": ""}
+                                elif btype == "thinking":
+                                    content_by_index[idx] = {"type": "thinking", "thinking": ""}
+                                elif btype == "redacted_thinking":
+                                    content_by_index[idx] = {
+                                        "type": "redacted_thinking",
+                                        "data": block.get("data", ""),
+                                    }
                                 else:
                                     content_by_index[idx] = dict(block)
                             elif etype == "content_block_delta":
@@ -359,7 +364,7 @@ class AnthropicAdapter(LLMProvider):
                                         partial_json[idx] += delta.get("partial_json", "")
                                 elif dtype == "thinking_delta":
                                     blk = content_by_index.get(idx)
-                                    if blk is not None:
+                                    if blk is not None and blk.get("type") == "thinking":
                                         blk["thinking"] = blk.get("thinking", "") + (
                                             delta.get("thinking") or ""
                                         )

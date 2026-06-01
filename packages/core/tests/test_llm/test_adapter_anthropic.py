@@ -231,8 +231,8 @@ async def test_generate_forwards_tool_choice_when_set() -> None:
         captured["payload"] = request.read()
         return httpx.Response(
             200,
-            json={
-                "content": [
+            content=_sse_from_message(
+                [
                     {
                         "type": "tool_use",
                         "id": "toolu_1",
@@ -240,9 +240,9 @@ async def test_generate_forwards_tool_choice_when_set() -> None:
                         "input": {"ok": True},
                     }
                 ],
-                "stop_reason": "tool_use",
-                "usage": {"input_tokens": 1, "output_tokens": 1},
-            },
+                stop_reason="tool_use",
+            ),
+            headers=_SSE_HEADERS,
         )
 
     with respx.mock() as mock:
@@ -272,11 +272,8 @@ async def test_generate_omits_tool_choice_when_unset() -> None:
         captured["payload"] = request.read()
         return httpx.Response(
             200,
-            json={
-                "content": [{"type": "text", "text": "ok"}],
-                "stop_reason": "end_turn",
-                "usage": {"input_tokens": 1, "output_tokens": 1},
-            },
+            content=_sse_from_message([{"type": "text", "text": "ok"}]),
+            headers=_SSE_HEADERS,
         )
 
     with respx.mock() as mock:
@@ -294,11 +291,8 @@ async def test_generate_includes_api_key_header() -> None:
         captured["headers"] = dict(request.headers)
         return httpx.Response(
             200,
-            json={
-                "content": [{"type": "text", "text": "ok"}],
-                "stop_reason": "end_turn",
-                "usage": {"input_tokens": 1, "output_tokens": 1},
-            },
+            content=_sse_from_message([{"type": "text", "text": "ok"}]),
+            headers=_SSE_HEADERS,
         )
 
     with respx.mock() as mock:
@@ -701,15 +695,12 @@ async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> No
     assert resp.cached_input_tokens == 0
 
 
-def _msg_response() -> dict:
-    return {
-        "id": "msg_test",
-        "type": "message",
-        "role": "assistant",
-        "stop_reason": "end_turn",
-        "content": [{"type": "text", "text": "ok"}],
-        "usage": {"input_tokens": 1, "output_tokens": 1},
-    }
+def _msg_response() -> httpx.Response:
+    return httpx.Response(
+        200,
+        content=_sse_from_message([{"type": "text", "text": "ok"}]),
+        headers=_SSE_HEADERS,
+    )
 
 
 async def test_generate_emits_thinking_block_on_supported_model() -> None:
@@ -721,9 +712,7 @@ async def test_generate_emits_thinking_block_on_supported_model() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
@@ -746,9 +735,7 @@ async def test_generate_thinking_block_medium_uses_8192_budget() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
@@ -766,9 +753,7 @@ async def test_generate_omits_thinking_block_when_effort_none() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
@@ -788,9 +773,7 @@ async def test_generate_omits_thinking_block_on_unsupported_model() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
