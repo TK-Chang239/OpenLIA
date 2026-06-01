@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { SaveToRepoButton } from "../SaveToRepoButton";
+import { SavedReportsProvider } from "../../repo/SavedReportsContext";
 import * as repoApi from "../../../api/repo";
 
 vi.mock("../../../api/repo");
@@ -89,6 +90,140 @@ describe("SaveToRepoButton", () => {
       expect(repoApi.unsaveV3RunFromRepo).toHaveBeenCalledWith("v3-1"),
     );
     expect(repoApi.unsaveFromRepo).not.toHaveBeenCalled();
+  });
+
+  it("routes to the eu save endpoint when engine=eu", async () => {
+    (repoApi.saveEuRunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "x",
+      eu_v2_report_id: "eu-1",
+      created_at: "2026-05-28T00:00:00Z",
+    });
+    render(
+      <SaveToRepoButton
+        reportId="eu-1"
+        engine="eu"
+        initialSaved={false}
+        variant="viewer-header"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save to repository/i }));
+    await waitFor(() =>
+      expect(repoApi.saveEuRunToRepo).toHaveBeenCalledWith("eu-1"),
+    );
+    // v1 endpoint must not be called when engine=eu.
+    expect(repoApi.saveToRepo).not.toHaveBeenCalled();
+  });
+
+  it("routes to the eu unsave endpoint when engine=eu and already saved", async () => {
+    (repoApi.unsaveEuRunFromRepo as ReturnType<typeof vi.fn>).mockResolvedValue(
+      undefined,
+    );
+    render(
+      <SaveToRepoButton
+        reportId="eu-1"
+        engine="eu"
+        initialSaved={true}
+        variant="viewer-header"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove from repository/i }));
+    await waitFor(() =>
+      expect(repoApi.unsaveEuRunFromRepo).toHaveBeenCalledWith("eu-1"),
+    );
+    expect(repoApi.unsaveFromRepo).not.toHaveBeenCalled();
+  });
+
+  it("shows saved state on mount when the EU context bucket reports it saved", async () => {
+    (repoApi.listRepoItems as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+    (repoApi.listSavedV2Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_run_ids: [],
+    });
+    (repoApi.listSavedV3Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: ["eu-1"],
+    });
+    render(
+      <SavedReportsProvider>
+        <SaveToRepoButton
+          reportId="eu-1"
+          engine="eu"
+          initialSaved={false}
+          variant="viewer-header"
+        />
+      </SavedReportsProvider>,
+    );
+    expect(
+      await screen.findByRole("button", { name: /remove from repository/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("marks the EU bucket saved after a save click", async () => {
+    (repoApi.listRepoItems as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+    (repoApi.listSavedV2Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_run_ids: [],
+    });
+    (repoApi.listSavedV3Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.saveEuRunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "x",
+      eu_v2_report_id: "eu-1",
+      created_at: "2026-05-28T00:00:00Z",
+    });
+    render(
+      <SavedReportsProvider>
+        <SaveToRepoButton
+          reportId="eu-1"
+          engine="eu"
+          initialSaved={false}
+          variant="viewer-header"
+        />
+      </SavedReportsProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save to repository/i }));
+    await waitFor(() => expect(repoApi.saveEuRunToRepo).toHaveBeenCalledWith("eu-1"));
+    // The context now reports it saved, so the button stays in saved state.
+    expect(
+      await screen.findByRole("button", { name: /remove from repository/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("marks the EU bucket unsaved after an unsave click", async () => {
+    (repoApi.listRepoItems as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+    (repoApi.listSavedV2Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_run_ids: [],
+    });
+    (repoApi.listSavedV3Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: ["eu-1"],
+    });
+    (repoApi.unsaveEuRunFromRepo as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    render(
+      <SavedReportsProvider>
+        <SaveToRepoButton
+          reportId="eu-1"
+          engine="eu"
+          initialSaved={false}
+          variant="viewer-header"
+        />
+      </SavedReportsProvider>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /remove from repository/i }),
+    );
+    await waitFor(() =>
+      expect(repoApi.unsaveEuRunFromRepo).toHaveBeenCalledWith("eu-1"),
+    );
+    expect(
+      await screen.findByRole("button", { name: /save to repository/i }),
+    ).toBeInTheDocument();
   });
 
   it("routes to the v2 save endpoint when engine=v2", async () => {

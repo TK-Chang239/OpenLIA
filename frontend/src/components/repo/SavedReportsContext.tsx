@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   listRepoItems,
+  listSavedEuRuns,
   listSavedV2Runs,
   listSavedV3Runs,
 } from "../../api/repo";
@@ -30,6 +31,11 @@ interface ContextShape {
   isV3Saved: (reportId: string) => boolean;
   markV3Saved: (reportId: string) => void;
   markV3Unsaved: (reportId: string) => void;
+  // Earnings Update v2 eu_v2_reports — keyed by eu_v2_report.id. Same
+  // isolation rationale as v2/v3.
+  isEuSaved: (reportId: string) => boolean;
+  markEuSaved: (reportId: string) => void;
+  markEuUnsaved: (reportId: string) => void;
 }
 
 const SavedReportsContext = createContext<ContextShape | null>(null);
@@ -38,6 +44,7 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
   const [savedV2Ids, setSavedV2Ids] = useState<Set<string>>(() => new Set());
   const [savedV3Ids, setSavedV3Ids] = useState<Set<string>>(() => new Set());
+  const [savedEuIds, setSavedEuIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +75,14 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
       })
       .catch(() => {
         // Endpoint is new (PR8) — older deployments will 404; that's fine.
+      });
+    void listSavedEuRuns()
+      .then((res) => {
+        if (cancelled) return;
+        setSavedEuIds(new Set(res.saved_report_ids));
+      })
+      .catch(() => {
+        // Endpoint is new — older deployments will 404; that's fine.
       });
     return () => {
       cancelled = true;
@@ -137,6 +152,29 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
     });
   }, []);
 
+  const isEuSaved = useCallback(
+    (reportId: string) => savedEuIds.has(reportId),
+    [savedEuIds],
+  );
+
+  const markEuSaved = useCallback((reportId: string) => {
+    setSavedEuIds((prev) => {
+      if (prev.has(reportId)) return prev;
+      const next = new Set(prev);
+      next.add(reportId);
+      return next;
+    });
+  }, []);
+
+  const markEuUnsaved = useCallback((reportId: string) => {
+    setSavedEuIds((prev) => {
+      if (!prev.has(reportId)) return prev;
+      const next = new Set(prev);
+      next.delete(reportId);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<ContextShape>(
     () => ({
       isSaved,
@@ -148,6 +186,9 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
       isV3Saved,
       markV3Saved,
       markV3Unsaved,
+      isEuSaved,
+      markEuSaved,
+      markEuUnsaved,
     }),
     [
       isSaved,
@@ -159,6 +200,9 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
       isV3Saved,
       markV3Saved,
       markV3Unsaved,
+      isEuSaved,
+      markEuSaved,
+      markEuUnsaved,
     ],
   );
 
