@@ -43,6 +43,8 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
   const [text, setText] = useState("");
   const [providerId, setProviderId] = useState("");
   const [providerEdited, setProviderEdited] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [displayEdited, setDisplayEdited] = useState(false);
   const [category, setCategory] = useState<Category>("financial");
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const [values, setValues] = useState<Record<string, string>>({});
@@ -53,6 +55,7 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
   const effectiveProvider = providerEdited
     ? providerId
     : deriveProviderId(text);
+  const effectiveDisplay = displayEdited ? displayName : effectiveProvider;
 
   const chips: SecretChip[] = useMemo(() => {
     if (parsed.kind === "error") return [];
@@ -72,8 +75,15 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
     return { en, va };
   }, [chips, enabled, values]);
 
+  const hasEmptyEnabledSecret = chips.some(
+    (c) => chipState.en[c.suggestedKey] && chipState.va[c.suggestedKey].trim() === "",
+  );
+
   const canSubmit =
-    parsed.kind !== "error" && text.trim().length > 0 && !submitting;
+    parsed.kind !== "error" &&
+    text.trim().length > 0 &&
+    !submitting &&
+    !hasEmptyEnabledSecret;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -89,7 +99,7 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
       });
       const payload: CreateConnectorInput = {
         provider_id: (effectiveProvider || "connector").trim(),
-        display_name: (effectiveProvider || "connector").trim(),
+        display_name: (effectiveDisplay || effectiveProvider || "connector").trim(),
         source: parsed.kind === "remote" ? "remote_mcp" : "cli_mcp",
         category,
         launch: { modes: [built.mode] },
@@ -127,6 +137,8 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
             setText(e.target.value);
             setEnabled({});
             setValues({});
+            setDisplayName("");
+            setDisplayEdited(false);
           }}
           placeholder="https://mcp.example.com/mcp?apikey=YOUR_KEY   —or—   uvx some-mcp-server YOUR_KEY"
           className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
@@ -155,6 +167,19 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
             onChange={(e) => {
               setProviderEdited(true);
               setProviderId(e.target.value);
+            }}
+            className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+          />
+        </label>
+        <label className="text-xs text-text-secondary">
+          Display name
+          <input
+            type="text"
+            aria-label="display name"
+            value={effectiveDisplay}
+            onChange={(e) => {
+              setDisplayEdited(true);
+              setDisplayName(e.target.value);
             }}
             className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
           />
@@ -222,21 +247,31 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
         </p>
       ) : null}
 
-      <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-        >
-          {submitting ? "Validating..." : "Validate & add"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
-        >
-          Cancel
-        </button>
+      <div className="space-y-1">
+        {hasEmptyEnabledSecret ? (
+          <p
+            data-testid="empty-secret-hint"
+            className="text-[10px] text-text-secondary"
+          >
+            Enter a value for each enabled secret, or toggle it off.
+          </p>
+        ) : null}
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          >
+            {submitting ? "Validating..." : "Validate & add"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </form>
   );
