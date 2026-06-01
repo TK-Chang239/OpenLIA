@@ -71,8 +71,11 @@ def resolve_key() -> bytes:
         return path.read_bytes().strip()
     key = Fernet.generate_key()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.write_bytes(key)
-    os.chmod(path, 0o600)
+    fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, key)
+    finally:
+        os.close(fd)
     return key
 
 
@@ -83,9 +86,18 @@ def get_fernet() -> Fernet:
         try:
             _fernet = Fernet(key)
         except (ValueError, TypeError) as exc:
-            raise SecretKeyInvalidError(
-                f"OPENLIA_SECRET_KEY is not a valid Fernet key. {_GENERATE_HINT}"
-            ) from exc
+            if os.environ.get("OPENLIA_SECRET_KEY"):
+                msg = f"OPENLIA_SECRET_KEY is not a valid Fernet key. {_GENERATE_HINT}"
+            else:
+                from openlia_server.db.bootstrap import openlia_home
+
+                key_path = openlia_home() / KEY_FILENAME
+                msg = (
+                    f"The connector secret key file at {key_path} is not a valid "
+                    f"Fernet key; delete it to regenerate, or set OPENLIA_SECRET_KEY. "
+                    f"{_GENERATE_HINT}"
+                )
+            raise SecretKeyInvalidError(msg) from exc
     return _fernet
 
 
