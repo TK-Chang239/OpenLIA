@@ -51,7 +51,7 @@ export function buildMcpLaunch(input: BuildMcpLaunchInput): BuiltMcpLaunch {
         secretValueOf(chip, p.value);
         return `${p.name}={${chip.suggestedKey}}`;
       }
-      return `${p.name}=${p.value}`;
+      return `${encodeURIComponent(p.name)}=${encodeURIComponent(p.value)}`;
     });
     const url =
       queryParts.length > 0

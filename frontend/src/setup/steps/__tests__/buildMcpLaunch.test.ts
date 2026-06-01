@@ -101,6 +101,29 @@ describe("buildMcpLaunch", () => {
     expect(built.secrets).toEqual({ MARKETDATA_ARG2: "MD_KEY_789" });
   });
 
+  it("url-encodes non-selected query param values", () => {
+    const parsed: RemoteParsed = {
+      kind: "remote",
+      baseUrl: "https://x/mcp",
+      queryParams: [
+        { name: "apikey", value: "AV1" },
+        { name: "q", value: "hello world" },
+      ],
+      headers: [],
+    };
+    const chips: SecretChip[] = [
+      {
+        locator: { kind: "query", name: "apikey" },
+        label: "apikey",
+        rawValue: "AV1",
+        preselected: true,
+        suggestedKey: "X_APIKEY",
+      },
+    ];
+    const built = buildMcpLaunch({ parsed, selected: chips, values: {} });
+    expect(built.mode.url).toBe("https://x/mcp?apikey={X_APIKEY}&q=hello%20world");
+  });
+
   it("embeds the placeholder inside a Bearer header value", () => {
     const parsed: RemoteParsed = {
       kind: "remote",

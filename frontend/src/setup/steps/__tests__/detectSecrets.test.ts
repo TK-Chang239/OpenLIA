@@ -70,4 +70,17 @@ describe("detectSecrets", () => {
     const chips = detectSecrets(parsed, "newsapi");
     expect(chips).toEqual([]);
   });
+
+  it("strips leading digits so the suggested key is a valid placeholder name", () => {
+    const parsed: RemoteParsed = {
+      kind: "remote",
+      baseUrl: "https://api.3xtrader.com/mcp",
+      queryParams: [{ name: "apikey", value: "k" }],
+      headers: [],
+    };
+    const chips = detectSecrets(parsed, "3xtrader");
+    // Backend placeholder regex requires the first char to be [A-Za-z_].
+    expect(chips[0].suggestedKey).toMatch(/^[A-Za-z_]/);
+    expect(chips[0].suggestedKey).toBe("XTRADER_APIKEY");
+  });
 });

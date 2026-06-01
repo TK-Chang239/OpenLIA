@@ -26,7 +26,11 @@ const SECRET_NAME_RE =
   /(api[_-]?key|apikey|api[_-]?token|access[_-]?token|token|secret|key)/i;
 
 function sanitizeKey(s: string): string {
-  return s.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
+  return s
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/^\d+/, "")
+    .toUpperCase();
 }
 
 function looksLikeCredential(token: string): boolean {
