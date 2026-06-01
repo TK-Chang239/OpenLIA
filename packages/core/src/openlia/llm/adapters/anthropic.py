@@ -370,10 +370,9 @@ class AnthropicAdapter(LLMProvider):
                                         )
                                 elif dtype == "citations_delta":
                                     blk = content_by_index.get(idx)
-                                    if blk is not None:
-                                        blk.setdefault("citations", []).append(
-                                            delta.get("citation")
-                                        )
+                                    citation = delta.get("citation")
+                                    if blk is not None and citation is not None:
+                                        blk.setdefault("citations", []).append(citation)
                             elif etype == "content_block_stop":
                                 idx = evt.get("index", -1)
                                 if idx in partial_json:

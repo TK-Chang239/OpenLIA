@@ -802,3 +802,24 @@ async def test_stream_text_chunks_have_no_server_tool_event() -> None:
             chunks.append(c)
     assert all(c.server_tool_event is None for c in chunks)
     assert "".join(c.delta for c in chunks) == "Hi"
+
+
+async def test_generate_retries_on_midstream_read_error() -> None:
+    """A transient ReadError (connection reset) on the streaming call is
+    the failure this whole change fixes. with_retries must retry with a
+    fresh accumulator; the second attempt succeeds and returns the
+    reassembled response — not the stale/partial first attempt."""
+    adapter = _adapter()
+    ok = httpx.Response(
+        200,
+        content=_sse_from_message([{"type": "text", "text": "recovered"}]),
+        headers=_SSE_HEADERS,
+    )
+    with respx.mock() as mock:
+        route = mock.post("https://api.anthropic.com/v1/messages")
+        route.side_effect = [httpx.ReadError("connection reset mid-stream"), ok]
+        resp = await adapter.generate(
+            LLMRequest(messages=[Message(role="user", content="hi")])
+        )
+    assert resp.text == "recovered"
+    assert route.call_count == 2
