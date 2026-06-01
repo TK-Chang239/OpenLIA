@@ -43,7 +43,9 @@ def upgrade() -> None:
             {"s": token, "id": row_id},
         )
     with op.batch_alter_table("connectors", schema=None) as batch_op:
-        batch_op.alter_column("secrets", type_=sa.Text())
+        batch_op.alter_column(
+            "secrets", type_=sa.Text(), postgresql_using="secrets::text"
+        )
 
 
 def downgrade() -> None:
@@ -60,4 +62,6 @@ def downgrade() -> None:
             {"s": plain, "id": row_id},
         )
     with op.batch_alter_table("connectors", schema=None) as batch_op:
-        batch_op.alter_column("secrets", type_=sa.JSON())
+        batch_op.alter_column(
+            "secrets", type_=sa.JSON(), postgresql_using="secrets::json"
+        )
