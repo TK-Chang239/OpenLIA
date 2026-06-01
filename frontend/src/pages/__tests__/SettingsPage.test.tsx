@@ -28,6 +28,9 @@ vi.mock('../../components/settings/admin/UsersPanel', () => ({
 vi.mock('../../components/settings/admin/ResetRequestsPanel', () => ({
   ResetRequestsPanel: () => <p>resets body</p>,
 }));
+vi.mock('../../components/settings/sections/ConnectorsSection', () => ({
+  ConnectorsSection: () => <p>connectors body</p>,
+}));
 
 import * as currentUserModule from '../../auth/useCurrentUser';
 
@@ -68,6 +71,19 @@ describe('SettingsPage', () => {
     renderAt('/settings/general');
     await waitFor(() => screen.getByText('general body'));
     expect(screen.queryByRole('link', { name: /admin/i })).toBeNull();
+  });
+
+  it('renders Connectors at its top-level route for a non-admin user', async () => {
+    vi.spyOn(currentUserModule, 'useCurrentUser').mockReturnValue({
+      id: 'u-1',
+      email: 'user@example.com',
+      display_name: 'User',
+      role: 'user',
+      must_change_password: false,
+    });
+    renderAt('/settings/connectors');
+    await waitFor(() => screen.getByText('connectors body'));
+    expect(screen.getByText('connectors body')).toBeInTheDocument();
   });
 
   it('shows Loading... when no current user yet', () => {

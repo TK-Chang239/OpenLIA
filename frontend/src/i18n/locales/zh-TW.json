@@ -75,6 +75,7 @@
     "tabs": {
       "general": "一般",
       "models": "模型",
+      "connectors": "資料連接器",
       "timezone": "時區與記憶",
       "account": "帳號",
       "skills": "技能",
@@ -202,7 +203,6 @@
       "tab_invites": "邀請碼",
       "tab_users": "使用者",
       "tab_reset_requests": "密碼重設申請",
-      "tab_connectors": "資料連接器",
       "tab_runner_specs": "Runner 規格",
       "tab_skills": "技能活動"
     },
@@ -271,8 +271,8 @@
       "title": "資料連接器",
       "subtitle": "管理各部門使用的資料來源連接器（MCP 伺服器、Python 函式庫）。",
       "loading": "載入中...",
+      "other_ways": "其他新增方式：",
       "add_from_catalog": "從目錄新增",
-      "add_mcp": "新增 MCP 連接器",
       "add_advanced": "新增連接器（進階）",
       "none_configured": "尚未設定任何連接器，請透過設定精靈或 API 新增。",
       "table_aria": "資料連接器",

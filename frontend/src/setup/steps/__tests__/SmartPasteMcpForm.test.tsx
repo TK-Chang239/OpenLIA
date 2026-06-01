@@ -141,4 +141,20 @@ describe("SmartPasteMcpForm", () => {
     });
     expect(screen.getByRole("button", { name: /validate & add/i })).not.toBeDisabled();
   });
+
+  it("omits the Cancel button when onCancel is not provided", () => {
+    render(<SmartPasteMcpForm onCreated={() => {}} />);
+    expect(screen.queryByRole("button", { name: /^cancel$/i })).toBeNull();
+    // The primary submit button is still present.
+    expect(
+      screen.getByRole("button", { name: /validate & add/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the Cancel button when onCancel is provided", () => {
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={() => {}} />);
+    expect(
+      screen.getByRole("button", { name: /^cancel$/i }),
+    ).toBeInTheDocument();
+  });
 });

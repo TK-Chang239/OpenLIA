@@ -76,6 +76,6 @@ describe("DeptDisabledBanner", () => {
     expect(screen.getByText(/missing required categories/i)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /settings.*connectors/i }),
-    ).toHaveAttribute("href", "/settings/admin/connectors");
+    ).toHaveAttribute("href", "/settings/connectors");
   });
 });

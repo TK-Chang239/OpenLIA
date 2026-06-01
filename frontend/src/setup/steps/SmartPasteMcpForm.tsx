@@ -18,7 +18,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
 ];
 
 interface Props {
-  onCancel: () => void;
+  onCancel?: () => void;
   onCreated: (row: ConnectorRow) => void;
 }
 
@@ -264,13 +264,15 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
           >
             {submitting ? "Validating..." : "Validate & add"}
           </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
-          >
-            Cancel
-          </button>
+          {onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
+            >
+              Cancel
+            </button>
+          ) : null}
         </div>
       </div>
     </form>

@@ -1,7 +1,9 @@
 /**
- * Admin panel: list / edit / validate / delete connectors.
+ * Top-level Connectors settings section: list / edit / validate / delete
+ * connectors. Visible to all users (no admin gating).
  *
- * Follows the same shape as ModelsAdminPanel — a refresh-on-mount table with
+ * The smart-paste form is the always-visible primary add path; "add from
+ * catalog" and "advanced" are secondary links. A refresh-on-mount table with
  * inline action buttons. Edits are limited to display_name + secrets;
  * source/category cannot change post-creation per spec §3.
  */
@@ -37,14 +39,14 @@ function kvToRecord(rows: KV[]): Record<string, string> {
   return out;
 }
 
-export function ConnectorsAdminPanel(): JSX.Element {
+export function ConnectorsSection(): JSX.Element {
   const { t } = useTranslation();
   const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ConnectorRow | null>(null);
   const [adding, setAdding] = useState(false);
-  const [addingMcp, setAddingMcp] = useState(false);
+  const [formNonce, setFormNonce] = useState(0);
   const [catalog, setCatalog] = useState<BuiltinTemplate[] | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosenTemplate, setChosenTemplate] = useState<BuiltinTemplate | null>(null);
@@ -106,40 +108,42 @@ export function ConnectorsAdminPanel(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-base font-semibold text-text-primary">{t('settings.connectors.title')}</h2>
-          <p className="mt-1 text-sm text-text-secondary">
-            {t('settings.connectors.subtitle')}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              if (catalog === null) setCatalog(await listBuiltinTemplates());
-              setPicking(true);
-            }}
-            className="rounded bg-accent-primary px-4 py-2 text-sm text-text-on-accent"
-          >
-            {t('settings.connectors.add_from_catalog')}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAddingMcp(true); setAdding(false); }}
-            className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
-          >
-            {t('settings.connectors.add_mcp')}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAdding(true); setAddingMcp(false); }}
-            className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
-          >
-            {t('settings.connectors.add_advanced')}
-          </button>
-        </div>
+      <header>
+        <h2 className="text-base font-semibold text-text-primary">{t('settings.connectors.title')}</h2>
+        <p className="mt-1 text-sm text-text-secondary">
+          {t('settings.connectors.subtitle')}
+        </p>
       </header>
+
+      <SmartPasteMcpForm
+        key={formNonce}
+        onCreated={() => {
+          setFormNonce((n) => n + 1);
+          void refresh();
+        }}
+      />
+
+      <div className="flex items-center gap-3 text-sm">
+        <span className="text-text-secondary">{t('settings.connectors.other_ways')}</span>
+        <button
+          type="button"
+          onClick={async () => {
+            if (catalog === null) setCatalog(await listBuiltinTemplates());
+            setPicking(true);
+          }}
+          className="text-accent-primary hover:underline"
+        >
+          {t('settings.connectors.add_from_catalog')}
+        </button>
+        <span className="text-text-secondary">·</span>
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="text-accent-primary hover:underline"
+        >
+          {t('settings.connectors.add_advanced')}
+        </button>
+      </div>
 
       {error ? (
         <p role="alert" className="text-sm text-feedback-error">
@@ -250,15 +254,6 @@ export function ConnectorsAdminPanel(): JSX.Element {
         />
       )}
 
-      {addingMcp && (
-        <SmartPasteMcpForm
-          onCancel={() => setAddingMcp(false)}
-          onCreated={(_row) => {
-            setAddingMcp(false);
-            void refresh();
-          }}
-        />
-      )}
 
       {adding && (
         <AddConnectorForm
