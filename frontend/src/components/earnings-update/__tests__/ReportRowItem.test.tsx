@@ -38,4 +38,19 @@ describe("ReportRowItem", () => {
     render(<ReportRowItem report={baseReport} onOpen={() => {}} isNew />);
     expect(screen.getByLabelText(/new/i)).toBeInTheDocument();
   });
+
+  it("does not render a download button — EU v2 reports are view-only", () => {
+    render(
+      <ReportRowItem
+        report={baseReport}
+        onOpen={() => {}}
+        showExtras
+        onRemove={() => {}}
+      />,
+    );
+    // No download affordance (EU v2 ships no export endpoint); the remove
+    // control is still present in the extras block.
+    expect(screen.queryByLabelText(/download/i)).toBeNull();
+    expect(screen.getByLabelText(/remove/i)).toBeInTheDocument();
+  });
 });
