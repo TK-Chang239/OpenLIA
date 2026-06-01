@@ -129,6 +129,17 @@ export default function Repository(): JSX.Element {
       });
       return;
     }
+    if (row.engine === "eu_v2") {
+      openViewer({
+        filename: row.filename,
+        kind: "report",
+        metadata,
+        source: { kind: "eu_v2_report", reportId: row.report_id },
+        initialSaved: true,
+        hideSaveToRepoButton: true,
+      });
+      return;
+    }
     openViewer({
       filename: row.filename,
       kind: "report",

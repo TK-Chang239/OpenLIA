@@ -15,9 +15,13 @@ export interface RepoItem {
  *     via ``{kind: "v3_report"}``; delete via ``deleteV3Run``;
  *     repo state lives in ``SavedReportsContext.isV3Saved``.
  *
+ *   - "eu_v2" — Earnings Update v2 engine (``eu_v2_report.id``).
+ *     Open via ``{kind: "eu_v2_report"}``; repo state lives in
+ *     ``SavedReportsContext.isEuSaved``.
+ *
  *  v2.2 still lists via its own ``/repo/v2-runs`` surface; pending
  *  fanout follow-up. */
-export type RepoEngine = "v1" | "v3";
+export type RepoEngine = "v1" | "v3" | "eu_v2";
 
 export interface RepoRow {
   id: string;
