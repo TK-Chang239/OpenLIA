@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 
 import { RunSummary } from "../../api/earnings-update";
-import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 interface Props {
   report: RunSummary;
@@ -56,7 +55,6 @@ export function ReportRowItem({
       </button>
       {showExtras ? (
         <>
-          <ReportDownloadButton reportId={report.report_id} className="ml-2" />
           <button
             type="button"
             onClick={() => onRemove?.(report.report_id)}

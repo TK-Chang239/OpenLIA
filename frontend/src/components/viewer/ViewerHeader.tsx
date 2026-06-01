@@ -53,6 +53,11 @@ export function ViewerHeader({
           <ReportDownloadButton reportId={source.reportId} />
         ) : source.kind === "v3_report" ? (
           <ReportDownloadButton reportId={source.reportId} engine="v3" />
+        ) : source.kind === "eu_v2_report" ? (
+          // EU v2 reports are view-only — the backend ships no html/pdf/docx
+          // export endpoint, so there's no download affordance (and sourceUrl
+          // intentionally rejects this kind).
+          null
         ) : (
           <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         )}
