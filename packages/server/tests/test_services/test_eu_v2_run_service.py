@@ -685,8 +685,9 @@ def test_build_eu_dispatcher_none_when_no_enabled_non_eodhd(db_session):
 
 
 def test_get_run_loads_row_with_children(db_session_with_seed):
-    from openlia_server.db.models.report_eu import ReportEu, ReportEuSection
     from datetime import UTC, datetime
+
+    from openlia_server.db.models.report_eu import ReportEu, ReportEuSection
 
     rid = "rid-load-1"
     db_session_with_seed.add(
