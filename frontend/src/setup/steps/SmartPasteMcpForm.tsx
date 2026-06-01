@@ -123,7 +123,11 @@ export function SmartPasteMcpForm({ onCancel, onCreated }: Props) {
           aria-label="paste a url or command"
           rows={3}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setEnabled({});
+            setValues({});
+          }}
           placeholder="https://mcp.example.com/mcp?apikey=YOUR_KEY   —or—   uvx some-mcp-server YOUR_KEY"
           className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
         />

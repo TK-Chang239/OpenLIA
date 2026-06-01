@@ -64,4 +64,31 @@ describe("SmartPasteMcpForm", () => {
     expect(screen.getByRole("button", { name: /validate & add/i })).toBeDisabled();
     expect(mocked.createConnector).not.toHaveBeenCalled();
   });
+
+  it("resets detected-secret state when the pasted text changes", async () => {
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={() => {}} />);
+    const box = screen.getByLabelText(/paste a url or command/i);
+
+    // First paste: an apikey secret is detected and pre-filled.
+    fireEvent.change(box, {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=AV12345" },
+    });
+    expect(await screen.findByDisplayValue("AV12345")).toBeInTheDocument();
+
+    // Toggle the chip OFF.
+    const checkbox = screen.getByLabelText(/treat apikey as secret/i);
+    fireEvent.click(checkbox);
+    expect((checkbox as HTMLInputElement).checked).toBe(false);
+
+    // Re-paste a different URL whose secret has the SAME suggestedKey shape
+    // (provider alphavantage, param apikey) but a new value.
+    fireEvent.change(box, {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=NEWVALUE99" },
+    });
+
+    // The chip must come back at its detected default: checked + new value.
+    const checkbox2 = await screen.findByLabelText(/treat apikey as secret/i);
+    expect((checkbox2 as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByDisplayValue("NEWVALUE99")).toBeInTheDocument();
+  });
 });
