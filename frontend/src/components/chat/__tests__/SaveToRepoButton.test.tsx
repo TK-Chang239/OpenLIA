@@ -91,6 +91,47 @@ describe("SaveToRepoButton", () => {
     expect(repoApi.unsaveFromRepo).not.toHaveBeenCalled();
   });
 
+  it("routes to the eu save endpoint when engine=eu", async () => {
+    (repoApi.saveEuRunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "x",
+      eu_v2_report_id: "eu-1",
+      created_at: "2026-05-28T00:00:00Z",
+    });
+    render(
+      <SaveToRepoButton
+        reportId="eu-1"
+        engine="eu"
+        initialSaved={false}
+        variant="viewer-header"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save to repository/i }));
+    await waitFor(() =>
+      expect(repoApi.saveEuRunToRepo).toHaveBeenCalledWith("eu-1"),
+    );
+    // v1 endpoint must not be called when engine=eu.
+    expect(repoApi.saveToRepo).not.toHaveBeenCalled();
+  });
+
+  it("routes to the eu unsave endpoint when engine=eu and already saved", async () => {
+    (repoApi.unsaveEuRunFromRepo as ReturnType<typeof vi.fn>).mockResolvedValue(
+      undefined,
+    );
+    render(
+      <SaveToRepoButton
+        reportId="eu-1"
+        engine="eu"
+        initialSaved={true}
+        variant="viewer-header"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove from repository/i }));
+    await waitFor(() =>
+      expect(repoApi.unsaveEuRunFromRepo).toHaveBeenCalledWith("eu-1"),
+    );
+    expect(repoApi.unsaveFromRepo).not.toHaveBeenCalled();
+  });
+
   it("routes to the v2 save endpoint when engine=v2", async () => {
     (repoApi.saveV2RunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "x",

@@ -31,6 +31,21 @@ describe("ViewerHeader download affordance", () => {
     expect(standalone?.getAttribute("target")).toBe("_blank");
   });
 
+  test("eu_v2_report with reportId + saveEngine=eu renders the Save-to-Repo button", () => {
+    const { getByTestId } = render(
+      <ViewerHeader
+        filename="AAPL earnings"
+        metadata="EU v2"
+        source={{ kind: "eu_v2_report", reportId: "r1" }}
+        reportId="r1"
+        saveEngine="eu"
+        onClose={() => undefined}
+      />,
+    );
+    expect(getByTestId("save")).toBeInTheDocument();
+    expect(getByTestId("report-dl")).toBeInTheDocument();
+  });
+
   test("v3_report still renders a ReportDownloadButton", () => {
     const { getByTestId } = render(
       <ViewerHeader

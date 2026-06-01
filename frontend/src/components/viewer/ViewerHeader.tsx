@@ -16,7 +16,7 @@ interface Props {
   /** Engine that produced the report — selects the right repo
    *  endpoint. Defaults to "v1" for back-compat with existing v1
    *  callers. */
-  saveEngine?: "v1" | "v2" | "v3";
+  saveEngine?: "v1" | "v2" | "v3" | "eu";
   initialSaved?: boolean;
   hideSaveToRepoButton?: boolean;
   onClose: () => void;

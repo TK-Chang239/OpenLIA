@@ -164,3 +164,24 @@ export const unsaveV3RunFromRepo = (reportId: string) =>
  *  `initialSaved` prop is correct after a reload. */
 export const listSavedV3Runs = () =>
   fetchJson<{ saved_report_ids: string[] }>("/api/repo/v3-runs");
+
+// Earnings Update v2 repo mirrors of the v3 helpers. Polymorphic
+// pointer column ``eu_v2_report_id`` lives in ``repo_items`` alongside
+// the v1/v2/v3 pointers; the routes keep each engine's surface explicit
+// so callers stay clear about which engine wrote the artifact.
+
+export const saveEuRunToRepo = (reportId: string) =>
+  fetchJson<RepoItem>("/api/repo/eu-runs", {
+    method: "POST",
+    json: { eu_v2_report_id: reportId },
+  });
+
+export const unsaveEuRunFromRepo = (reportId: string) =>
+  fetchJson<void>(
+    `/api/repo/eu-runs?eu_v2_report_id=${encodeURIComponent(reportId)}`,
+    { method: "DELETE" },
+  );
+
+/** Returns the EU v2 report ids the current user has saved. */
+export const listSavedEuRuns = () =>
+  fetchJson<{ saved_report_ids: string[] }>("/api/repo/eu-runs");
