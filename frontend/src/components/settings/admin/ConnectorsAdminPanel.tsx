@@ -20,6 +20,8 @@ import { refreshDeptHealth, useDeptHealth } from "../../../store/dept-health";
 import { CatalogGrid } from "../../connectors/CatalogGrid";
 import { CategoryRequirementsPanel } from "../../connectors/CategoryRequirementsPanel";
 import { InstallBuiltinForm } from "../../connectors/InstallBuiltinForm";
+import { AddConnectorForm } from "../../../setup/steps/AddConnectorForm";
+import { SmartPasteMcpForm } from "../../../setup/steps/SmartPasteMcpForm";
 
 interface KV {
   key: string;
@@ -42,6 +44,7 @@ export function ConnectorsAdminPanel(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ConnectorRow | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addingMcp, setAddingMcp] = useState(false);
   const [catalog, setCatalog] = useState<BuiltinTemplate[] | null>(null);
   const [picking, setPicking] = useState(false);
   const [chosenTemplate, setChosenTemplate] = useState<BuiltinTemplate | null>(null);
@@ -123,10 +126,17 @@ export function ConnectorsAdminPanel(): JSX.Element {
           </button>
           <button
             type="button"
-            onClick={() => setAdding(true)}
+            onClick={() => { setAddingMcp(true); setAdding(false); }}
             className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
           >
-            {t('settings.connectors.add_custom')}
+            Add MCP connector
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAdding(true); setAddingMcp(false); }}
+            className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
+          >
+            Add connector (advanced)
           </button>
         </div>
       </header>
@@ -240,10 +250,24 @@ export function ConnectorsAdminPanel(): JSX.Element {
         />
       )}
 
+      {addingMcp && (
+        <SmartPasteMcpForm
+          onCancel={() => setAddingMcp(false)}
+          onCreated={(_row) => {
+            setAddingMcp(false);
+            void refresh();
+          }}
+        />
+      )}
+
       {adding && (
-        <p className="text-sm text-text-secondary">
-          {t('settings.connectors.custom_hint')}
-        </p>
+        <AddConnectorForm
+          onCancel={() => setAdding(false)}
+          onCreated={(_row) => {
+            setAdding(false);
+            void refresh();
+          }}
+        />
       )}
 
       {editing ? (
