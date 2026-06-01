@@ -91,4 +91,54 @@ describe("SmartPasteMcpForm", () => {
     expect((checkbox2 as HTMLInputElement).checked).toBe(true);
     expect(screen.getByDisplayValue("NEWVALUE99")).toBeInTheDocument();
   });
+
+  it("lets the user set a display name independent of provider id", async () => {
+    const created = vi.fn();
+    const row: api.ConnectorRow = {
+      id: "c1",
+      provider_id: "alphavantage",
+      display_name: "Alpha Vantage",
+      source: "remote_mcp",
+      category: "financial",
+      status: "validated",
+      last_error: null,
+      cached_tools_count: 1,
+    };
+    // Use the same mocked createConnector the other tests use:
+    const mocked2 = api.createConnector as unknown as ReturnType<typeof vi.fn>;
+    mocked2.mockResolvedValue(row);
+
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={created} />);
+    fireEvent.change(screen.getByLabelText(/paste a url or command/i), {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=AV12345" },
+    });
+    await screen.findByDisplayValue("AV12345");
+
+    fireEvent.change(screen.getByLabelText(/display name/i), {
+      target: { value: "Alpha Vantage" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /validate & add/i }));
+
+    await waitFor(() => expect(mocked2).toHaveBeenCalled());
+    const payload = mocked2.mock.calls.at(-1)![0];
+    expect(payload.provider_id).toBe("alphavantage");
+    expect(payload.display_name).toBe("Alpha Vantage");
+  });
+
+  it("disables submit when an enabled secret has no value", async () => {
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/paste a url or command/i), {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=YOUR_API_KEY" },
+    });
+    // Placeholder-shaped value -> chip enabled but value blank.
+    const checkbox = await screen.findByLabelText(/treat apikey as secret/i);
+    expect((checkbox as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: /validate & add/i })).toBeDisabled();
+
+    // Typing a value enables submit.
+    fireEvent.change(screen.getByLabelText(/secret value apikey/i), {
+      target: { value: "real-key" },
+    });
+    expect(screen.getByRole("button", { name: /validate & add/i })).not.toBeDisabled();
+  });
 });
