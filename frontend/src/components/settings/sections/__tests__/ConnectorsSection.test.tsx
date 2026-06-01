@@ -159,4 +159,14 @@ describe("ConnectorsSection", () => {
       ).toBe(""),
     );
   });
+
+  it("reveals the advanced form when the 'advanced' secondary link is clicked", async () => {
+    render(<ConnectorsSection />);
+    await screen.findByText("EODHD");
+    fireEvent.click(
+      screen.getByRole("button", { name: /add connector \(advanced\)/i }),
+    );
+    // AddConnectorForm has a "source" select that the smart-paste form lacks.
+    expect(await screen.findByLabelText("source")).toBeInTheDocument();
+  });
 });
