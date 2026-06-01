@@ -397,7 +397,14 @@ export function parseFilenameFromHeader(
   return fallback;
 }
 
-export type ReportEngine = "v1" | "v2" | "v23" | "v3";
+export type ReportEngine = "v1" | "v2" | "v23" | "v3" | "eu";
+
+// Earnings Update v2 standalone HTML render endpoint. Mirrors v3HtmlUrl
+// (in equity-research-v3.ts) — the caller opens it in a new tab; the
+// browser's Save As then yields a Word/PDF copy.
+export function euHtmlUrl(reportId: string): string {
+  return `/api/departments/earnings-update/v2/runs/${encodeURIComponent(reportId)}/html`;
+}
 
 export async function downloadReportBlob(
   reportId: string,
@@ -413,6 +420,13 @@ export async function downloadReportBlob(
       format === "pdf"
         ? `/api/departments/equity-research/v3/runs/${encodeURIComponent(reportId)}/pdf`
         : `/api/departments/equity-research/v3/runs/${encodeURIComponent(reportId)}/docx`;
+  } else if (engine === "eu") {
+    // Earnings Update v2 emits both formats natively, mirroring v3:
+    // PDF prints the rendered HTML; docx is built by python-docx.
+    url =
+      format === "pdf"
+        ? `/api/departments/earnings-update/v2/runs/${encodeURIComponent(reportId)}/pdf`
+        : `/api/departments/earnings-update/v2/runs/${encodeURIComponent(reportId)}/docx`;
   } else if (engine === "v23") {
     // v2.3 only emits docx today; PDF is browser-print from the viewer.
     url = `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(reportId)}/docx`;
