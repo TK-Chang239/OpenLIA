@@ -191,7 +191,7 @@ def test_eu_save_then_list(client, user_factory, login_as, db_session):
     assert resp.status_code == 201
     assert resp.json()["eu_v2_report_id"] == r.id
     listed = client.get("/repo/eu-runs").json()
-    assert listed["saved_run_ids"] == [r.id]
+    assert listed["saved_report_ids"] == [r.id]
 
 
 def test_eu_delete_removes_entry(client, user_factory, login_as, db_session):
@@ -200,7 +200,7 @@ def test_eu_delete_removes_entry(client, user_factory, login_as, db_session):
     r = _eu_report_factory(db_session)(user_id=u.id)
     client.post("/repo/eu-runs", json={"eu_v2_report_id": r.id})
     assert client.delete(f"/repo/eu-runs?eu_v2_report_id={r.id}").status_code == 204
-    assert client.get("/repo/eu-runs").json()["saved_run_ids"] == []
+    assert client.get("/repo/eu-runs").json()["saved_report_ids"] == []
 
 
 def test_eu_save_unknown_returns_404(client, user_factory, login_as):

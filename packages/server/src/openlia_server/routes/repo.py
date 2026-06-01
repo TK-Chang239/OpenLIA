@@ -64,7 +64,7 @@ class RepoEuSavedListOut(BaseModel):
     on page load.
     """
 
-    saved_run_ids: list[str]
+    saved_report_ids: list[str]
 
 
 class RepoRowOut(BaseModel):
@@ -343,6 +343,6 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
     ) -> RepoEuSavedListOut:
         rows = svc.list_items(db, user_id=user.id)
         ids = [r.eu_v2_report_id for r in rows if r.eu_v2_report_id is not None]
-        return RepoEuSavedListOut(saved_run_ids=ids)
+        return RepoEuSavedListOut(saved_report_ids=ids)
 
     return router

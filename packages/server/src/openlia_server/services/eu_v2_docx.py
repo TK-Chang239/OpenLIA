@@ -58,7 +58,7 @@ def render_docx(
     charts: list[ReportEuChart],
     citations: list[ReportEuCitation],
 ) -> bytes:
-    """Build a Word document from the persisted v3 rows."""
+    """Build a Word document from the persisted EU v2 rows."""
     doc = Document()
     _configure_styles(doc)
     cover_spec = _parse_cover(report.cover_json)
@@ -118,7 +118,7 @@ def _parse_cover(raw: str | None) -> CoverSpec | None:
     try:
         return CoverSpec.model_validate_json(raw)
     except (TypeError, ValueError):
-        log.warning("v3 cover_json failed to deserialise; rendering bare cover")
+        log.warning("EU v2 cover_json failed to deserialise; rendering bare cover")
         return None
 
 
