@@ -75,6 +75,7 @@
     "tabs": {
       "general": "General",
       "models": "Models",
+      "connectors": "Connectors",
       "timezone": "Timezone & Memory",
       "account": "Account",
       "skills": "Skills",
@@ -271,6 +272,7 @@
       "title": "Connectors",
       "subtitle": "Manage data-source connectors (MCP servers, Python libraries) used by departments.",
       "loading": "Loading...",
+      "other_ways": "Other ways to add:",
       "add_from_catalog": "Add from catalog",
       "add_mcp": "Add MCP connector",
       "add_advanced": "Add connector (advanced)",
