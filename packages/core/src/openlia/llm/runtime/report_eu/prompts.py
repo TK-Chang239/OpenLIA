@@ -194,7 +194,26 @@ def _render_connectors_block(
             "only the output tools (`write_section`, `set_cover`, "
             "`emit_chart`, `finalize`) are available."
         )
-    return "These tool groups are enabled this run:\n\n" + "\n".join(available)
+    return (
+        "These tool groups are enabled this run:\n\n"
+        + "\n".join(available)
+        + "\n\n"
+        + _EARNINGS_DATA_PRIORITY
+    )
+
+
+# Connector-agnostic research directive. Appended whenever at least one data
+# tool is enabled, so the model leans on primary reported data regardless of
+# which provider supplies it. Names no specific connector — a provider the
+# user runs today may be swapped out tomorrow.
+_EARNINGS_DATA_PRIORITY = (
+    "Prioritize the data that defines an earnings update. Favor tools that "
+    "return the reported quarter's actual figures, the beat/miss history "
+    "versus estimates, and the earnings call transcript and management "
+    "commentary. When a tool group exposes a discovery interface (a "
+    "list/describe/call pattern), use it to find and call those "
+    "earnings-specific tools so the analysis rests on primary reported data."
+)
 
 
 _PROMPT_TEMPLATE = """\
