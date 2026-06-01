@@ -71,7 +71,11 @@ def resolve_key() -> bytes:
         return path.read_bytes().strip()
     key = Fernet.generate_key()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+    except FileExistsError:
+        # Another process created it between our existence check and here.
+        return path.read_bytes().strip()
     try:
         os.write(fd, key)
     finally:
