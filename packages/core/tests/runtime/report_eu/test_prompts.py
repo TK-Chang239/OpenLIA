@@ -99,6 +99,42 @@ def test_prompt_fallback_when_no_connectors_and_no_tools():
     assert "no data tools" in prompt.lower()
 
 
+def test_prompt_includes_earnings_data_priority_when_tools_available():
+    prompt = build_system_prompt(
+        _req(EnabledConnectors(provider_ids=frozenset({"eodhd"})), None)
+    )
+    lowered = prompt.lower()
+    assert "earnings call transcript" in lowered
+    assert "beat/miss" in lowered
+    assert "discovery interface" in lowered
+
+
+def test_data_priority_directive_names_no_provider():
+    prompt = build_system_prompt(
+        _req(EnabledConnectors(provider_ids=frozenset({"eodhd"})), None),
+        connector_tools=(
+            ConnectorPromptInfo(
+                label="alphavantage",
+                tools=(("alphavantage__TOOL_LIST", "List tools"),),
+            ),
+        ),
+    )
+    # The directive is connector-agnostic: it must read the same whether or
+    # not any specific provider is enabled. Isolate just the directive
+    # paragraph and assert no provider label leaked into it.
+    tail = prompt.split("Prioritize the data that defines")[1]
+    directive = tail.split("primary reported data.")[0]
+    assert "alphavantage" not in directive.lower()
+    assert "eodhd" not in directive.lower()
+
+
+def test_prompt_omits_data_priority_when_no_tools():
+    prompt = build_system_prompt(
+        _req(EnabledConnectors(provider_ids=frozenset(), web_search=False), None)
+    )
+    assert "discovery interface" not in prompt.lower()
+
+
 def test_prompt_lists_template_sections():
     prompt = build_system_prompt(_req(EnabledConnectors(), None))
     assert "quick_take" in prompt
