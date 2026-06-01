@@ -12,6 +12,10 @@ the first available mode in priority order (`python_lib` > `cli_mcp` >
 `remote_mcp`) is realized as a transport instance. Connectors persisted
 with a legacy/empty `launch` JSON fall back to `_UnboundTransport` so the
 server still boots while their rows wait for migration.
+
+Secret `{NAME}` placeholders are substituted from the connector's secrets
+in remote_mcp URLs/headers and cli_mcp argv tokens before transport
+construction, so raw keys never need to live in the persisted launch JSON.
 """
 
 from __future__ import annotations
@@ -111,9 +115,18 @@ def _build_transport(connector_id: str, mode: dict, secrets: dict[str, str]) -> 
             secrets=secrets,
         )
     if kind == "cli_mcp":
+        # Substitute `{NAME}` placeholders in argv tokens from secrets, mirroring
+        # the remote_mcp URL/header substitution below. This lets an API key be
+        # supplied as a positional CLI arg (e.g. `uvx marketdata-mcp-server {KEY}`)
+        # without persisting the raw key in launch JSON. Unmatched placeholders
+        # stay literal so a missing secret surfaces as an obvious failure.
+        argv = [
+            _substitute_secrets(tok, secrets) if isinstance(tok, str) else tok
+            for tok in (mode.get("argv") or [])
+        ]
         cli_mode = CliMcpMode(
             kind="cli_mcp",
-            argv=list(mode.get("argv") or []),
+            argv=argv,
             env_keys=list(mode.get("env_keys") or []),
         )
         return CliMcpTransport(mode=cli_mode, secrets=secrets)
