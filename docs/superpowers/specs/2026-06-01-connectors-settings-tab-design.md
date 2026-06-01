@@ -109,10 +109,12 @@ In `ConnectorsSection`:
 
 `frontend/src/i18n/locales/en.json` and `zh-TW.json`:
 
-- Add `settings.tabs.connectors` ("Connectors" / Traditional Chinese equivalent).
-- Add keys for the two secondary links, e.g. `settings.connectors.browse_catalog` and
-  `settings.connectors.advanced_setup`.
-- Remove the now-unused `settings.admin.tab_connectors`.
+- Add `settings.tabs.connectors` ("Connectors" / "資料連接器").
+- Reuse the existing `settings.connectors.add_from_catalog` and
+  `settings.connectors.add_advanced` labels for the two secondary links; add a small
+  lead-in label `settings.connectors.other_ways` ("Other ways to add:").
+- Remove the now-unused `settings.admin.tab_connectors`. (`settings.connectors.add_mcp`
+  becomes unused once the toggle button is gone; harmless to leave.)
 - The existing `settings.connectors.*` keys (title, subtitle, table columns, actions, edit
   modal, etc.) are reused unchanged.
 
