@@ -20,8 +20,12 @@ from typing import Any
 from .schemas import CitationLogEntry
 
 # Maps tool name -> source_id prefix. Unknown tools fall back to
-# their tool name itself (with non-alphanumeric chars stripped) so we
-# never silently lose provenance attribution.
+# their tool name itself (lowercased, non-alphanumeric chars stripped) so we
+# never silently lose provenance attribution. Lowercasing keeps the source_id
+# matchable by the citation regex (``[a-z0-9_]+``) shared across the
+# write_section validator, the display-index assigner, and the rewriter:
+# connector tools carry uppercase names (e.g. ``alphavantage__TOOL_CALL``)
+# that would otherwise render as raw, unresolved ``[^...]`` markers.
 _TOOL_PREFIX_MAP: dict[str, str] = {
     "web_search": "web",
     "get_fundamentals": "eodhd",
@@ -37,7 +41,7 @@ _TOOL_PREFIX_MAP: dict[str, str] = {
 def _prefix_for(tool_name: str) -> str:
     if tool_name in _TOOL_PREFIX_MAP:
         return _TOOL_PREFIX_MAP[tool_name]
-    sanitized = "".join(ch for ch in tool_name if ch.isalnum() or ch == "_")
+    sanitized = "".join(ch for ch in tool_name.lower() if ch.isalnum() or ch == "_")
     return sanitized or "tool"
 
 
