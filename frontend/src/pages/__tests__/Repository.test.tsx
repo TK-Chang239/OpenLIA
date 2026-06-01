@@ -71,6 +71,7 @@ vi.mock("../../api/equity-research-v3", () => ({
 }));
 
 import Repository from "../Repository";
+import * as viewerCtx from "../../components/viewer/FileViewerContext";
 import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
 import { FileViewer } from "../../components/viewer/FileViewer";
 import { ToastProvider } from "../../components/primitives/Toast";
@@ -112,6 +113,18 @@ const SAMPLE_V3_ROW = {
   department: "equity_research",
   title: "RKLB.US",
   filename: "RKLB.US_initiation_default_2026-05-28.pdf",
+  generated_at: new Date(Date.now() - 86_400_000).toISOString(),
+  saved_at: new Date(Date.now() - 3_600_000).toISOString(),
+};
+
+const SAMPLE_EU_ROW = {
+  id: "i3",
+  engine: "eu_v2" as const,
+  // For eu_v2 rows, report_id holds the eu_v2_report.id.
+  report_id: "eu-xyz",
+  department: "earnings_update",
+  title: "AAPL Q1 update",
+  filename: "AAPL_earnings_update_2026-05-30.pdf",
   generated_at: new Date(Date.now() - 86_400_000).toISOString(),
   saved_at: new Date(Date.now() - 3_600_000).toISOString(),
 };
@@ -348,5 +361,34 @@ describe("Repository page", () => {
       expect(unsaveV3RunFromRepo).toHaveBeenCalledWith(SAMPLE_V3_ROW.report_id);
     });
     expect(unsaveFromRepo).not.toHaveBeenCalled();
+  });
+
+  // ----- EU v2 fanout (Task 11) -----
+
+  it("opens an eu_v2 row via the eu_v2_report file source", async () => {
+    const openSpy = vi.fn();
+    vi.spyOn(viewerCtx, "useFileViewer").mockReturnValue({
+      current: null,
+      lastTrigger: null,
+      open: openSpy,
+      close: vi.fn(),
+    } as unknown as ReturnType<typeof viewerCtx.useFileViewer>);
+    listRepoItemsFiltered.mockReset();
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [SAMPLE_EU_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    renderPage();
+    const row = await screen.findByText(SAMPLE_EU_ROW.filename);
+    fireEvent.click(row);
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "report",
+        source: { kind: "eu_v2_report", reportId: SAMPLE_EU_ROW.report_id },
+      }),
+    );
   });
 });
