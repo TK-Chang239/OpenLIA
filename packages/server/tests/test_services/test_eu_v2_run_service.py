@@ -684,6 +684,45 @@ def test_build_eu_dispatcher_none_when_no_enabled_non_eodhd(db_session):
     assert dispatcher is None
 
 
+def test_get_run_loads_row_with_children(db_session_with_seed):
+    from datetime import UTC, datetime
+
+    from openlia_server.db.models.report_eu import ReportEu, ReportEuSection
+
+    rid = "rid-load-1"
+    db_session_with_seed.add(
+        ReportEu(
+            id=rid, user_id="u-1", subject="AAPL earnings", ticker="AAPL",
+            trigger_kind="on_demand", fiscal_date=None, template_id="eu_default",
+            language="en", length="normal", provider_kind="anthropic",
+            model="claude-sonnet-4-6", status="completed", error_message=None,
+            created_at=datetime.now(UTC), completed_at=datetime.now(UTC),
+            cover_json=None, reasoning_effort=None,
+        )
+    )
+    db_session_with_seed.add(
+        ReportEuSection(
+            report_id=rid, section_id="quick_take", section_index=0,
+            title="Quick Take", markdown="Body.", version=1,
+        )
+    )
+    db_session_with_seed.flush()
+
+    row, sections, charts, citations = svc.get_run(
+        db=db_session_with_seed, user_id="u-1", report_id=rid
+    )
+    assert row.id == rid
+    assert [s.section_id for s in sections] == ["quick_take"]
+    assert charts == []
+    assert citations == []
+
+
+def test_get_run_missing_raises(db_session_with_seed):
+    import pytest as _pytest
+    with _pytest.raises(svc.ReportNotFoundError):
+        svc.get_run(db=db_session_with_seed, user_id="u-1", report_id="nope")
+
+
 def test_cleanup_orphaned_running_rows(db_session):
     """Stuck 'running' rows flipped to 'failed'; completed rows untouched."""
     now = datetime.now(UTC)

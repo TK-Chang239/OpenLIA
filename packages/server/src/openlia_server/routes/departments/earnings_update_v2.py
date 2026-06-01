@@ -16,11 +16,9 @@ Endpoints (prefix ``/departments/earnings-update/v2``):
 - ``GET      /runs`` ``GET /runs/{id}`` ``DELETE /runs/{id}``  run CRUD
 - ``POST     /runs/{id}/cancel``         cooperative cancel
 - ``GET      /runs/{id}/events``         SSE progress stream
-
-Render endpoints (html/pdf/docx) are intentionally NOT implemented here:
-the v3 render service is bound to the ``report_v3_*`` tables and cannot
-be reused for ``report_eu`` without a non-trivial adapter. They are
-deferred to a follow-up (see the implementation plan's open follow-ups).
+- ``GET      /runs/{id}/html``           rendered HTML download
+- ``GET      /runs/{id}/pdf``            rendered PDF download (needs browser launcher)
+- ``GET      /runs/{id}/docx``           native .docx download
 """
 
 from __future__ import annotations
@@ -42,7 +40,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openlia.llm.runtime.report_eu import (
     CancelToken,
     EventBroker,
@@ -66,6 +64,7 @@ from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 from openlia_server.services import eu_v2_calendar_sync as calendar_sync
 from openlia_server.services import eu_v2_data_sources
 from openlia_server.services import eu_v2_instructions_service as instructions_svc
+from openlia_server.services import eu_v2_render_service as render_svc
 from openlia_server.services import eu_v2_run_service as run_svc
 from openlia_server.services import eu_v2_settings as settings_svc
 from openlia_server.services import eu_v2_template_service as templates_svc
@@ -75,6 +74,7 @@ from openlia_server.services.attachments import (
     extract_text,
     validate_uploads,
 )
+from openlia_server.services.eu_v2_filename import build_download_filename
 from openlia_server.services.eu_v2_wiring import (
     build_eu_v2_transports,
     resolve_eodhd_api_key,
@@ -977,6 +977,85 @@ def build_earnings_update_v2_router(
             _sse_stream(broker, report_id, terminal_snapshot),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    # ----- Exports -----
+
+    @router.get("/runs/{report_id}/html", response_class=HTMLResponse)
+    def get_html(
+        report_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> HTMLResponse:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        try:
+            row = run_svc.get_report_row(db=db, user_id=user.id, report_id=report_id)
+            rendered = render_svc.render_html(db=db, user_id=user.id, report_id=report_id)
+        except run_svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        filename = build_download_filename(row=row, ext="html")
+        return HTMLResponse(
+            content=rendered.html,
+            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        )
+
+    @router.get("/runs/{report_id}/pdf")
+    async def get_pdf(
+        report_id: str,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        launcher = getattr(request.app.state, "browser_launcher", None)
+        if launcher is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "PDF rendering requires the BrowserLauncher on app.state. "
+                    "Use GET /html instead."
+                ),
+            )
+        try:
+            row = run_svc.get_report_row(db=db, user_id=user.id, report_id=report_id)
+            pdf_bytes = await render_svc.render_pdf(
+                db=db, user_id=user.id, report_id=report_id, browser_launcher=launcher
+            )
+        except run_svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        filename = build_download_filename(row=row, ext="pdf")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        )
+
+    @router.get("/runs/{report_id}/docx")
+    def get_docx(
+        report_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        if not eu_v2_enabled():
+            raise _engine_disabled()
+        try:
+            row = run_svc.get_report_row(db=db, user_id=user.id, report_id=report_id)
+            docx_bytes = render_svc.render_docx(db=db, user_id=user.id, report_id=report_id)
+        except run_svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            log.exception("eu v2 docx render failed for report_id=%s", report_id)
+            raise HTTPException(
+                status_code=500,
+                detail=f"eu v2 docx render failed: {type(exc).__name__}: {exc}",
+            ) from exc
+        filename = build_download_filename(row=row, ext="docx")
+        return Response(
+            content=docx_bytes,
+            media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     return router

@@ -1,8 +1,9 @@
 import type { Ref } from "react";
-import { X } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
+import { euHtmlUrl } from "../../api/reports";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { FileDownloadButton } from "../chat/FileDownloadButton";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
@@ -15,7 +16,7 @@ interface Props {
   /** Engine that produced the report — selects the right repo
    *  endpoint. Defaults to "v1" for back-compat with existing v1
    *  callers. */
-  saveEngine?: "v1" | "v2" | "v3";
+  saveEngine?: "v1" | "v2" | "v3" | "eu";
   initialSaved?: boolean;
   hideSaveToRepoButton?: boolean;
   onClose: () => void;
@@ -54,10 +55,19 @@ export function ViewerHeader({
         ) : source.kind === "v3_report" ? (
           <ReportDownloadButton reportId={source.reportId} engine="v3" />
         ) : source.kind === "eu_v2_report" ? (
-          // EU v2 reports are view-only — the backend ships no html/pdf/docx
-          // export endpoint, so there's no download affordance (and sourceUrl
-          // intentionally rejects this kind).
-          null
+          <>
+            <ReportDownloadButton reportId={source.reportId} engine="eu" />
+            <a
+              href={euHtmlUrl(source.reportId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open the printable HTML in a new tab (use the browser's Save As to grab a Word or PDF copy)"
+              className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[12px] text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-secondary"
+            >
+              <ExternalLink size={12} strokeWidth={1.7} />
+              Standalone
+            </a>
+          </>
         ) : (
           <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         )}

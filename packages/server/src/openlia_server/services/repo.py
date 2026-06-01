@@ -13,7 +13,11 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import RepoItem, Report
 from openlia_server.db.models.pipeline_runs import PipelineRun
+from openlia_server.db.models.report_eu import ReportEu
 from openlia_server.db.models.report_v3 import ReportV3
+from openlia_server.services.eu_v2_filename import (
+    build_download_filename as build_eu_download_filename,
+)
 from openlia_server.services.v3_filename import build_download_filename
 
 SortKey = Literal[
@@ -36,7 +40,7 @@ VALID_SORTS: frozenset[str] = frozenset(
     }
 )
 
-Engine = Literal["v1", "v2", "v3"]
+Engine = Literal["v1", "v2", "v3", "eu_v2"]
 
 
 @dataclass(frozen=True)
@@ -45,10 +49,10 @@ class RepoRow:
 
     ``engine`` distinguishes which source table the row was joined
     from. ``target_id`` is the id within that engine's namespace (v1:
-    ``reports.id``; v2: ``pipeline_runs.id``; v3: ``report_v3.id``).
-    The route layer maps this directly to ``RepoRowOut``; the frontend
-    branches on ``engine`` to choose the right FileViewer source +
-    delete path.
+    ``reports.id``; v2: ``pipeline_runs.id``; v3: ``report_v3.id``;
+    eu_v2: ``report_eu.id``). The route layer maps this directly to
+    ``RepoRowOut``; the frontend branches on ``engine`` to choose the
+    right FileViewer source + delete path.
     """
 
     id: str  # repo_items.id
@@ -212,6 +216,67 @@ def is_v3_report_saved(db: Session, *, user_id: str, v3_report_id: str) -> bool:
     )
 
 
+# ---------------------------------------------------------------------------
+# EU v2 earnings-update report repo support — fourth polymorphic target.
+# ---------------------------------------------------------------------------
+
+
+def save_eu_report_to_repo(db: Session, *, user_id: str, eu_report_id: str) -> RepoItem:
+    """Save an EU v2 report to the user's repo. Idempotent."""
+    existing = db.execute(
+        select(RepoItem).where(
+            RepoItem.user_id == user_id,
+            RepoItem.eu_v2_report_id == eu_report_id,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    report = db.get(ReportEu, eu_report_id)
+    if report is None or report.user_id != user_id:
+        raise LookupError(f"EU report {eu_report_id} not found")
+    item = RepoItem(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        report_id=None,
+        pipeline_run_id=None,
+        v3_report_id=None,
+        eu_v2_report_id=eu_report_id,
+    )
+    db.add(item)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return db.execute(
+            select(RepoItem).where(
+                RepoItem.user_id == user_id,
+                RepoItem.eu_v2_report_id == eu_report_id,
+            )
+        ).scalar_one()
+    db.refresh(item)
+    return item
+
+
+def unsave_eu_report_from_repo(db: Session, *, user_id: str, eu_report_id: str) -> None:
+    db.query(RepoItem).filter(
+        RepoItem.user_id == user_id,
+        RepoItem.eu_v2_report_id == eu_report_id,
+    ).delete()
+    db.commit()
+
+
+def is_eu_report_saved(db: Session, *, user_id: str, eu_report_id: str) -> bool:
+    return (
+        db.execute(
+            select(RepoItem.id).where(
+                RepoItem.user_id == user_id,
+                RepoItem.eu_v2_report_id == eu_report_id,
+            )
+        ).first()
+        is not None
+    )
+
+
 def list_items(db: Session, *, user_id: str) -> list[RepoItem]:
     stmt = select(RepoItem).where(RepoItem.user_id == user_id).order_by(RepoItem.created_at.desc())
     return list(db.execute(stmt).scalars())
@@ -226,6 +291,7 @@ def _end_of_day_utc(d: date) -> datetime:
 
 
 _V3_DEPARTMENT = "equity_research"
+_EU_DEPARTMENT = "earnings_update"
 
 
 def list_items_filtered(
@@ -286,6 +352,18 @@ def list_items_filtered(
     if department_filter is None or _V3_DEPARTMENT in department_filter:
         rows.extend(
             _list_v3_rows(
+                db,
+                user_id=user_id,
+                q=q,
+                generated_from=generated_from,
+                generated_to=generated_to,
+                saved_from=saved_from,
+                saved_to=saved_to,
+            )
+        )
+    if department_filter is None or _EU_DEPARTMENT in department_filter:
+        rows.extend(
+            _list_eu_rows(
                 db,
                 user_id=user_id,
                 q=q,
@@ -399,6 +477,50 @@ def _list_v3_rows(
     return out
 
 
+def _list_eu_rows(
+    db: Session,
+    *,
+    user_id: str,
+    q: str | None,
+    generated_from: date | None,
+    generated_to: date | None,
+    saved_from: date | None,
+    saved_to: date | None,
+) -> list[RepoRow]:
+    stmt = (
+        select(RepoItem, ReportEu)
+        .join(ReportEu, RepoItem.eu_v2_report_id == ReportEu.id)
+        .where(RepoItem.user_id == user_id)
+    )
+    if q:
+        stmt = stmt.where(func.lower(ReportEu.subject).like(f"%{q.lower()}%"))
+    if generated_from:
+        stmt = stmt.where(ReportEu.created_at >= _start_of_day_utc(generated_from))
+    if generated_to:
+        stmt = stmt.where(ReportEu.created_at <= _end_of_day_utc(generated_to))
+    if saved_from:
+        stmt = stmt.where(RepoItem.created_at >= _start_of_day_utc(saved_from))
+    if saved_to:
+        stmt = stmt.where(RepoItem.created_at <= _end_of_day_utc(saved_to))
+
+    out: list[RepoRow] = []
+    for item, report in db.execute(stmt).all():
+        filename = build_eu_download_filename(row=report, ext="pdf")
+        out.append(
+            RepoRow(
+                id=item.id,
+                engine="eu_v2",
+                target_id=report.id,
+                department=_EU_DEPARTMENT,
+                title=report.subject,
+                filename=filename,
+                generated_at=report.created_at,
+                saved_at=item.created_at,
+            )
+        )
+    return out
+
+
 def _sort_rows(rows: list[RepoRow], sort: SortKey) -> list[RepoRow]:
     if sort == "saved_desc":
         return sorted(rows, key=lambda r: (r.saved_at, r.id), reverse=True)
@@ -422,7 +544,8 @@ def facets(db: Session, *, user_id: str) -> dict:
 
     v1: groups on ``Report.department`` (covers every non-equity slug
     plus older v1 equity-research rows). v3: every saved row counts
-    as one ``equity_research`` entry. v2 still pending.
+    as one ``equity_research`` entry. eu_v2: every saved row counts as
+    one ``earnings_update`` entry. v2 still pending.
     """
     counts: dict[str, int] = {}
 
@@ -443,6 +566,15 @@ def facets(db: Session, *, user_id: str) -> dict:
     v3_count = int(db.execute(v3_stmt).scalar() or 0)
     if v3_count:
         counts[_V3_DEPARTMENT] = counts.get(_V3_DEPARTMENT, 0) + v3_count
+
+    eu_stmt = (
+        select(func.count(RepoItem.id))
+        .join(ReportEu, RepoItem.eu_v2_report_id == ReportEu.id)
+        .where(RepoItem.user_id == user_id)
+    )
+    eu_count = int(db.execute(eu_stmt).scalar() or 0)
+    if eu_count:
+        counts[_EU_DEPARTMENT] = counts.get(_EU_DEPARTMENT, 0) + eu_count
 
     departments = [{"slug": dep, "count": counts[dep]} for dep in sorted(counts.keys())]
     total = sum(d["count"] for d in departments)
