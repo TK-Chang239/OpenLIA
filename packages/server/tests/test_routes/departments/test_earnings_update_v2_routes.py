@@ -352,6 +352,79 @@ def test_data_sources_web_search_query_override(client_eu_v2, monkeypatch):
     assert ws["routing"] == "model_native"
 
 
+def _seed_completed_run(report_id: str = "rep-export") -> str:
+    """Seed a completed report_eu row with one section for render tests."""
+    from openlia_server.db.models.report_eu import ReportEu, ReportEuSection
+
+    now = datetime.now(UTC)
+    with session_mod.SessionLocal() as s:
+        s.add(
+            ReportEu(
+                id=report_id,
+                user_id="local",
+                subject="AAPL.US earnings",
+                ticker="AAPL.US",
+                trigger_kind="on_demand",
+                fiscal_date=None,
+                template_id="eu_default",
+                language="en",
+                length="normal",
+                provider_kind="anthropic",
+                model="claude-sonnet-4-6",
+                status="completed",
+                error_message=None,
+                created_at=now,
+                completed_at=now,
+                cover_json=None,
+                reasoning_effort=None,
+            )
+        )
+        s.add(
+            ReportEuSection(
+                report_id=report_id,
+                section_id="overview",
+                section_index=0,
+                title="Quarter Overview",
+                markdown="Revenue beat expectations this quarter.",
+                version=1,
+            )
+        )
+        s.commit()
+    return report_id
+
+
+def test_export_html_ok(client_eu_v2):
+    rid = _seed_completed_run("rep-html")
+    r = client_eu_v2.get(f"{_BASE}/runs/{rid}/html")
+    assert r.status_code == 200, r.text
+    assert ".html" in r.headers["content-disposition"]
+    assert "Quarter Overview" in r.text
+
+
+def test_export_docx_ok(client_eu_v2):
+    rid = _seed_completed_run("rep-docx")
+    r = client_eu_v2.get(f"{_BASE}/runs/{rid}/docx")
+    assert r.status_code == 200, r.text
+    assert (
+        r.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert ".docx" in r.headers["content-disposition"]
+
+
+def test_export_html_unknown_run_404(client_eu_v2):
+    r = client_eu_v2.get(f"{_BASE}/runs/nope/html")
+    assert r.status_code == 404
+
+
+def test_export_pdf_503_without_launcher(client_eu_v2):
+    # The test app has no browser_launcher on app.state, so the PDF
+    # endpoint must refuse with 503 (mirrors the v3 route behaviour).
+    rid = _seed_completed_run("rep-pdf")
+    r = client_eu_v2.get(f"{_BASE}/runs/{rid}/pdf")
+    assert r.status_code == 503
+
+
 def test_resolve_eu_transports_bridges_connector_key(client_eu_v2, monkeypatch):
     # The route module's transport resolver must honor an installed EODHD
     # connector's stored key (bridge), not only the env var.
