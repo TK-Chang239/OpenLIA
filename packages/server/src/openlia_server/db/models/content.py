@@ -254,14 +254,15 @@ class WatchlistItem(Base):
 
 
 class RepoItem(Base):
-    """Saved-report pointer. Polymorphic across three targets:
+    """Saved-report pointer. Polymorphic across four targets:
 
     - ``report_id`` -> v1 report (``reports.id``)
     - ``pipeline_run_id`` -> v2.2 pipeline run (``pipeline_runs.id``)
     - ``v3_report_id`` -> v3 equity-research report (``report_v3.id``)
+    - ``eu_v2_report_id`` -> Earnings Update v2 report (``report_eu.id``)
 
     Exactly one is set on any given row, enforced by a CHECK
-    constraint. Listing endpoints fan out and merge all three sources
+    constraint. Listing endpoints fan out and merge all four sources
     before returning to the frontend.
     """
 
@@ -284,6 +285,11 @@ class RepoItem(Base):
         ForeignKey("report_v3.id", ondelete="CASCADE"),
         nullable=True,
     )
+    eu_v2_report_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("report_eu.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )
@@ -292,12 +298,14 @@ class RepoItem(Base):
         UniqueConstraint("user_id", "report_id", name="uq_repo_items_user_report"),
         UniqueConstraint("user_id", "pipeline_run_id", name="uq_repo_items_user_pipeline_run"),
         UniqueConstraint("user_id", "v3_report_id", name="uq_repo_items_user_v3_report"),
+        UniqueConstraint("user_id", "eu_v2_report_id", name="uq_repo_items_user_eu_report"),
         Index("ix_repo_items_user_id_created_at", "user_id", "created_at"),
         Index("ix_repo_items_user_id_v3_report_id", "user_id", "v3_report_id"),
         CheckConstraint(
             "((CASE WHEN report_id IS NOT NULL THEN 1 ELSE 0 END) + "
             "(CASE WHEN pipeline_run_id IS NOT NULL THEN 1 ELSE 0 END) + "
-            "(CASE WHEN v3_report_id IS NOT NULL THEN 1 ELSE 0 END)) = 1",
+            "(CASE WHEN v3_report_id IS NOT NULL THEN 1 ELSE 0 END) + "
+            "(CASE WHEN eu_v2_report_id IS NOT NULL THEN 1 ELSE 0 END)) = 1",
             name="ck_repo_items_exactly_one_target",
         ),
     )
