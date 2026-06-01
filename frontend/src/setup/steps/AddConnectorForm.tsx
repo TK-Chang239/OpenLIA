@@ -784,8 +784,8 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
       <fieldset className="space-y-1">
         <legend className="text-xs text-text-secondary">API keys / secrets</legend>
         <p className="text-[10px] text-text-secondary">
-          Stored on the server, never sent to the LLM. Key is the env var
-          name; value is the actual secret.
+          Stored encrypted on the server, never sent to the LLM. Key is the env
+          var name; value is the actual secret.
         </p>
         {isEditing ? (
           <p className="text-[10px] text-text-secondary">
