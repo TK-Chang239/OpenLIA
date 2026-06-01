@@ -20,6 +20,7 @@ from openlia.llm.runtime.report_eu import (
     EuDataTransports,
     EventBroker,
     LLMSession,
+    is_finish_sentinel,
 )
 from openlia.llm.runtime.report_eu.default_template import build_default_template
 from openlia_server.db.models.report_eu import (
@@ -352,6 +353,80 @@ async def test_start_run_async_completes_and_persists(db_session_with_seed, db_s
             check.scalars(select(ReportEuSection).where(ReportEuSection.report_id == report_id))
         )
         assert len(sections) == 8
+
+
+@pytest.mark.asyncio
+async def test_start_run_async_emits_run_failed_when_engine_raises(
+    db_session_with_seed, db_session_factory
+):
+    """A mid-run engine exception (e.g. an httpx ReadError on the LLM call)
+    must publish a terminal ``run.failed`` event — not just close the
+    stream — so the SSE client resolves instead of spinning on the
+    generating UI forever."""
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=[],
+        web_search_enabled=False,
+    )
+    request = svc.build_run_request(
+        db_session_with_seed,
+        user_id="u-1",
+        ticker="MSFT.US",
+        trigger_kind="on_demand",
+        fiscal_period=None,
+        report_date=None,
+        release_timing=None,
+        eps_estimate=None,
+        revenue_estimate=None,
+    )
+
+    session, _fake = _fake_session()
+
+    async def _boom(**_kwargs: object) -> object:
+        raise RuntimeError("ReadError: connection reset mid-stream")
+
+    session.generate = _boom  # type: ignore[method-assign]
+
+    broker = EventBroker()
+    cancel_registry: dict = {}
+
+    report_id = svc.start_run_async(
+        db_session_with_seed,
+        user_id="u-1",
+        request=request,
+        broker=broker,
+        cancel_registry=cancel_registry,
+        session_factory=db_session_factory,
+        trigger_kind="on_demand",
+        transports=_null_transports(),
+        session=session,
+    )
+    db_session_with_seed.commit()
+
+    # Subscribe registers synchronously (before the bg task's first await),
+    # so no run-start race: we see every event up to the finish sentinel.
+    event_types: list[str] = []
+    async with broker.subscribe(report_id) as queue:
+        while True:
+            item = await asyncio.wait_for(queue.get(), timeout=5)
+            if is_finish_sentinel(item):
+                break
+            event_types.append(item.type)
+
+    assert "run.failed" in event_types
+
+    with db_session_factory() as check:
+        row = check.get(ReportEu, report_id)
+        assert row is not None
+        assert row.status == "failed"
+        assert "ReadError" in (row.error_message or "")
 
 
 def test_build_run_request_gates_financial_off_without_eodhd(monkeypatch, db_session_with_seed):
