@@ -108,7 +108,7 @@ class EncryptedJSON(types.TypeDecorator):
             try:
                 return json.loads(value)
             except (ValueError, TypeError):
-                raise dec_err
+                raise dec_err from None
 
 
 class Base(DeclarativeBase):
