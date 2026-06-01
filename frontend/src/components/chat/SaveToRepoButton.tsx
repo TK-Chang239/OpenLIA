@@ -56,7 +56,9 @@ export function SaveToRepoButton({
       ? ctx?.isV2Saved(reportId)
       : engine === "v3"
         ? ctx?.isV3Saved(reportId)
-        : ctx?.isSaved(reportId);
+        : engine === "eu"
+          ? ctx?.isEuSaved(reportId)
+          : ctx?.isSaved(reportId);
   const saved = ctxIsSaved || localSaved;
 
   const ariaLabel = saved ? "Remove from repository" : "Save to repository";
@@ -75,6 +77,7 @@ export function SaveToRepoButton({
           ctx?.markV3Unsaved(reportId);
         } else if (engine === "eu") {
           await unsaveEuRunFromRepo(reportId);
+          ctx?.markEuUnsaved(reportId);
         } else {
           await unsaveFromRepo(reportId);
           ctx?.markUnsaved(reportId);
@@ -91,6 +94,7 @@ export function SaveToRepoButton({
           ctx?.markV3Saved(reportId);
         } else if (engine === "eu") {
           await saveEuRunToRepo(reportId);
+          ctx?.markEuSaved(reportId);
         } else {
           await saveToRepo(reportId);
           ctx?.markSaved(reportId);
