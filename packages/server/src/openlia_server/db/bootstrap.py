@@ -69,9 +69,11 @@ _ALEMBIC_INI_PATH = Path(__file__).resolve().parents[3] / "alembic.ini"
 
 def bootstrap() -> None:
     """Run the Plan 1a startup sequence (see module docstring)."""
+    from openlia_server.db import secrets_crypto as _secrets_crypto
     from openlia_server.db import session as _session_mod
 
     ensure_openlia_dir()
+    _secrets_crypto.ensure_key_available()
 
     url = resolve_db_url()
     _session_mod.configure_engine(url)
