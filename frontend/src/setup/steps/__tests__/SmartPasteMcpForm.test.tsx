@@ -1,0 +1,144 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { SmartPasteMcpForm } from "../SmartPasteMcpForm";
+import * as api from "../../../api/connectors";
+
+vi.mock("../../../api/connectors", async () => {
+  const actual = await vi.importActual<typeof api>("../../../api/connectors");
+  return {
+    ...actual,
+    createConnector: vi.fn(),
+  };
+});
+
+const mocked = api as unknown as {
+  createConnector: ReturnType<typeof vi.fn>;
+};
+
+describe("SmartPasteMcpForm", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("parses a pasted URL, extracts the apikey as a secret, and submits", async () => {
+    const created = vi.fn();
+    const row: api.ConnectorRow = {
+      id: "c1",
+      provider_id: "alphavantage",
+      display_name: "alphavantage",
+      source: "remote_mcp",
+      category: "financial",
+      status: "validated",
+      last_error: null,
+      cached_tools_count: 3,
+    };
+    mocked.createConnector.mockResolvedValue(row);
+
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={created} />);
+
+    fireEvent.change(screen.getByLabelText(/paste a url or command/i), {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=AV12345" },
+    });
+
+    // Detected secret value is pre-filled from the pasted key.
+    expect(await screen.findByDisplayValue("AV12345")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /validate & add/i }));
+
+    await waitFor(() => expect(mocked.createConnector).toHaveBeenCalledTimes(1));
+    const payload = mocked.createConnector.mock.calls[0][0];
+    expect(payload.source).toBe("remote_mcp");
+    expect(payload.launch.modes[0]).toMatchObject({
+      kind: "remote_mcp",
+      url: "https://mcp.alphavantage.co/mcp?apikey={ALPHAVANTAGE_APIKEY}",
+    });
+    expect(payload.secrets).toEqual({ ALPHAVANTAGE_APIKEY: "AV12345" });
+    expect(created).toHaveBeenCalledWith(row);
+  });
+
+  it("shows an error and does not submit when input is unclassifiable", () => {
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/paste a url or command/i), {
+      target: { value: "https://" },
+    });
+    expect(screen.getByRole("button", { name: /validate & add/i })).toBeDisabled();
+    expect(mocked.createConnector).not.toHaveBeenCalled();
+  });
+
+  it("resets detected-secret state when the pasted text changes", async () => {
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={() => {}} />);
+    const box = screen.getByLabelText(/paste a url or command/i);
+
+    // First paste: an apikey secret is detected and pre-filled.
+    fireEvent.change(box, {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=AV12345" },
+    });
+    expect(await screen.findByDisplayValue("AV12345")).toBeInTheDocument();
+
+    // Toggle the chip OFF.
+    const checkbox = screen.getByLabelText(/treat apikey as secret/i);
+    fireEvent.click(checkbox);
+    expect((checkbox as HTMLInputElement).checked).toBe(false);
+
+    // Re-paste a different URL whose secret has the SAME suggestedKey shape
+    // (provider alphavantage, param apikey) but a new value.
+    fireEvent.change(box, {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=NEWVALUE99" },
+    });
+
+    // The chip must come back at its detected default: checked + new value.
+    const checkbox2 = await screen.findByLabelText(/treat apikey as secret/i);
+    expect((checkbox2 as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByDisplayValue("NEWVALUE99")).toBeInTheDocument();
+  });
+
+  it("lets the user set a display name independent of provider id", async () => {
+    const created = vi.fn();
+    const row: api.ConnectorRow = {
+      id: "c1",
+      provider_id: "alphavantage",
+      display_name: "Alpha Vantage",
+      source: "remote_mcp",
+      category: "financial",
+      status: "validated",
+      last_error: null,
+      cached_tools_count: 1,
+    };
+    // Use the same mocked createConnector the other tests use:
+    const mocked2 = api.createConnector as unknown as ReturnType<typeof vi.fn>;
+    mocked2.mockResolvedValue(row);
+
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={created} />);
+    fireEvent.change(screen.getByLabelText(/paste a url or command/i), {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=AV12345" },
+    });
+    await screen.findByDisplayValue("AV12345");
+
+    fireEvent.change(screen.getByLabelText(/display name/i), {
+      target: { value: "Alpha Vantage" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /validate & add/i }));
+
+    await waitFor(() => expect(mocked2).toHaveBeenCalled());
+    const payload = mocked2.mock.calls.at(-1)![0];
+    expect(payload.provider_id).toBe("alphavantage");
+    expect(payload.display_name).toBe("Alpha Vantage");
+  });
+
+  it("disables submit when an enabled secret has no value", async () => {
+    render(<SmartPasteMcpForm onCancel={() => {}} onCreated={() => {}} />);
+    fireEvent.change(screen.getByLabelText(/paste a url or command/i), {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=YOUR_API_KEY" },
+    });
+    // Placeholder-shaped value -> chip enabled but value blank.
+    const checkbox = await screen.findByLabelText(/treat apikey as secret/i);
+    expect((checkbox as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: /validate & add/i })).toBeDisabled();
+
+    // Typing a value enables submit.
+    fireEvent.change(screen.getByLabelText(/secret value apikey/i), {
+      target: { value: "real-key" },
+    });
+    expect(screen.getByRole("button", { name: /validate & add/i })).not.toBeDisabled();
+  });
+});

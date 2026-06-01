@@ -1,4 +1,4 @@
-"""Tests for `{ENV_VAR_NAME}` substitution in remote_mcp launch dicts.
+"""Tests for `{ENV_VAR_NAME}` substitution in remote_mcp and cli_mcp launch dicts.
 
 Built-in templates declare URLs with placeholder formatting (e.g.
 `https://mcp.firecrawl.dev/{api_key}/v2/mcp` or
@@ -9,8 +9,8 @@ the literal `{api_key}` reaches the upstream server, list_tools may
 work without auth, and call_tool returns 401 — silent breakage.
 
 The substitution is keyed by .env-style variable names: every
-`{NAME}` in the URL or any header value is replaced by `secrets[NAME]`
-when present.
+`{NAME}` in the URL, any header value, or any cli_mcp argv token is
+replaced by `secrets[NAME]` when present.
 """
 
 from __future__ import annotations
@@ -133,3 +133,31 @@ def test_build_transport_leaves_unknown_placeholder_unchanged() -> None:
     }
     t = _build_transport("c1", mode, {})
     assert t._mode.url == "https://api.example.com/{MISSING_VAR}/mcp"  # type: ignore[attr-defined]
+
+
+def test_build_transport_substitutes_placeholder_in_cli_argv() -> None:
+    """A key placed as a positional CLI arg (e.g. `uvx marketdata-mcp-server {KEY}`)
+    must resolve from secrets at launch, the same way remote URLs do."""
+    mode = {
+        "kind": "cli_mcp",
+        "argv": ["uvx", "marketdata-mcp-server", "{MARKETDATA_KEY}"],
+        "env_keys": [],
+    }
+    secrets = {"MARKETDATA_KEY": "md-secret-123"}
+    t = _build_transport("c1", mode, secrets)
+    assert t._mode.argv == [  # type: ignore[attr-defined]
+        "uvx",
+        "marketdata-mcp-server",
+        "md-secret-123",
+    ]
+
+
+def test_build_transport_leaves_unknown_argv_placeholder_unchanged() -> None:
+    """Missing secret -> placeholder stays literal so the failure is obvious."""
+    mode = {
+        "kind": "cli_mcp",
+        "argv": ["uvx", "srv", "{MISSING}"],
+        "env_keys": [],
+    }
+    t = _build_transport("c1", mode, {})
+    assert t._mode.argv == ["uvx", "srv", "{MISSING}"]  # type: ignore[attr-defined]
