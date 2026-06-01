@@ -417,6 +417,11 @@ def test_export_html_unknown_run_404(client_eu_v2):
     assert r.status_code == 404
 
 
+def test_export_docx_unknown_run_404(client_eu_v2):
+    r = client_eu_v2.get(f"{_BASE}/runs/nope/docx")
+    assert r.status_code == 404
+
+
 def test_export_pdf_503_without_launcher(client_eu_v2):
     # The test app has no browser_launcher on app.state, so the PDF
     # endpoint must refuse with 503 (mirrors the v3 route behaviour).

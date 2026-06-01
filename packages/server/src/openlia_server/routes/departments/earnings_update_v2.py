@@ -1045,6 +1045,12 @@ def build_earnings_update_v2_router(
             docx_bytes = render_svc.render_docx(db=db, user_id=user.id, report_id=report_id)
         except run_svc.ReportNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            log.exception("eu v2 docx render failed for report_id=%s", report_id)
+            raise HTTPException(
+                status_code=500,
+                detail=f"eu v2 docx render failed: {type(exc).__name__}: {exc}",
+            ) from exc
         filename = build_download_filename(row=row, ext="docx")
         return Response(
             content=docx_bytes,
