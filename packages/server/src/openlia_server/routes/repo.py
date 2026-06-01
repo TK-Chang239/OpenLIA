@@ -27,11 +27,16 @@ class RepoSaveV3In(BaseModel):
     v3_report_id: str
 
 
+class RepoSaveEuIn(BaseModel):
+    eu_v2_report_id: str
+
+
 class RepoItemOut(BaseModel):
     id: str
     report_id: str | None = None
     pipeline_run_id: str | None = None
     v3_report_id: str | None = None
+    eu_v2_report_id: str | None = None
     created_at: datetime
 
 
@@ -51,6 +56,15 @@ class RepoV3SavedListOut(BaseModel):
     """
 
     saved_report_ids: list[str]
+
+
+class RepoEuSavedListOut(BaseModel):
+    """EU v2 mirror of RepoV2SavedListOut — the eu_v2_report ids the user
+    has bookmarked, used for the EU report card's `initialSaved` prop
+    on page load.
+    """
+
+    saved_run_ids: list[str]
 
 
 class RepoRowOut(BaseModel):
@@ -290,5 +304,45 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
         rows = svc.list_items(db, user_id=user.id)
         ids = [r.v3_report_id for r in rows if r.v3_report_id is not None]
         return RepoV3SavedListOut(saved_report_ids=ids)
+
+    # ----- Earnings Update v2 repo endpoints -----
+
+    @router.post(
+        "/eu-runs",
+        response_model=RepoItemOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def save_eu_ep(
+        body: RepoSaveEuIn,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoItemOut:
+        try:
+            item = svc.save_eu_report_to_repo(
+                db, user_id=user.id, eu_report_id=body.eu_v2_report_id
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "eu_report_not_found", "message": str(exc)},
+            ) from exc
+        return RepoItemOut.model_validate(item, from_attributes=True)
+
+    @router.delete("/eu-runs", status_code=status.HTTP_204_NO_CONTENT)
+    def unsave_eu_ep(
+        eu_v2_report_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> None:
+        svc.unsave_eu_report_from_repo(db, user_id=user.id, eu_report_id=eu_v2_report_id)
+
+    @router.get("/eu-runs", response_model=RepoEuSavedListOut)
+    def list_eu_saved_ep(
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoEuSavedListOut:
+        rows = svc.list_items(db, user_id=user.id)
+        ids = [r.eu_v2_report_id for r in rows if r.eu_v2_report_id is not None]
+        return RepoEuSavedListOut(saved_run_ids=ids)
 
     return router
