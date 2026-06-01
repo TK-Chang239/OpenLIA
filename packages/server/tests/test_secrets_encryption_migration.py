@@ -8,12 +8,18 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from cryptography.fernet import Fernet
-from sqlalchemy import create_engine, text
-
 from openlia_server.db import secrets_crypto as sc
+from sqlalchemy import create_engine, text
 
 PRIOR_REVISION = "1c6b0cda0ed9"
 NEW_REVISION = "enc_secrets_0601"  # must equal the revision you assign
+
+_INSERT_CONNECTOR = (
+    "INSERT INTO connectors "
+    "(id, provider_id, display_name, source, category, launch, secrets, status) "
+    "VALUES (:id, 'acme', 'Acme', 'remote_mcp', 'financial',"
+    " '{\"modes\": []}', :s, 'validated')"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -46,14 +52,7 @@ def test_migration_encrypts_existing_plaintext_row(tmp_path, monkeypatch):
     row_id = str(uuid.uuid4())
     plaintext = json.dumps({"ACME_API_KEY": "plain-123"})
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                "INSERT INTO connectors "
-                "(id, provider_id, display_name, source, category, launch, secrets, status) "
-                "VALUES (:id, 'acme', 'Acme', 'remote_mcp', 'financial', '{\"modes\": []}', :s, 'validated')"
-            ),
-            {"id": row_id, "s": plaintext},
-        )
+        conn.execute(text(_INSERT_CONNECTOR), {"id": row_id, "s": plaintext})
 
     command.upgrade(cfg, NEW_REVISION)
 
@@ -63,3 +62,24 @@ def test_migration_encrypts_existing_plaintext_row(tmp_path, monkeypatch):
         ).scalar_one()
     assert "plain-123" not in stored
     assert sc.decrypt(stored) == plaintext
+
+
+def test_migration_downgrade_restores_plaintext(tmp_path, monkeypatch):
+    db_url = f"sqlite:///{tmp_path / 'mig_down.db'}"
+    cfg = _config(db_url, monkeypatch)
+    command.upgrade(cfg, PRIOR_REVISION)
+
+    engine = create_engine(db_url)
+    row_id = str(uuid.uuid4())
+    plaintext = json.dumps({"ACME_API_KEY": "plain-123"})
+    with engine.begin() as conn:
+        conn.execute(text(_INSERT_CONNECTOR), {"id": row_id, "s": plaintext})
+
+    command.upgrade(cfg, NEW_REVISION)  # encrypt
+    command.downgrade(cfg, PRIOR_REVISION)  # decrypt back
+
+    with engine.begin() as conn:
+        stored = conn.execute(
+            text("SELECT secrets FROM connectors WHERE id = :id"), {"id": row_id}
+        ).scalar_one()
+    assert stored == plaintext
