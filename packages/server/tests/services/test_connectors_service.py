@@ -8,6 +8,7 @@ from openlia_server.db.models.connectors import Connector, RunnerCallableSpec
 from openlia_server.services import connectors_service
 from openlia_server.services.connectors_service import (
     DuplicateConnectorError,
+    ValidationFailure,
     ValidationOk,
     create_connector,
     install_builtin,
@@ -411,9 +412,6 @@ async def test_install_builtin_rejects_second_install_of_same_template(
 # ---------------------------------------------------------------------------
 
 
-from openlia_server.services import connectors_service as cs  # noqa: E402
-
-
 class _FakeTransport:
     def __init__(self, tools: list[dict]) -> None:
         self._tools = tools
@@ -430,11 +428,13 @@ async def test_validate_launch_fails_when_remote_mcp_returns_no_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        cs, "_build_transport", lambda connector_id, mode, secrets: _FakeTransport([])
+        connectors_service,
+        "_build_transport",
+        lambda connector_id, mode, secrets: _FakeTransport([]),
     )
     launch = {"modes": [{"kind": "remote_mcp", "url": "https://x/mcp", "headers": {}}]}
-    result = await cs._validate_launch(launch, {})
-    assert isinstance(result, cs.ValidationFailure)
+    result = await connectors_service._validate_launch(launch, {})
+    assert isinstance(result, ValidationFailure)
     assert "no tools" in result.error.lower()
 
 
@@ -444,9 +444,11 @@ async def test_validate_launch_passes_when_cli_mcp_returns_a_tool(
 ) -> None:
     tool = {"name": "quote", "description": "", "input_schema": {}}
     monkeypatch.setattr(
-        cs, "_build_transport", lambda connector_id, mode, secrets: _FakeTransport([tool])
+        connectors_service,
+        "_build_transport",
+        lambda connector_id, mode, secrets: _FakeTransport([tool]),
     )
     launch = {"modes": [{"kind": "cli_mcp", "argv": ["uvx", "srv"], "env_keys": []}]}
-    result = await cs._validate_launch(launch, {})
-    assert isinstance(result, cs.ValidationOk)
+    result = await connectors_service._validate_launch(launch, {})
+    assert isinstance(result, ValidationOk)
     assert result.tools == [tool]
