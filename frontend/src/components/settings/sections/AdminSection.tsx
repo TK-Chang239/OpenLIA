@@ -5,7 +5,7 @@ const TABS = [
   { to: 'invites', labelKey: 'settings.admin.tab_invites' },
   { to: 'users', labelKey: 'settings.admin.tab_users' },
   { to: 'reset-requests', labelKey: 'settings.admin.tab_reset_requests' },
-  { to: 'connectors', labelKey: 'settings.admin.tab_connectors' },
+
   { to: 'runner-specs', labelKey: 'settings.admin.tab_runner_specs' },
   { to: 'skills', labelKey: 'settings.admin.tab_skills' },
 ];

@@ -13,6 +13,7 @@ interface NavItem {
 const ITEMS: NavItem[] = [
   { to: '/settings/general', labelKey: 'settings.tabs.general' },
   { to: '/settings/models', labelKey: 'settings.tabs.models' },
+  { to: '/settings/connectors', labelKey: 'settings.tabs.connectors' },
   { to: '/settings/timezone', labelKey: 'settings.tabs.timezone' },
   { to: '/settings/account', labelKey: 'settings.tabs.account' },
   { to: '/settings/disclaimer', labelKey: 'settings.tabs.disclaimer' },

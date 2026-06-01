@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { ConnectorsAdminPanel } from "../ConnectorsAdminPanel";
+import { ConnectorsSection } from "../ConnectorsSection";
 import * as connectorsApi from "../../../../api/connectors";
 import * as deptHealthApi from "../../../../api/dept-health";
 import type { ConnectorRow } from "../../../../api/connectors";
@@ -52,16 +52,16 @@ beforeEach(() => {
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
-describe("ConnectorsAdminPanel", () => {
+describe("ConnectorsSection", () => {
   it("renders connector rows", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     expect(await screen.findByText("EODHD")).toBeInTheDocument();
     expect(screen.getByText("eodhd")).toBeInTheDocument();
     expect(screen.getByText("validated")).toBeInTheDocument();
   });
 
   it("Validate now triggers validateConnector(id)", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     await screen.findByText("EODHD");
     fireEvent.click(screen.getByRole("button", { name: /validate now/i }));
     await waitFor(() =>
@@ -70,7 +70,7 @@ describe("ConnectorsAdminPanel", () => {
   });
 
   it("Delete triggers deleteConnector(id) after confirm", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     await screen.findByText("EODHD");
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
     await waitFor(() =>
@@ -79,7 +79,7 @@ describe("ConnectorsAdminPanel", () => {
   });
 
   it("Edit opens a modal that disallows changing source/category", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     await screen.findByText("EODHD");
     fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     expect(
@@ -92,7 +92,7 @@ describe("ConnectorsAdminPanel", () => {
 
   it("renders empty-state copy when no connectors exist", async () => {
     mocked.listConnectors.mockResolvedValue([]);
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     expect(
       await screen.findByText(/no connectors configured/i),
     ).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("ConnectorsAdminPanel", () => {
         covered_need_ids: [],
       },
     ]);
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
     expect(await screen.findByText("Firecrawl")).toBeInTheDocument();
   });
@@ -123,14 +123,14 @@ describe("ConnectorsAdminPanel", () => {
         covered_need_ids: [],
       },
     ]);
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
     fireEvent.click(await screen.findByText("Firecrawl"));
     expect(await screen.findByLabelText(/api key/i)).toBeInTheDocument();
   });
 
   it("shows the smart-paste box as the always-visible primary add path", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     // Smart-paste textarea is present on mount, with no toggle button to reveal it.
     expect(
       await screen.findByLabelText(/paste a url or command/i),
@@ -141,7 +141,7 @@ describe("ConnectorsAdminPanel", () => {
   });
 
   it("resets the smart-paste form after a successful add", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     const box = (await screen.findByLabelText(
       /paste a url or command/i,
     )) as HTMLTextAreaElement;

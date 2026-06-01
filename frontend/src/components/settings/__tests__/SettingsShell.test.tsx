@@ -13,6 +13,7 @@ function renderAt(path: string, role: 'user' | 'admin' = 'user') {
           { path: 'general', element: <p>general body</p> },
           { path: 'account', element: <p>account body</p> },
           { path: 'models', element: <p>models body</p> },
+          { path: 'connectors', element: <p>connectors body</p> },
           { path: 'admin', element: <p>admin body</p> },
         ],
       },
@@ -34,6 +35,13 @@ describe('SettingsShell', () => {
   it('renders Admin nav item when role is admin', () => {
     renderAt('/settings/general', 'admin');
     expect(screen.getByRole('link', { name: /admin/i })).toBeInTheDocument();
+  });
+
+  it('renders the Connectors nav item for a regular user', () => {
+    renderAt('/settings/general');
+    expect(
+      screen.getByRole('link', { name: /connectors/i }),
+    ).toBeInTheDocument();
   });
 
   it('marks the active section', () => {

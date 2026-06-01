@@ -1,7 +1,9 @@
 /**
- * Admin panel: list / edit / validate / delete connectors.
+ * Top-level Connectors settings section: list / edit / validate / delete
+ * connectors. Visible to all users (no admin gating).
  *
- * Follows the same shape as ModelsAdminPanel — a refresh-on-mount table with
+ * The smart-paste form is the always-visible primary add path; "add from
+ * catalog" and "advanced" are secondary links. A refresh-on-mount table with
  * inline action buttons. Edits are limited to display_name + secrets;
  * source/category cannot change post-creation per spec §3.
  */
@@ -37,7 +39,7 @@ function kvToRecord(rows: KV[]): Record<string, string> {
   return out;
 }
 
-export function ConnectorsAdminPanel(): JSX.Element {
+export function ConnectorsSection(): JSX.Element {
   const { t } = useTranslation();
   const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [loading, setLoading] = useState(true);
