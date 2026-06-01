@@ -277,22 +277,134 @@ class AnthropicAdapter(LLMProvider):
                 "budget_tokens": _REASONING_BUDGET_BY_EFFORT[request.reasoning_effort],
             }
             payload["temperature"] = 1.0
+        # Stream the completion and reassemble the same `body` dict the
+        # non-streaming endpoint would have returned. Streaming keeps bytes
+        # flowing so long completions (big context + reasoning) don't hit a
+        # mid-completion connection reset (httpx ReadError).
+        payload["stream"] = True
 
-        async def _post() -> dict:
+        async def _stream_and_assemble() -> dict:
+            content_by_index: dict[int, dict] = {}
+            partial_json: dict[int, str] = {}
+            input_tokens = 0
+            output_tokens = 0
+            cache_read_input_tokens = 0
+            stop_reason: str | None = None
+
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
                 try:
-                    resp = await client.post("/v1/messages", json=payload)
+                    async with client.stream("POST", "/v1/messages", json=payload) as resp:
+                        if resp.status_code != 200:
+                            body_bytes = await resp.aread()
+                            status_to_exception(
+                                status_code=resp.status_code,
+                                body_text=body_bytes.decode("utf-8", errors="replace"),
+                                headers=dict(resp.headers),
+                            )
+                        async for line in resp.aiter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            data = line[len("data:") :].strip()
+                            try:
+                                evt = json.loads(data)
+                            except json.JSONDecodeError:
+                                continue
+                            etype = evt.get("type")
+                            if etype == "message_start":
+                                usage = (evt.get("message") or {}).get("usage") or {}
+                                input_tokens = int(usage.get("input_tokens", 0))
+                                cache_read_input_tokens = int(
+                                    usage.get("cache_read_input_tokens", 0)
+                                )
+                            elif etype == "content_block_start":
+                                idx = evt.get("index", -1)
+                                block = evt.get("content_block") or {}
+                                btype = block.get("type")
+                                if btype == "text":
+                                    content_by_index[idx] = {
+                                        "type": "text",
+                                        "text": "",
+                                        "citations": [],
+                                    }
+                                elif btype in ("tool_use", "server_tool_use"):
+                                    content_by_index[idx] = {
+                                        "type": btype,
+                                        "id": block.get("id", ""),
+                                        "name": block.get("name", ""),
+                                        "input": {},
+                                    }
+                                    partial_json[idx] = ""
+                                elif btype == "web_search_tool_result":
+                                    content_by_index[idx] = {
+                                        "type": "web_search_tool_result",
+                                        "tool_use_id": block.get("tool_use_id", ""),
+                                        "content": block.get("content"),
+                                    }
+                                elif btype in ("thinking", "redacted_thinking"):
+                                    content_by_index[idx] = {"type": btype, "thinking": ""}
+                                else:
+                                    content_by_index[idx] = dict(block)
+                            elif etype == "content_block_delta":
+                                idx = evt.get("index", -1)
+                                delta = evt.get("delta") or {}
+                                dtype = delta.get("type")
+                                if dtype == "text_delta":
+                                    blk = content_by_index.get(idx)
+                                    if blk is not None:
+                                        blk["text"] = blk.get("text", "") + (
+                                            delta.get("text") or ""
+                                        )
+                                elif dtype == "input_json_delta":
+                                    if idx in partial_json:
+                                        partial_json[idx] += delta.get("partial_json", "")
+                                elif dtype == "thinking_delta":
+                                    blk = content_by_index.get(idx)
+                                    if blk is not None:
+                                        blk["thinking"] = blk.get("thinking", "") + (
+                                            delta.get("thinking") or ""
+                                        )
+                                elif dtype == "citations_delta":
+                                    blk = content_by_index.get(idx)
+                                    if blk is not None:
+                                        blk.setdefault("citations", []).append(
+                                            delta.get("citation")
+                                        )
+                            elif etype == "content_block_stop":
+                                idx = evt.get("index", -1)
+                                if idx in partial_json:
+                                    raw = partial_json.pop(idx)
+                                    try:
+                                        parsed = json.loads(raw) if raw else {}
+                                    except json.JSONDecodeError:
+                                        parsed = {}
+                                    if not isinstance(parsed, dict):
+                                        parsed = {}
+                                    blk = content_by_index.get(idx)
+                                    if blk is not None:
+                                        blk["input"] = parsed
+                            elif etype == "message_delta":
+                                stop = (evt.get("delta") or {}).get("stop_reason")
+                                if stop:
+                                    stop_reason = stop
+                                usage = evt.get("usage") or {}
+                                if "output_tokens" in usage:
+                                    output_tokens = int(usage.get("output_tokens", 0))
+                            elif etype == "message_stop":
+                                break
                 except TRANSIENT_NETWORK_ERRORS as exc:
                     raise wrap_httpx_error(exc) from exc
-                if resp.status_code != 200:
-                    status_to_exception(
-                        status_code=resp.status_code,
-                        body_text=resp.text,
-                        headers=dict(resp.headers),
-                    )
-                return resp.json()
 
-        body = await with_retries(_post)
+            return {
+                "content": [content_by_index[i] for i in sorted(content_by_index)],
+                "stop_reason": stop_reason or "end_turn",
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_input_tokens": cache_read_input_tokens,
+                },
+            }
+
+        body = await with_retries(_stream_and_assemble)
 
         (
             text_parts,
