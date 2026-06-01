@@ -75,6 +75,7 @@
     "tabs": {
       "general": "General",
       "models": "Models",
+      "connectors": "Connectors",
       "timezone": "Timezone & Memory",
       "account": "Account",
       "skills": "Skills",
@@ -202,7 +203,6 @@
       "tab_invites": "Invites",
       "tab_users": "Users",
       "tab_reset_requests": "Reset requests",
-      "tab_connectors": "Connectors",
       "tab_runner_specs": "Runner specs",
       "tab_skills": "Skill activity"
     },
@@ -271,8 +271,8 @@
       "title": "Connectors",
       "subtitle": "Manage data-source connectors (MCP servers, Python libraries) used by departments.",
       "loading": "Loading...",
+      "other_ways": "Other ways to add:",
       "add_from_catalog": "Add from catalog",
-      "add_mcp": "Add MCP connector",
       "add_advanced": "Add connector (advanced)",
       "none_configured": "No connectors configured. Add one from the setup wizard or via the API.",
       "table_aria": "Connectors",

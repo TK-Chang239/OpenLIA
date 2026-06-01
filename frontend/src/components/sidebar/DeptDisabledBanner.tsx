@@ -27,7 +27,7 @@ export function DeptDisabledBanner({ departmentId }: Props) {
         {health.reason ? <span className="ml-1">{health.reason}.</span> : null}
       </p>
       <Link
-        to="/settings/admin/connectors"
+        to="/settings/connectors"
         className="text-sm font-medium underline hover:no-underline"
       >
         Settings &rarr; Connectors

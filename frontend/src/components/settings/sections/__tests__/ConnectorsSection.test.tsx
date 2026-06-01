@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { ConnectorsAdminPanel } from "../ConnectorsAdminPanel";
+import { ConnectorsSection } from "../ConnectorsSection";
 import * as connectorsApi from "../../../../api/connectors";
 import * as deptHealthApi from "../../../../api/dept-health";
 import type { ConnectorRow } from "../../../../api/connectors";
@@ -15,6 +15,7 @@ vi.mock("../../../../api/connectors", async () => {
     deleteConnector: vi.fn(),
     validateConnector: vi.fn(),
     listBuiltinTemplates: vi.fn(),
+    createConnector: vi.fn(),
   };
 });
 
@@ -23,6 +24,7 @@ const mocked = connectorsApi as unknown as {
   deleteConnector: ReturnType<typeof vi.fn>;
   validateConnector: ReturnType<typeof vi.fn>;
   listBuiltinTemplates: ReturnType<typeof vi.fn>;
+  createConnector: ReturnType<typeof vi.fn>;
 };
 
 function row(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
@@ -45,20 +47,21 @@ beforeEach(() => {
   mocked.deleteConnector.mockResolvedValue(undefined);
   mocked.validateConnector.mockResolvedValue(row());
   mocked.listBuiltinTemplates.mockResolvedValue([]);
+  mocked.createConnector.mockResolvedValue(row());
   vi.spyOn(deptHealthApi, "fetchDeptHealth").mockResolvedValue([]);
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
-describe("ConnectorsAdminPanel", () => {
+describe("ConnectorsSection", () => {
   it("renders connector rows", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     expect(await screen.findByText("EODHD")).toBeInTheDocument();
     expect(screen.getByText("eodhd")).toBeInTheDocument();
     expect(screen.getByText("validated")).toBeInTheDocument();
   });
 
   it("Validate now triggers validateConnector(id)", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     await screen.findByText("EODHD");
     fireEvent.click(screen.getByRole("button", { name: /validate now/i }));
     await waitFor(() =>
@@ -67,7 +70,7 @@ describe("ConnectorsAdminPanel", () => {
   });
 
   it("Delete triggers deleteConnector(id) after confirm", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     await screen.findByText("EODHD");
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
     await waitFor(() =>
@@ -76,7 +79,7 @@ describe("ConnectorsAdminPanel", () => {
   });
 
   it("Edit opens a modal that disallows changing source/category", async () => {
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     await screen.findByText("EODHD");
     fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
     expect(
@@ -89,7 +92,7 @@ describe("ConnectorsAdminPanel", () => {
 
   it("renders empty-state copy when no connectors exist", async () => {
     mocked.listConnectors.mockResolvedValue([]);
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     expect(
       await screen.findByText(/no connectors configured/i),
     ).toBeInTheDocument();
@@ -105,7 +108,7 @@ describe("ConnectorsAdminPanel", () => {
         covered_need_ids: [],
       },
     ]);
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
     expect(await screen.findByText("Firecrawl")).toBeInTheDocument();
   });
@@ -120,9 +123,50 @@ describe("ConnectorsAdminPanel", () => {
         covered_need_ids: [],
       },
     ]);
-    render(<ConnectorsAdminPanel />);
+    render(<ConnectorsSection />);
     fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
     fireEvent.click(await screen.findByText("Firecrawl"));
     expect(await screen.findByLabelText(/api key/i)).toBeInTheDocument();
+  });
+
+  it("shows the smart-paste box as the always-visible primary add path", async () => {
+    render(<ConnectorsSection />);
+    // Smart-paste textarea is present on mount, with no toggle button to reveal it.
+    expect(
+      await screen.findByLabelText(/paste a url or command/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add mcp connector/i }),
+    ).toBeNull();
+  });
+
+  it("resets the smart-paste form after a successful add", async () => {
+    render(<ConnectorsSection />);
+    const box = (await screen.findByLabelText(
+      /paste a url or command/i,
+    )) as HTMLTextAreaElement;
+    fireEvent.change(box, {
+      target: { value: "https://mcp.alphavantage.co/mcp?apikey=AV12345" },
+    });
+    expect(box.value).toContain("alphavantage");
+    fireEvent.click(screen.getByRole("button", { name: /validate & add/i }));
+    await waitFor(() => expect(mocked.createConnector).toHaveBeenCalledTimes(1));
+    // After onCreated, the formNonce key change remounts the form -> textarea is empty.
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText(/paste a url or command/i) as HTMLTextAreaElement)
+          .value,
+      ).toBe(""),
+    );
+  });
+
+  it("reveals the advanced form when the 'advanced' secondary link is clicked", async () => {
+    render(<ConnectorsSection />);
+    await screen.findByText("EODHD");
+    fireEvent.click(
+      screen.getByRole("button", { name: /add connector \(advanced\)/i }),
+    );
+    // AddConnectorForm has a "source" select that the smart-paste form lacks.
+    expect(await screen.findByLabelText("source")).toBeInTheDocument();
   });
 });
