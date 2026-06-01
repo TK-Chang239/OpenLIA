@@ -39,6 +39,158 @@ async def test_list_models_parses_response() -> None:
     assert any(m.display_name == "Claude Sonnet 4.6" for m in models)
 
 
+def _sse_from_events(events: list[dict]) -> bytes:
+    """Render a list of SSE event dicts into an Anthropic `data:`-line body."""
+    return b"".join(b"data: " + json.dumps(e).encode() + b"\n\n" for e in events)
+
+
+def _sse_from_message(
+    content: list[dict],
+    *,
+    stop_reason: str = "end_turn",
+    usage: dict | None = None,
+) -> bytes:
+    """Render a full logical message (content blocks + stop_reason + usage)
+    into the Anthropic SSE event stream the streaming endpoint emits, so a
+    `generate` call reassembles it back into the same logical message."""
+    usage = usage or {"input_tokens": 1, "output_tokens": 1}
+    events: list[dict] = [
+        {
+            "type": "message_start",
+            "message": {
+                "usage": {
+                    "input_tokens": usage.get("input_tokens", 0),
+                    "cache_read_input_tokens": usage.get("cache_read_input_tokens", 0),
+                }
+            },
+        }
+    ]
+    for idx, block in enumerate(content):
+        btype = block.get("type")
+        if btype == "text":
+            events.append(
+                {
+                    "type": "content_block_start",
+                    "index": idx,
+                    "content_block": {"type": "text", "text": ""},
+                }
+            )
+            events.append(
+                {
+                    "type": "content_block_delta",
+                    "index": idx,
+                    "delta": {"type": "text_delta", "text": block.get("text", "")},
+                }
+            )
+        elif btype in ("tool_use", "server_tool_use"):
+            events.append(
+                {
+                    "type": "content_block_start",
+                    "index": idx,
+                    "content_block": {
+                        "type": btype,
+                        "id": block.get("id", ""),
+                        "name": block.get("name", ""),
+                        "input": {},
+                    },
+                }
+            )
+            events.append(
+                {
+                    "type": "content_block_delta",
+                    "index": idx,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": json.dumps(block.get("input") or {}),
+                    },
+                }
+            )
+        else:
+            events.append(
+                {
+                    "type": "content_block_start",
+                    "index": idx,
+                    "content_block": block,
+                }
+            )
+        events.append({"type": "content_block_stop", "index": idx})
+    events.append(
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": stop_reason},
+            "usage": {"output_tokens": usage.get("output_tokens", 0)},
+        }
+    )
+    events.append({"type": "message_stop"})
+    return _sse_from_events(events)
+
+
+_SSE_HEADERS = {"content-type": "text/event-stream"}
+
+
+async def test_generate_streams_and_reassembles_text_and_tool_use() -> None:
+    """`generate` fetches via the streaming endpoint and reassembles the
+    same logical message (text + tool_use + stop_reason + usage) the
+    non-streaming endpoint would have returned."""
+    adapter = _adapter()
+    sse = _sse_from_events(
+        [
+            {"type": "message_start", "message": {"usage": {"input_tokens": 10}}},
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hello "},
+            },
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "t1",
+                    "name": "write_section",
+                    "input": {},
+                },
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": '{"section_id":"overview",'},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": '"markdown":"x"}'},
+            },
+            {"type": "content_block_stop", "index": 1},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "tool_use"},
+                "usage": {"output_tokens": 5},
+            },
+            {"type": "message_stop"},
+        ]
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            200, content=sse, headers={"content-type": "text/event-stream"}
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.text == "Hello "
+    assert len(resp.tool_calls) == 1
+    assert resp.tool_calls[0].name == "write_section"
+    assert resp.tool_calls[0].arguments == {"section_id": "overview", "markdown": "x"}
+    assert resp.tool_calls[0].id == "t1"
+    assert resp.finish_reason == "tool_use"
+    assert resp.input_tokens == 10
+    assert resp.output_tokens == 5
+
+
 async def test_generate_happy_path_separates_system_from_messages() -> None:
     adapter = _adapter()
     captured: dict = {}
@@ -47,11 +199,11 @@ async def test_generate_happy_path_separates_system_from_messages() -> None:
         captured["payload"] = request.read()
         return httpx.Response(
             200,
-            json={
-                "content": [{"type": "text", "text": "hello"}],
-                "stop_reason": "end_turn",
-                "usage": {"input_tokens": 5, "output_tokens": 2},
-            },
+            content=_sse_from_message(
+                [{"type": "text", "text": "hello"}],
+                usage={"input_tokens": 5, "output_tokens": 2},
+            ),
+            headers=_SSE_HEADERS,
         )
 
     with respx.mock() as mock:
@@ -79,8 +231,8 @@ async def test_generate_forwards_tool_choice_when_set() -> None:
         captured["payload"] = request.read()
         return httpx.Response(
             200,
-            json={
-                "content": [
+            content=_sse_from_message(
+                [
                     {
                         "type": "tool_use",
                         "id": "toolu_1",
@@ -88,9 +240,9 @@ async def test_generate_forwards_tool_choice_when_set() -> None:
                         "input": {"ok": True},
                     }
                 ],
-                "stop_reason": "tool_use",
-                "usage": {"input_tokens": 1, "output_tokens": 1},
-            },
+                stop_reason="tool_use",
+            ),
+            headers=_SSE_HEADERS,
         )
 
     with respx.mock() as mock:
@@ -120,11 +272,8 @@ async def test_generate_omits_tool_choice_when_unset() -> None:
         captured["payload"] = request.read()
         return httpx.Response(
             200,
-            json={
-                "content": [{"type": "text", "text": "ok"}],
-                "stop_reason": "end_turn",
-                "usage": {"input_tokens": 1, "output_tokens": 1},
-            },
+            content=_sse_from_message([{"type": "text", "text": "ok"}]),
+            headers=_SSE_HEADERS,
         )
 
     with respx.mock() as mock:
@@ -142,11 +291,8 @@ async def test_generate_includes_api_key_header() -> None:
         captured["headers"] = dict(request.headers)
         return httpx.Response(
             200,
-            json={
-                "content": [{"type": "text", "text": "ok"}],
-                "stop_reason": "end_turn",
-                "usage": {"input_tokens": 1, "output_tokens": 1},
-            },
+            content=_sse_from_message([{"type": "text", "text": "ok"}]),
+            headers=_SSE_HEADERS,
         )
 
     with respx.mock() as mock:
@@ -217,11 +363,8 @@ async def test_stream_sends_stream_true_in_payload() -> None:
 def _ok_response(content: list[dict], stop_reason: str = "end_turn") -> httpx.Response:
     return httpx.Response(
         200,
-        json={
-            "content": content,
-            "stop_reason": stop_reason,
-            "usage": {"input_tokens": 1, "output_tokens": 1},
-        },
+        content=_sse_from_message(content, stop_reason=stop_reason),
+        headers=_SSE_HEADERS,
     )
 
 
@@ -524,18 +667,15 @@ async def test_generate_surfaces_cached_input_tokens() -> None:
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").respond(
             200,
-            json={
-                "id": "msg_test",
-                "type": "message",
-                "role": "assistant",
-                "stop_reason": "end_turn",
-                "content": [{"type": "text", "text": "hi"}],
-                "usage": {
+            content=_sse_from_message(
+                [{"type": "text", "text": "hi"}],
+                usage={
                     "input_tokens": 5_000,
                     "output_tokens": 50,
                     "cache_read_input_tokens": 4_800,
                 },
-            },
+            ),
+            headers=_SSE_HEADERS,
         )
         resp = await _adapter().generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert resp.cached_input_tokens == 4_800
@@ -545,28 +685,22 @@ async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> No
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").respond(
             200,
-            json={
-                "id": "msg_test",
-                "type": "message",
-                "role": "assistant",
-                "stop_reason": "end_turn",
-                "content": [{"type": "text", "text": "hi"}],
-                "usage": {"input_tokens": 5, "output_tokens": 2},
-            },
+            content=_sse_from_message(
+                [{"type": "text", "text": "hi"}],
+                usage={"input_tokens": 5, "output_tokens": 2},
+            ),
+            headers=_SSE_HEADERS,
         )
         resp = await _adapter().generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert resp.cached_input_tokens == 0
 
 
-def _msg_response() -> dict:
-    return {
-        "id": "msg_test",
-        "type": "message",
-        "role": "assistant",
-        "stop_reason": "end_turn",
-        "content": [{"type": "text", "text": "ok"}],
-        "usage": {"input_tokens": 1, "output_tokens": 1},
-    }
+def _msg_response() -> httpx.Response:
+    return httpx.Response(
+        200,
+        content=_sse_from_message([{"type": "text", "text": "ok"}]),
+        headers=_SSE_HEADERS,
+    )
 
 
 async def test_generate_emits_thinking_block_on_supported_model() -> None:
@@ -578,9 +712,7 @@ async def test_generate_emits_thinking_block_on_supported_model() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
@@ -603,9 +735,7 @@ async def test_generate_thinking_block_medium_uses_8192_budget() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
@@ -623,9 +753,7 @@ async def test_generate_omits_thinking_block_when_effort_none() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
@@ -645,9 +773,7 @@ async def test_generate_omits_thinking_block_on_unsupported_model() -> None:
 
     def _capture(request):
         captured.update(json.loads(request.content))
-        import httpx
-
-        return httpx.Response(200, json=_msg_response())
+        return _msg_response()
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
@@ -676,3 +802,24 @@ async def test_stream_text_chunks_have_no_server_tool_event() -> None:
             chunks.append(c)
     assert all(c.server_tool_event is None for c in chunks)
     assert "".join(c.delta for c in chunks) == "Hi"
+
+
+async def test_generate_retries_on_midstream_read_error() -> None:
+    """A transient ReadError (connection reset) on the streaming call is
+    the failure this whole change fixes. with_retries must retry with a
+    fresh accumulator; the second attempt succeeds and returns the
+    reassembled response — not the stale/partial first attempt."""
+    adapter = _adapter()
+    ok = httpx.Response(
+        200,
+        content=_sse_from_message([{"type": "text", "text": "recovered"}]),
+        headers=_SSE_HEADERS,
+    )
+    with respx.mock() as mock:
+        route = mock.post("https://api.anthropic.com/v1/messages")
+        route.side_effect = [httpx.ReadError("connection reset mid-stream"), ok]
+        resp = await adapter.generate(
+            LLMRequest(messages=[Message(role="user", content="hi")])
+        )
+    assert resp.text == "recovered"
+    assert route.call_count == 2

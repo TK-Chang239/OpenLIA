@@ -365,7 +365,9 @@ async def _run_in_background(
             )
         except Exception as exc:
             log.exception("EU v2 run %s crashed unexpectedly", report_id)
-            _mark_failed(session_factory, report_id, f"unexpected: {exc}")
+            _emit_and_mark_failed(
+                emitter, session_factory, report_id, f"unexpected: {exc}"
+            )
             return
 
         _persist_background_outcome(
@@ -373,6 +375,12 @@ async def _run_in_background(
             report_id=report_id,
             result=result,
         )
+    except Exception as exc:
+        # Setup-phase failures (Runner construction, session build) land
+        # here — outside the inner loop's handler. Emit a terminal event +
+        # mark failed so the SSE client never sees a silently-closed stream.
+        log.exception("EU v2 run %s failed before the engine loop", report_id)
+        _emit_and_mark_failed(emitter, session_factory, report_id, f"setup: {exc}")
     finally:
         cancel_registry.pop(report_id, None)
         broker.finish(report_id)
@@ -395,6 +403,27 @@ def _persist_background_outcome(
         row.error_message = result.message or None
         row.completed_at = datetime.now(UTC)
         bg_db.commit()
+
+
+def _emit_and_mark_failed(
+    emitter: BrokerEmitter,
+    session_factory: Callable[[], DBSession],
+    report_id: str,
+    message: str,
+) -> None:
+    """Publish a terminal ``run.failed`` event AND flip the row to failed.
+
+    The engine's own ``_finish`` emits run.failed for cancel/deadline, but
+    an exception thrown out of ``runner.run`` (e.g. an httpx ``ReadError``
+    on the LLM call) bypasses it. Without a terminal frame the SSE stream
+    would close via ``broker.finish`` with no signal, leaving the client's
+    generating UI spinning forever.
+    """
+    emitter.emit(
+        "run.failed",
+        {"error": message, "message": message, "partial_sections_written": 0},
+    )
+    _mark_failed(session_factory, report_id, message)
 
 
 def _mark_failed(
