@@ -274,7 +274,6 @@
       "loading": "載入中...",
       "other_ways": "其他新增方式：",
       "add_from_catalog": "從目錄新增",
-      "add_mcp": "新增 MCP 連接器",
       "add_advanced": "新增連接器（進階）",
       "none_configured": "尚未設定任何連接器，請透過設定精靈或 API 新增。",
       "table_aria": "資料連接器",
