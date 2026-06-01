@@ -56,3 +56,12 @@ def test_decrypt_with_wrong_key_raises(monkeypatch):
     sc.reset_cache()
     with pytest.raises(sc.SecretDecryptError):
         sc.decrypt(token)
+
+
+def test_invalid_key_file_message_points_to_file(tmp_path):
+    # Write a corrupt key file (not a valid Fernet key), personal mode, no env key.
+    (tmp_path / sc.KEY_FILENAME).write_bytes(b"corrupt-not-fernet")
+    with pytest.raises(sc.SecretKeyInvalidError) as excinfo:
+        sc.ensure_key_available()
+    assert sc.KEY_FILENAME in str(excinfo.value)
+    assert "OPENLIA_SECRET_KEY is not a valid" not in str(excinfo.value)
