@@ -100,7 +100,6 @@ export default function MorningBriefing() {
         kind: "report",
         metadata: t("morning_briefing.viewer_metadata"),
         source: { kind: "mb_report", reportId },
-        hideSaveToRepoButton: true,
         onDelete: () => removeReport(reportId),
       });
     },

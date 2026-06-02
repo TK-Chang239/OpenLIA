@@ -50,12 +50,9 @@ export function ViewerHeader({
           <SaveToRepoButton
             variant="viewer-header"
             reportId={reportId}
-            // The backend exposes /api/repo/mb-runs, but the MB viewer save
-            // affordance is a deferred follow-up (briefings live in the feed);
-            // the MB page passes hideSaveToRepoButton, so this branch never
-            // renders for MB. "mb" collapses to "v1" only to satisfy the
-            // SaveToRepoEngine union until the MB save flow is wired.
-            engine={saveEngine === "mb" ? "v1" : saveEngine}
+            // Selects the repo endpoint + SavedReportsContext bucket
+            // (v1/v2/v3/eu/mb). The MB page no longer hides this button.
+            engine={saveEngine}
             initialSaved={initialSaved}
           />
         ) : null}
