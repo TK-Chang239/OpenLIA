@@ -134,6 +134,8 @@ EXPECTED_TABLES = {
     "eu_v2_watchlist",
     "eu_v2_earnings_schedule",
     "eu_v2_settings",
+    "eu_v2_batch_job",
+    "eu_v2_batch_run",
 }
 
 
