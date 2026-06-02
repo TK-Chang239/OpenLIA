@@ -240,15 +240,32 @@ through the new engine + scheduler, not the chat runner).
 
 ## 11. Removed
 
-- `services/mb_config.py`, `services/mb_request_builder.py`.
-- `mb_user_configs` table + model + migration model reference.
-- Report mode of `prompts/morning_briefing.yaml` (chat mode for "ask about a past
-  briefing" via Secretary stays if still referenced; otherwise remove the report
-  prompt blocks). MB no longer uses the generic `ReportRunner` for generation.
-- Old route handlers and old frontend tabs/components driven by the sections
-  config.
+Removed in Phase 6 (commit `e733761b`):
 
-The generic `ReportRunner` / `runtime/report.py` / `reports` table stay (legacy
+- Legacy services `mb_config.py`, `mb_request_builder.py`, `mb_runner.py`, and
+  the OLD `mb_schedules.py` (superseded by `mb_v2_schedules.py`) — plus their
+  tests.
+- `mb_user_configs` table + `MbUserConfig` model. Dropped via the
+  `drop_mb_user_configs` migration (down_revision `morning_briefing_v2`;
+  `downgrade` recreates the original shape). The drop was deliberately deferred
+  out of the Phase 2 migration so it lands atomically with the model + service
+  deletion, keeping `Base.metadata` and the alembic head in sync.
+- `MBRequestBuilder` protocol (`scheduler/payloads.py`), the now-dead
+  `mb_builder` param of `build_scheduler_service` (`scheduler/wiring.py`), and
+  its `MbRequestBuilderImpl` instantiation in `app.py`. The matching test
+  doubles (`StubMBRequestBuilder`, `FakeMBBuilder`) and every `mb_builder=` call
+  site were removed too. `ReportStore` stays — the EU scan executor uses it.
+- Report (`report:*`) blocks of `prompts/morning_briefing.yaml`. The
+  `chat:system` block STAYS — it is still referenced by the Secretary "ask about
+  a past briefing" desk (and the persona / chat-formatting prompt tests). Because
+  `report_mb` builds its own system prompt in code, the startup
+  `_DEPARTMENT_SLOTS` (app.py) and the `EXPECTED` slot map in
+  `test_prompt_contents.py` for `morning_briefing` collapse to `["chat.system"]`.
+- Old route handlers and old frontend tabs/components driven by the sections
+  config; old pre-rework `tests/db/test_mb_models.py` + `test_mb_migration.py`.
+
+MB no longer uses the generic `ReportRunner` for generation. The generic
+`ReportRunner` / `runtime/report.py` / `reports` table stay (legacy
 `earnings_update` route still uses them). Old v1 MB report rows stop being
 written; they remain readable in the archive listing.
 
@@ -277,12 +294,15 @@ if a concrete need appears.
    rendering) + unit tests with fake transports.
 2. DB models + Alembic migrations (`report_mb*`, `report_mb_templates`/
    `_instructions`, `mb_schedules` config columns, `repo_items.mb_v2_report_id`,
-   seed `mb_default`, drop `mb_user_configs`).
+   seed `mb_default`). NOTE: the `mb_user_configs` drop was deferred from this
+   phase to Phase 6 so it lands atomically with the model/service deletion.
 3. Server services (`mb_v2_run/template/instructions/data_sources/render/wiring/
    schedules`) + executor + wiring rewire + repo fan-out + tests.
 4. Route rewrite + route tests.
 5. Frontend rework (page, components, api, hooks, i18n) + tests.
-6. Delete old MB code; final full-suite + tsc verification.
+6. Delete old MB code (services, model, builder/wiring, prompt report blocks) +
+   drop `mb_user_configs` atomically; final targeted-suite + tsc + ruff
+   verification. DONE — see §11.
 
 ## 14. Testing strategy
 
