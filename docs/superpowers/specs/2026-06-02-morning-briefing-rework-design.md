@@ -259,13 +259,17 @@ if a concrete need appears.
 
 ### Tracked follow-up (surfaced during execution)
 
-- **Schedule enable/disable toggle.** `mb_v2_schedules` + the route cannot flip
-  `is_enabled` on PATCH (create hardcodes `True`); pausing a schedule means
-  delete + recreate. This matches EU v2 (no toggle there either), so it is not a
-  rework regression, but the legacy MB supported it. Proper support needs
-  `is_enabled` on `ScheduleIn` + `update_schedule`, plus `scheduler/service.py`
-  `modify_schedule` honoring the flag (skip `_register_schedule` when disabled).
-  Touches shared scheduler code, so deferred out of the mirror-EU scope.
+- **MB save-to-repo frontend wiring (deferred).** The backend exposes
+  `/api/repo/mb-runs` (save/unsave/list, Phase 3.7) and the repo listing fan-out
+  includes MB, but the frontend MB viewer does not yet offer a save-to-repo
+  button (`hideSaveToRepoButton`, and `SaveToRepoEngine` has no `"mb"` case).
+  Briefings live in the MB feed, so this is a v1-acceptable omission; wiring it
+  needs `"mb"` in `SaveToRepoButton`/`repo.ts`/`SavedReportsContext` + a list call.
+
+- **Schedule enable/disable toggle — DONE.** Wired end-to-end: `is_enabled` on
+  `ScheduleIn` + `mb_v2_schedules.create_schedule`/`update_schedule`, with
+  transition-driven scheduler calls (off→on add, on→off remove, on→on modify,
+  off→off no-op) so no shared `scheduler/service.py` change was needed.
 
 ## 13. Implementation phasing (hand-off to writing-plans)
 
