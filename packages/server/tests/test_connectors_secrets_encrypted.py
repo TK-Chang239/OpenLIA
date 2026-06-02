@@ -1,14 +1,14 @@
 """The connectors.secrets column is stored encrypted but reads back plaintext."""
+
 from __future__ import annotations
 
 import uuid
 
 import pytest
 from cryptography.fernet import Fernet
-from sqlalchemy import text
-
 from openlia_server.db import secrets_crypto as sc
 from openlia_server.db.models.connectors import Connector
+from sqlalchemy import text
 
 
 @pytest.fixture(autouse=True)

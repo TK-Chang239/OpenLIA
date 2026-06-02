@@ -9,8 +9,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from openlia.llm import exceptions as llm_exceptions
 from openlia.llm.exceptions import LLMProviderError, is_transient
 from openlia.llm.runtime.cancellation import CancellationToken
+from openlia.llm.runtime.events import ReportError
 from sqlalchemy.orm import Session
 
 from openlia_server.scheduler.registry import (
@@ -22,6 +24,21 @@ from openlia_server.scheduler.services import jobs as jobs_svc
 from openlia_server.scheduler.services import notifications as notif_svc
 
 DEFAULT_BACKOFF_SECONDS: tuple[int, ...] = (30, 120, 480)
+
+
+def raise_from_report_error(event: ReportError) -> None:
+    """Re-raise a ``ReportError`` event as the matching provider exception.
+
+    Shared by the report-runner executors (EU scan, MR assessment): a
+    ``ReportError`` from the runner carries the original exception's class
+    name, so the retry/backoff machinery can distinguish transient provider
+    errors from terminal ones. Falls back to ``RuntimeError`` for unknown
+    classes.
+    """
+    exc_cls = getattr(llm_exceptions, event.error_class, None)
+    if exc_cls is not None and issubclass(exc_cls, LLMProviderError):
+        raise exc_cls(event.message)
+    raise RuntimeError(f"{event.error_class}: {event.message}")
 
 
 @dataclass(frozen=True)

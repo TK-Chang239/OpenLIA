@@ -818,8 +818,6 @@ async def test_generate_retries_on_midstream_read_error() -> None:
     with respx.mock() as mock:
         route = mock.post("https://api.anthropic.com/v1/messages")
         route.side_effect = [httpx.ReadError("connection reset mid-stream"), ok]
-        resp = await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert resp.text == "recovered"
     assert route.call_count == 2

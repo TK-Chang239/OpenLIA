@@ -122,10 +122,9 @@ _DEPARTMENT_SLOTS: dict[str, list[str]] = {
         "report.system",
         "report.earnings_update.user",
     ],
-    "morning_briefing": [
-        "report.system",
-        "report.morning_briefing.user",
-    ],
+    # MB v2 (report_mb) builds its own system prompt in code; only the chat
+    # slot (Secretary "ask about a past briefing") is loaded from YAML.
+    "morning_briefing": ["chat.system"],
     "macro_research": [
         "batch.t4_assessment.system",
         "batch.t4_assessment.user",
@@ -359,6 +358,11 @@ def _make_lifespan(
         app.state.v3_cancel_registry = {}
         app.state.eu_v2_event_broker = EventBroker()
         app.state.eu_v2_cancel_registry = {}
+
+        from openlia.llm.runtime.report_mb import EventBroker as _MbEventBroker
+
+        app.state.mb_v2_event_broker = _MbEventBroker()
+        app.state.mb_v2_cancel_registry = {}
         _v3_sweep_sf = db_session_factory or _default_session_factory
         with _v3_sweep_sf() as _v3_sweep_db:
             _v3_swept = _v3_cleanup(db=_v3_sweep_db)
@@ -373,6 +377,15 @@ def _make_lifespan(
             _eu_v2_swept = _eu_v2_cleanup(db=_eu_v2_sweep_db)
         if _eu_v2_swept:
             log.info("startup sweep: marked %d orphaned eu_v2 run(s) as failed", _eu_v2_swept)
+
+        from openlia_server.services.mb_v2_run_service import (
+            cleanup_orphaned_running_rows as _mb_v2_cleanup,
+        )
+
+        with _v3_sweep_sf() as _mb_v2_sweep_db:
+            _mb_v2_swept = _mb_v2_cleanup(db=_mb_v2_sweep_db)
+        if _mb_v2_swept:
+            log.info("startup sweep: marked %d orphaned mb_v2 run(s) as failed", _mb_v2_swept)
 
         # Resume in-flight batch jobs from before the restart (the EU run sweep
         # above skips their reports). Un-resumable jobs are failed by recovery.
@@ -463,11 +476,6 @@ def _make_lifespan(
                 getattr(app.state, "earnings_recent_adapter", None) or _NoopEarningsRecentAdapter()
             )
             eu_planner = EuScanPlannerImpl(adapter=earnings_adapter)
-            from openlia_server.services.mb_request_builder import (
-                MbRequestBuilderImpl,
-            )
-
-            mb_builder = MbRequestBuilderImpl()
             from openlia_server.services.mr_assessment import MRAssessmentBuilderImpl
             from openlia_server.services.mr_cache import MRCacheStoreImpl
             from openlia_server.services.mr_schedules import MRScheduleService
@@ -507,7 +515,6 @@ def _make_lifespan(
                     ),
                     batch_runner=build_batch_runner(_sm),
                     eu_planner=eu_planner,
-                    mb_builder=mb_builder,
                     mr_builder=mr_builder,
                     report_store=report_store_impl,
                     mr_cache_store=mr_cache_store_lifespan,
@@ -786,6 +793,13 @@ def create_app(
         app.state.eu_v2_event_broker = _EventBroker()
         app.state.eu_v2_cancel_registry = {}
     app.include_router(build_earnings_update_v2_router(db_session_factory=factory, mode=mode))
+    # MB v2 streaming infrastructure — lifespan sets the real broker. This
+    # guard covers tests that call create_app() without entering the lifespan.
+    if getattr(app.state, "mb_v2_event_broker", None) is None:
+        from openlia.llm.runtime.report_mb import EventBroker as _MbEventBroker
+
+        app.state.mb_v2_cancel_registry = {}
+        app.state.mb_v2_event_broker = _MbEventBroker()
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
 

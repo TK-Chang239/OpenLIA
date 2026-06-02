@@ -1,11 +1,11 @@
 """Tests for the EncryptedJSON TypeDecorator (bind/result round-trip)."""
+
 from __future__ import annotations
 
 import json
 
 import pytest
 from cryptography.fernet import Fernet
-
 from openlia_server.db import secrets_crypto as sc
 from openlia_server.db.base import EncryptedJSON
 

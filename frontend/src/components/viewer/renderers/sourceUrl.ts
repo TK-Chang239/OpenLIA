@@ -26,5 +26,10 @@ export function sourceUrl(source: FileSource): string {
       "sourceUrl(): eu_v2_report sources are rendered via getRun inside EUV2ReportRenderer",
     );
   }
+  if (source.kind === "mb_report") {
+    throw new Error(
+      "sourceUrl(): mb_report sources are rendered via getMbRun inside MBReportRenderer",
+    );
+  }
   return downloadUrlForAttachment(source.attachmentId);
 }

@@ -1,5 +1,5 @@
-export type Tone = 'positive' | 'negative' | 'neutral' | 'warn';
-export type DeltaDirection = 'up' | 'down' | 'flat';
+export type Tone = "positive" | "negative" | "neutral" | "warn";
+export type DeltaDirection = "up" | "down" | "flat";
 
 export interface Tag {
   label: string;
@@ -81,25 +81,28 @@ export interface Citation {
 }
 
 // ─── Block discriminated union ─────────────────────────────────────────────
-export type Align = 'left' | 'center' | 'right';
+export type Align = "left" | "center" | "right";
 export type FormatRule =
-  | 'negative'
-  | 'positive'
-  | 'directional'
-  | 'bold'
-  | 'muted'
-  | 'tag-beat'
-  | 'tag-miss'
-  | 'tag-info';
+  | "negative"
+  | "positive"
+  | "directional"
+  | "bold"
+  | "muted"
+  | "tag-beat"
+  | "tag-miss"
+  | "tag-info";
 
-export interface TextBlock { type: 'text'; content: string; }
+export interface TextBlock {
+  type: "text";
+  content: string;
+}
 export interface KeyFindingBlock {
-  type: 'key_finding';
+  type: "key_finding";
   content: string;
   source_ids?: string[];
 }
 export interface PullQuoteBlock {
-  type: 'pull_quote';
+  type: "pull_quote";
   text: string;
   attribution?: string | null;
   source?: string | null;
@@ -107,12 +110,15 @@ export interface PullQuoteBlock {
   source_ids?: string[];
 }
 export interface RatingBadgeBlock {
-  type: 'rating_badge';
+  type: "rating_badge";
   rating: string;
   previous_rating?: string | null;
   change_date?: string | null;
 }
-export interface MetricCardsBlock { type: 'metric_cards'; metrics: Metric[]; }
+export interface MetricCardsBlock {
+  type: "metric_cards";
+  metrics: Metric[];
+}
 export interface TableHeaderSpec {
   key: string;
   label: string;
@@ -121,7 +127,7 @@ export interface TableHeaderSpec {
   sparkline?: boolean;
 }
 export interface TableBlock {
-  type: 'table';
+  type: "table";
   title: string;
   headers: TableHeaderSpec[];
   rows: Record<string, unknown>[];
@@ -136,7 +142,7 @@ export interface CalloutItem {
   description: string;
 }
 export interface CalloutGridBlock {
-  type: 'callout_grid';
+  type: "callout_grid";
   columns?: 2 | 3 | 4;
   items: CalloutItem[];
 }
@@ -149,15 +155,15 @@ export interface TimelineEvent {
   highlight?: boolean;
 }
 export interface TimelineBlock {
-  type: 'timeline';
+  type: "timeline";
   title?: string | null;
   events: TimelineEvent[];
 }
 
 export interface BulletListBlock {
-  type: 'bullet_list';
+  type: "bullet_list";
   items: string[];
-  tone?: 'default' | 'positive' | 'negative';
+  tone?: "default" | "positive" | "negative";
 }
 
 export interface ComparisonColumn {
@@ -166,13 +172,13 @@ export interface ComparisonColumn {
   items: string[];
 }
 export interface ComparisonSplitBlock {
-  type: 'comparison_split';
+  type: "comparison_split";
   left: ComparisonColumn;
   right: ComparisonColumn;
 }
 
 export interface QuoteBlock {
-  type: 'quote';
+  type: "quote";
   text: string;
   speaker?: string | null;
   role?: string | null;
@@ -184,21 +190,21 @@ export interface QuoteBlock {
 // Charts (kept loose — existing chart renderers consume the raw shapes).
 export interface ChartLikeBlock {
   type:
-    | 'line_chart'
-    | 'bar_chart'
-    | 'area_chart'
-    | 'pie_chart'
-    | 'candlestick_chart'
-    | 'waterfall_chart'
-    | 'scatter_plot'
-    | 'heatmap'
-    | 'treemap'
-    | 'combo_chart';
+    | "line_chart"
+    | "bar_chart"
+    | "area_chart"
+    | "pie_chart"
+    | "candlestick_chart"
+    | "waterfall_chart"
+    | "scatter_plot"
+    | "heatmap"
+    | "treemap"
+    | "combo_chart";
   [k: string]: unknown;
 }
 
 export interface GroupBlock {
-  type: 'group';
+  type: "group";
   columns: 1 | 2 | 3 | 4;
   blocks: ReportBlock[];
 }
@@ -241,11 +247,11 @@ export interface MetaStats {
 // v2.2 engine payloads. Present only on reports produced by the v2.2
 // pipeline (or carrying forward through revisions). The v1 path omits
 // both fields, in which case the renderer simply does not display them.
-import type { RunSummaryData } from '../components/equity-research/RunSummary/RunSummary';
-import type { VerificationHistoryData } from '../components/equity-research/VerificationHistory/VerificationHistory';
+import type { RunSummaryData } from "../components/equity-research/RunSummary/RunSummary";
+import type { VerificationHistoryData } from "../components/equity-research/VerificationHistory/VerificationHistory";
 
 export interface ReportSchema {
-  schema_version: '2.0';
+  schema_version: "2.0";
   department: string;
   generated_at?: string;
   page_furniture?: PageFurniture | null;
@@ -268,14 +274,21 @@ export interface ReportDetail {
   created_at?: string;
 }
 
-export async function fetchReportDetail(reportId: string): Promise<ReportDetail> {
-  if (reportId.startsWith('demo-') && import.meta.env?.MODE !== 'test') {
-    const { getDemoReportSchema } = await import('../lib/earnings-update/demo-reports');
+export async function fetchReportDetail(
+  reportId: string,
+): Promise<ReportDetail> {
+  if (reportId.startsWith("demo-") && import.meta.env?.MODE !== "test") {
+    const { getDemoReportSchema } =
+      await import("../lib/earnings-update/demo-reports");
     return { schema: await getDemoReportSchema(reportId), expired_at: null };
   }
-  const res = await fetch(`/api/reports/${reportId}`, { credentials: 'include' });
+  const res = await fetch(`/api/reports/${reportId}`, {
+    credentials: "include",
+  });
   if (!res.ok) {
-    throw new Error(`fetchReport failed (${res.status} ${res.statusText ?? ''})`);
+    throw new Error(
+      `fetchReport failed (${res.status} ${res.statusText ?? ""})`,
+    );
   }
   return (await res.json()) as ReportDetail;
 }
@@ -310,24 +323,30 @@ export async function listReports(
   } = {},
 ): Promise<ReportListResponse> {
   const search = new URLSearchParams();
-  if (params.department) search.set('department', params.department);
-  if (params.session_id) search.set('session_id', params.session_id);
-  if (params.include_expired) search.set('include_expired', 'true');
+  if (params.department) search.set("department", params.department);
+  if (params.session_id) search.set("session_id", params.session_id);
+  if (params.include_expired) search.set("include_expired", "true");
   const qs = search.toString();
-  const res = await fetch(`/api/reports${qs ? `?${qs}` : ''}`, { credentials: 'include' });
+  const res = await fetch(`/api/reports${qs ? `?${qs}` : ""}`, {
+    credentials: "include",
+  });
   if (!res.ok) {
-    throw new Error(`listReports failed (${res.status} ${res.statusText ?? ''})`);
+    throw new Error(
+      `listReports failed (${res.status} ${res.statusText ?? ""})`,
+    );
   }
   return (await res.json()) as ReportListResponse;
 }
 
 export async function deleteReport(reportId: string): Promise<void> {
   const res = await fetch(`/api/reports/${reportId}`, {
-    method: 'DELETE',
-    credentials: 'include',
+    method: "DELETE",
+    credentials: "include",
   });
   if (!res.ok && res.status !== 204) {
-    throw new Error(`deleteReport failed (${res.status} ${res.statusText ?? ''})`);
+    throw new Error(
+      `deleteReport failed (${res.status} ${res.statusText ?? ""})`,
+    );
   }
 }
 
@@ -397,13 +416,20 @@ export function parseFilenameFromHeader(
   return fallback;
 }
 
-export type ReportEngine = "v1" | "v2" | "v23" | "v3" | "eu";
+export type ReportEngine = "v1" | "v2" | "v23" | "v3" | "eu" | "mb";
 
 // Earnings Update v2 standalone HTML render endpoint. Mirrors v3HtmlUrl
 // (in equity-research-v3.ts) — the caller opens it in a new tab; the
 // browser's Save As then yields a Word/PDF copy.
 export function euHtmlUrl(reportId: string): string {
   return `/api/departments/earnings-update/v2/runs/${encodeURIComponent(reportId)}/html`;
+}
+
+// Morning Briefing standalone HTML render endpoint. Mirrors euHtmlUrl —
+// the caller opens it in a new tab; the browser's Save As then yields a
+// Word/PDF copy.
+export function mbHtmlUrl(reportId: string): string {
+  return `/api/departments/morning-briefing/runs/${encodeURIComponent(reportId)}/html`;
 }
 
 export async function downloadReportBlob(
@@ -427,6 +453,12 @@ export async function downloadReportBlob(
       format === "pdf"
         ? `/api/departments/earnings-update/v2/runs/${encodeURIComponent(reportId)}/pdf`
         : `/api/departments/earnings-update/v2/runs/${encodeURIComponent(reportId)}/docx`;
+  } else if (engine === "mb") {
+    // Morning Briefing emits both formats natively, mirroring EU/v3.
+    url =
+      format === "pdf"
+        ? `/api/departments/morning-briefing/runs/${encodeURIComponent(reportId)}/pdf`
+        : `/api/departments/morning-briefing/runs/${encodeURIComponent(reportId)}/docx`;
   } else if (engine === "v23") {
     // v2.3 only emits docx today; PDF is browser-print from the viewer.
     url = `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(reportId)}/docx`;

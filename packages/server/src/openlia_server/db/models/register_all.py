@@ -38,4 +38,5 @@ from openlia_server.db.models import (  # noqa: F401
     pipeline_runs,
     report_v3,
     report_eu,
+    report_mb,
 )

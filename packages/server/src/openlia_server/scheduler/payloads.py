@@ -22,18 +22,6 @@ class DepartmentPayloadBuilderNotWired(RuntimeError):
 
 
 # ------------------------------------------------------------------
-# MB — Morning Briefing
-# ------------------------------------------------------------------
-
-
-class MBRequestBuilder(Protocol):
-    """Given a user + schedule_id, build the ReportRequest for the
-    morning briefing."""
-
-    def build(self, *, session: Session, user_id: str, schedule_id: str) -> ReportRequest: ...
-
-
-# ------------------------------------------------------------------
 # EU — Earnings Update
 # ------------------------------------------------------------------
 

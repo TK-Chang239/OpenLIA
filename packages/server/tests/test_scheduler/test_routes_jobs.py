@@ -51,7 +51,6 @@ def client_with_user(route_session_factory):
     from _scheduler_fakes import (
         FakeAPScheduler,
         FakeBatchRunner,
-        FakeMBBuilder,
         FakeMRBuilder,
         FakeMRCacheStore,
         FakeReportRunner,
@@ -82,7 +81,6 @@ def client_with_user(route_session_factory):
         scheduler=scheduler,
         report_runner=FakeReportRunner(events=[]),
         batch_runner=FakeBatchRunner(results=[]),
-        mb_builder=FakeMBBuilder(request=ReportRequest(mode="stock_update", user_input="x")),
         eu_planner=StubEUScanPlanner(),
         mr_builder=FakeMRBuilder(
             items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")

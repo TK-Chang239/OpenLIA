@@ -1,4 +1,5 @@
 """The encryption migration converts existing plaintext secret rows to ciphertext."""
+
 from __future__ import annotations
 
 import json

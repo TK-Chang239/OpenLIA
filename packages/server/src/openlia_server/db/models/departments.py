@@ -11,7 +11,6 @@ from datetime import date
 
 from sqlalchemy import (
     JSON,
-    Boolean,
     CheckConstraint,
     Date,
     ForeignKey,
@@ -170,41 +169,5 @@ class EuUserConfig(Base, TimestampMixin):
         CheckConstraint(
             "report_length IN ('concise', 'normal', 'elaborative')",
             name="ck_eu_user_configs_length",
-        ),
-    )
-
-
-class MbUserConfig(Base, TimestampMixin):
-    """Per-user Morning Briefing config. One row per user."""
-
-    __tablename__ = "mb_user_configs"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
-    report_length: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="normal", server_default="normal"
-    )
-    enabled_section_ids: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list, server_default=text("'[]'")
-    )
-    section_topics: Mapped[dict] = mapped_column(
-        JSON, nullable=False, default=dict, server_default=text("'{}'")
-    )
-    custom_sections: Mapped[list[dict]] = mapped_column(
-        JSON, nullable=False, default=list, server_default=text("'[]'")
-    )
-    reference_portfolio: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=text("0")
-    )
-
-    __table_args__ = (
-        CheckConstraint(
-            "report_length IN ('concise', 'normal', 'elaborative')",
-            name="ck_mb_user_configs_length",
         ),
     )

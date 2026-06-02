@@ -6,7 +6,6 @@ from __future__ import annotations
 from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
-    FakeMBBuilder,
     FakeMRBuilder,
     FakeMRCacheStore,
     FakeReportRunner,
@@ -31,7 +30,6 @@ def test_wiring_accepts_real_eu_planner(session_factory) -> None:
         scheduler=FakeAPScheduler(),
         report_runner=FakeReportRunner(events=[]),
         batch_runner=FakeBatchRunner(results=[]),
-        mb_builder=FakeMBBuilder(request=ReportRequest(mode="stock_update", user_input="x")),
         eu_planner=planner,
         mr_builder=FakeMRBuilder(
             items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
