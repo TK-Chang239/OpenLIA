@@ -150,6 +150,33 @@ def test_settings_put_roundtrip(client_eu_v2):
     assert body["enabled_provider_ids"] == []
 
 
+def test_settings_get_defaults_batch_disabled(client_eu_v2):
+    r = client_eu_v2.get(f"{_BASE}/settings")
+    assert r.status_code == 200
+    assert r.json()["batch_enabled"] is False
+
+
+def test_settings_put_roundtrip_batch_enabled(client_eu_v2):
+    r = client_eu_v2.put(
+        f"{_BASE}/settings",
+        json={
+            "provider_kind": "openai",
+            "model": "gpt-5.4-2026-03-05",
+            "template_id": "eu_default",
+            "language": "en",
+            "length": "normal",
+            "reasoning_effort": None,
+            "enabled_provider_ids": ["eodhd"],
+            "web_search_enabled": False,
+            "batch_enabled": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["batch_enabled"] is True
+    g = client_eu_v2.get(f"{_BASE}/settings")
+    assert g.json()["batch_enabled"] is True
+
+
 def test_settings_put_freeform_without_instructions_rejected(client_eu_v2):
     r = client_eu_v2.put(
         f"{_BASE}/settings",
