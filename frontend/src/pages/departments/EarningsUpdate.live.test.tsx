@@ -131,4 +131,30 @@ describe("EarningsUpdate live run lifecycle", () => {
       expect(screen.queryByTestId("eu-generating-card")).not.toBeInTheDocument(),
     );
   });
+
+  it("deletes the completed live card and clears it from the feed", async () => {
+    const del = vi.spyOn(api, "deleteRun").mockResolvedValue(undefined);
+    const { rerender } = renderPage();
+    await startLiveRun();
+
+    // The run finishes — the live block swaps the generating card for the
+    // completed EuBigCard, which carries a delete control.
+    streamState = makeStream("completed");
+    rerender(
+      <FileViewerProvider>
+        <EarningsUpdate />
+      </FileViewerProvider>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /remove report/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+
+    // Deletes the live run id and clears the card (setLive(null)).
+    await waitFor(() => expect(del).toHaveBeenCalledWith("r1"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("eu-big-card")).not.toBeInTheDocument(),
+    );
+  });
 });
