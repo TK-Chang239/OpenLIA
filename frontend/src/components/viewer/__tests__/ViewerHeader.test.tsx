@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { ViewerHeader } from "../ViewerHeader";
 
@@ -56,5 +56,32 @@ describe("ViewerHeader download affordance", () => {
       />,
     );
     expect(getByTestId("report-dl")).toBeInTheDocument();
+  });
+
+  test("renders a delete button that fires onRequestDelete when provided", () => {
+    const onRequestDelete = vi.fn();
+    const { getByLabelText } = render(
+      <ViewerHeader
+        filename="AAPL earnings"
+        metadata="EU v2"
+        source={{ kind: "eu_v2_report", reportId: "r1" }}
+        onRequestDelete={onRequestDelete}
+        onClose={() => undefined}
+      />,
+    );
+    fireEvent.click(getByLabelText("chat.viewer_delete_aria"));
+    expect(onRequestDelete).toHaveBeenCalledTimes(1);
+  });
+
+  test("renders no delete button when onRequestDelete is absent", () => {
+    const { queryByLabelText } = render(
+      <ViewerHeader
+        filename="AAPL earnings"
+        metadata="EU v2"
+        source={{ kind: "eu_v2_report", reportId: "r1" }}
+        onClose={() => undefined}
+      />,
+    );
+    expect(queryByLabelText("chat.viewer_delete_aria")).toBeNull();
   });
 });

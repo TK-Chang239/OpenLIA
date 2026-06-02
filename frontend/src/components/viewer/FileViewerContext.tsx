@@ -41,6 +41,8 @@ export interface FileViewerTarget {
   hideSaveToRepoButton?: boolean;
   /** Element that opened the viewer; focus returns here on close. */
   trigger?: HTMLElement | null;
+  /** When provided, the viewer shows a delete action that calls this then closes. */
+  onDelete?: () => void | Promise<void>;
 }
 
 interface ContextShape {

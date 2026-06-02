@@ -12,6 +12,7 @@ import { ImageRenderer } from "./renderers/ImageRenderer";
 import { UnsupportedRenderer } from "./renderers/UnsupportedRenderer";
 import { StructuredReportRenderer } from "./renderers/StructuredReportRenderer";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
+import { ConfirmDialog } from "../primitives/ConfirmDialog";
 
 type ViewerTab = "preview" | "raw";
 
@@ -61,6 +62,7 @@ export function FileViewer(): JSX.Element | null {
   );
   const [mobile, setMobile] = useState<boolean>(isMobile);
   const [tab, setTab] = useState<ViewerTab>("preview");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const previousFilenameRef = useRef<string | null>(null);
@@ -69,6 +71,7 @@ export function FileViewer(): JSX.Element | null {
   // and shouldn't leak across opens.
   useEffect(() => {
     setTab("preview");
+    setConfirmDelete(false);
   }, [current?.filename]);
 
   useEffect(() => {
@@ -176,6 +179,9 @@ export function FileViewer(): JSX.Element | null {
             // SaveToRepoButton supports v1 (POST /api/repo/items),
             // v3 (POST /api/repo/v3-runs), and eu (POST /api/repo/eu-runs).
             hideSaveToRepoButton={current.hideSaveToRepoButton ?? false}
+            onRequestDelete={
+              current.onDelete ? () => setConfirmDelete(true) : undefined
+            }
             onClose={close}
             closeButtonRef={closeButtonRef}
           />
@@ -213,6 +219,18 @@ export function FileViewer(): JSX.Element | null {
               </motion.div>
             </AnimatePresence>
           </div>
+          <ConfirmDialog
+            open={confirmDelete}
+            title={t("chat.viewer_delete_title")}
+            description={t("chat.viewer_delete_description")}
+            confirmLabel={t("chat.viewer_delete_confirm")}
+            destructive
+            onCancel={() => setConfirmDelete(false)}
+            onConfirm={() => {
+              setConfirmDelete(false);
+              void Promise.resolve(current?.onDelete?.()).then(() => close());
+            }}
+          />
         </motion.aside>
       ) : null}
     </AnimatePresence>
