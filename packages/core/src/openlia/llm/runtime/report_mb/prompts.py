@@ -1,10 +1,10 @@
-"""System prompt builder for the Earnings Update v2 engine.
+"""System prompt builder for the Morning Briefing engine.
 
 One function: ``build_system_prompt(request)`` produces the single
 system message the model sees for the whole run. The prompt states the
-analyst's job, the template sections, the earnings trigger context, and
-which connectors are available this run — so the model knows the
-release it is covering and which tools it may call before it calls any.
+analyst's job, the template sections, the briefing context, and which
+connectors are available this run — so the model knows which briefing
+it is writing and which tools it may call before it calls any.
 """
 
 from __future__ import annotations
@@ -51,14 +51,14 @@ def build_system_prompt(
     *,
     connector_tools: Sequence[ConnectorPromptInfo] = (),
 ) -> str:
-    """Compose the EU v2 system prompt for one run.
+    """Compose the Morning Briefing system prompt for one run.
 
     Two structural modes, decided by whether the template carries any
     sections:
       - templated: the section list is fixed; the model must write every
         section id before ``finalize``.
       - freeform (empty ``sections``): the model designs its own
-        sections, guided by the subject and trigger context.
+        sections, guided by the subject and briefing context.
     """
     template = request.template
     language_label = _LANGUAGE_LABELS.get(request.language, request.language.value)
@@ -97,15 +97,26 @@ def _render_instructions_block(instructions: str | None) -> str:
 def _render_briefing_block(briefing: BriefingContext | None) -> str:
     """The briefing context block, or empty when no briefing given.
 
-    Reworked for market-briefing content in Task 1.5; this minimal form
-    keeps the package importable after the schema rename.
+    Only non-None fields render, so a run that knows only the run date
+    still produces a clean, accurate block. Tells the model which
+    recurring market briefing it is writing and when it fires.
     """
     if briefing is None:
         return ""
     lines: list[str] = ["# Briefing you are writing", ""]
-    lines.append(f"Run date: {briefing.run_date}")
-    if briefing.schedule_label:
-        lines.append(f"Schedule: {briefing.schedule_label}")
+    lead = f"You are writing the {briefing.schedule_label or 'market briefing'}"
+    lead += f" for {briefing.run_date}"
+    if briefing.time_label:
+        lead += f" at {briefing.time_label}"
+    if briefing.timezone:
+        lead += f" {briefing.timezone}"
+    lead += "."
+    lines.append(lead)
+    lines.append(
+        "Treat the run date as today. Cover the market backdrop, overnight "
+        "and pre-market moves, the day's scheduled catalysts, and what they "
+        "mean for the day ahead."
+    )
     return "\n".join(lines) + "\n\n"
 
 
@@ -132,11 +143,11 @@ def _render_structure_block(template: TemplateSpec) -> str:
 
 
 _FREEFORM_STRUCTURE_BLOCK = """\
-No fixed section structure is imposed. Design the report's sections
-yourself, guided by the earnings event and the subject. For each section
-call `write_section` with a short `lowercase_snake_case` section id and a
-human-readable `title`. Write at least one section before calling
-`finalize`."""
+No fixed section structure is imposed. Design the briefing's sections
+yourself, guided by the briefing context and the subject. For each
+section call `write_section` with a short `lowercase_snake_case` section
+id and a human-readable `title`. Write at least one section before
+calling `finalize`."""
 
 
 def _render_connectors_block(
@@ -146,18 +157,18 @@ def _render_connectors_block(
     """List the tool groups available this run.
 
     When all connectors are off, state explicitly that no data tools are
-    available so the model writes from the trigger context and its own
+    available so the model writes from the briefing context and its own
     knowledge rather than waiting on a disabled tool.
     """
     available: list[str] = []
     if connectors.eodhd:
         available.append(
-            "  - Financial data & earnings calendar (EODHD): "
-            "`get_fundamentals`, `get_historical_prices`, "
-            "`get_company_news`, `get_earnings_calendar`. Pull reported "
-            "line items, price action, and recent headlines; confirm the "
-            "release and pull consensus estimates to score the print "
-            "against."
+            "  - Market data (EODHD): `get_quotes`, `get_historical_prices`, "
+            "`get_news`, `get_economic_calendar`, `get_macro_indicators`. "
+            "Read where indices and the names you cover are trading, the "
+            "trend and recent moves, overnight and market-wide headlines, "
+            "the day's scheduled releases, and the rates/volatility/dollar/"
+            "commodity backdrop."
         )
     for info in connector_tools:
         tool_lines = "\n".join(f"    - {name}: {description}" for name, description in info.tools)
@@ -167,45 +178,44 @@ def _render_connectors_block(
     if connectors.web_search:
         available.append(
             "  - Web search: the provider's first-class web search. Use "
-            "for management commentary, call transcripts, and context the "
-            "data feeds do not cover."
+            "for narrative context and breaking developments the data "
+            "feeds do not cover."
         )
     if not available:
         return (
-            "No data tools are available this run. Write the report from "
-            "the earnings event context above and your own knowledge. Do "
-            "not attempt to call data, calendar, or web-search tools — "
-            "only the output tools (`write_section`, `set_cover`, "
-            "`emit_chart`, `finalize`) are available."
+            "No data tools are available this run. Write the briefing from "
+            "the briefing context above and your own knowledge. Lean on the "
+            "output tools (`write_section`, `set_cover`, `emit_chart`, "
+            "`finalize`) only."
         )
     return (
         "These tool groups are enabled this run:\n\n"
         + "\n".join(available)
         + "\n\n"
-        + _EARNINGS_DATA_PRIORITY
+        + _MARKET_DATA_PRIORITY
     )
 
 
 # Connector-agnostic research directive. Appended whenever at least one data
-# tool is enabled, so the model leans on primary reported data regardless of
+# tool is enabled, so the model leans on primary market data regardless of
 # which provider supplies it. Names no specific connector — a provider the
 # user runs today may be swapped out tomorrow.
-_EARNINGS_DATA_PRIORITY = (
-    "Prioritize the data that defines an earnings update. Favor tools that "
-    "return the reported quarter's actual figures, the beat/miss history "
-    "versus estimates, and the earnings call transcript and management "
-    "commentary. When a tool group exposes a discovery interface (a "
-    "list/describe/call pattern), use it to find and call those "
-    "earnings-specific tools so the analysis rests on primary reported data."
+_MARKET_DATA_PRIORITY = (
+    "Prioritize the data that defines a market briefing. Favor tools that "
+    "return current index and asset levels, overnight and pre-market moves, "
+    "the scheduled macro catalysts for the day, and the rates, volatility, "
+    "and currency backdrop. When a tool group exposes a discovery interface "
+    "(a list/describe/call pattern), use it to find and call the relevant "
+    "market tools so the briefing rests on primary observed data."
 )
 
 
 _PROMPT_TEMPLATE = """\
-You are an earnings analyst producing a post-earnings update for a
-professional investor. Assess the quarter against expectations and the
-prior investment thesis: what beat, what missed, what changed, and what
-it means going forward. The report structure is fixed by the user's
-template (below).
+You are a markets analyst writing a recurring market briefing for a
+professional investor. Set the scene for the trading day: the global and
+overnight backdrop, what moved and why, the scheduled catalysts ahead,
+and what it all means for positioning. The report structure is fixed by
+the user's template (below).
 
 # Report subject
 {subject}
@@ -228,14 +238,14 @@ template (below).
 
 # Output discipline
 
-Produce the report by calling the output tools:
+Produce the briefing by calling the output tools:
   - `write_section(section_id, markdown)` for every template section id.
-  - `emit_chart(...)` when a simple chart (revenue/EPS vs estimate,
-    segment trends) clarifies the quarter; reference it from a section
-    via `{{{{chart:<chart_id>}}}}`.
-  - `set_cover(...)` once near the end with the headline verdict: a
-    one-sentence `tagline`, 3-5 `tldr` bullets, key metric cards, and a
-    `rating`.
+  - `emit_chart(...)` when a simple chart (index performance, a sector or
+    rates trend) clarifies the day; reference it from a section via
+    `{{{{chart:<chart_id>}}}}`.
+  - `set_cover(...)` once near the end with the headline read: a
+    one-sentence `tagline`, 3-5 `tldr` bullets, and key metric cards for
+    the levels that matter.
   - `finalize()` after every section is written and the cover is set. If
     `finalize()` reports missing sections, write them and call again.
 
