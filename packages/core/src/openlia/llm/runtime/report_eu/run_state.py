@@ -24,6 +24,7 @@ to a ``NullEmitter``.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -71,6 +72,11 @@ class EuRunState:
     messages: list[Message]
     max_turns: int = _DEFAULT_MAX_TURNS
     turn: int = 0
+    # Optional connector dispatcher (duck-typed: async ``in_department``
+    # context manager). When set, tool dispatch runs inside its context so
+    # connector tools resolve per-department credentials. Only tool
+    # execution needs it — the model call happens remotely via the batch.
+    dispatcher: Any = None
     _result: RunResult | None = field(default=None, repr=False)
 
     @classmethod
@@ -113,6 +119,7 @@ class EuRunState:
             max_output_tokens=caps.max_output_tokens,
             messages=[_initial_user_turn(request)],
             max_turns=max_turns,
+            dispatcher=dispatcher,
         )
 
     @property
@@ -179,9 +186,14 @@ class EuRunState:
                 )
             return
 
-        for call in response.tool_calls:
-            result_message = await _dispatch_one(call, self.tools_by_name)
-            self.messages.append(result_message)
+        if self.dispatcher is not None:
+            ctx = self.dispatcher.in_department("earnings_update")
+        else:
+            ctx = contextlib.nullcontext()
+        async with ctx:
+            for call in response.tool_calls:
+                result_message = await _dispatch_one(call, self.tools_by_name)
+                self.messages.append(result_message)
 
         if self.workspace.finalized:
             self._result = _finish(self.workspace, NullEmitter(), status="completed")

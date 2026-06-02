@@ -1,5 +1,7 @@
 """EuRunState — step-wise driver parity with the inline Runner."""
 
+import contextlib
+
 import pytest
 from openlia.llm.runtime.report_eu import EuDataTransports
 from openlia.llm.runtime.report_eu.run_state import EuRunState
@@ -91,6 +93,37 @@ async def test_max_turns_without_finalize_fails():
     assert state.pending_request() is None
     assert state.result().status == "failed"
     assert "hard limit of 2 model turns" in state.result().message
+
+
+@pytest.mark.asyncio
+async def test_tool_dispatch_runs_inside_dispatcher_context():
+    class FakeDispatcher:
+        def __init__(self):
+            self.events: list[str] = []
+            self.department: str | None = None
+
+        def candidate_tools(self) -> list[dict]:
+            return []
+
+        @contextlib.asynccontextmanager
+        async def in_department(self, department: str):
+            self.department = department
+            self.events.append("enter")
+            try:
+                yield
+            finally:
+                self.events.append("exit")
+
+    dispatcher = FakeDispatcher()
+    state = EuRunState.from_request(
+        _req(), transports=_transports(), custom_id="r1", dispatcher=dispatcher
+    )
+    state.pending_request()
+    await state.apply_response(
+        script_tool_calls(("write_section", {"section_id": "quick_take", "markdown": "b."}))
+    )
+    assert dispatcher.events == ["enter", "exit"]
+    assert dispatcher.department == "earnings_update"
 
 
 @pytest.mark.asyncio
