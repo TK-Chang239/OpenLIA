@@ -308,9 +308,7 @@ def build_eu_dispatcher(
     """
     rows = connectors_service.list_connectors(db)
     disabled = frozenset(
-        r.id
-        for r in rows
-        if r.provider_id not in enabled_provider_ids or r.provider_id == "eodhd"
+        r.id for r in rows if r.provider_id not in enabled_provider_ids or r.provider_id == "eodhd"
     )
     routable = any(
         r.status == ConnectorStatus.VALIDATED.value
@@ -346,9 +344,7 @@ def start_run_async(
     fake adapter); when omitted the runner builds one from env on first
     generate. ``transports`` overrides the env-resolved EODHD bundle.
     """
-    report_id = insert_report_row(
-        db, user_id=user_id, request=request, trigger_kind=trigger_kind
-    )
+    report_id = insert_report_row(db, user_id=user_id, request=request, trigger_kind=trigger_kind)
 
     if transports is None:
         transports = build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))
@@ -419,9 +415,7 @@ async def _run_in_background(
             )
         except Exception as exc:
             log.exception("EU v2 run %s crashed unexpectedly", report_id)
-            _emit_and_mark_failed(
-                emitter, session_factory, report_id, f"unexpected: {exc}"
-            )
+            _emit_and_mark_failed(emitter, session_factory, report_id, f"unexpected: {exc}")
             return
 
         _persist_background_outcome(

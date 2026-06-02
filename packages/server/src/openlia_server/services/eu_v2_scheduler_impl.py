@@ -16,13 +16,13 @@ from datetime import UTC, datetime
 from openlia.llm.runtime.report_eu import EventBroker
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.services.eu_v2_batch_service import dispatch_due_batches
 from openlia_server.services.eu_v2_calendar_sync import sync_all_watchlists
 from openlia_server.services.eu_v2_dispatch import (
     mark_failed,
     mark_reported,
     select_due_rows,
 )
-from openlia_server.services.eu_v2_batch_service import dispatch_due_batches
 from openlia_server.services.eu_v2_run_service import build_run_request, start_run_async
 from openlia_server.services.eu_v2_wiring import build_eu_v2_transports
 
