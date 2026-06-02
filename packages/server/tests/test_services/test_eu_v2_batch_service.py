@@ -212,3 +212,45 @@ def test_run_batch_group_empty_raises(db_session_factory):
             runs=[],
             transport=FakeBatchTransport({}),
         )
+
+
+def test_mark_orphaned_batch_jobs_failed(db_session, make_user):
+    from datetime import UTC, datetime
+
+    user = make_user(email="orphan@example.com")
+    req = _req("DDD.US earnings")
+    report_id = insert_report_row(
+        db_session, user_id=user.id, request=req, trigger_kind="scheduled"
+    )
+    now = datetime.now(UTC)
+    db_session.add(
+        EuV2BatchJob(
+            id="job-x",
+            provider_kind="anthropic",
+            model="claude-sonnet-4-6",
+            status="polling",
+            provider_batch_id="batch-abc",
+            turn_index=2,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        EuV2BatchRun(
+            id="run-x",
+            batch_job_id="job-x",
+            report_id=report_id,
+            custom_id=report_id,
+            status="active",
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    swept = svc.mark_orphaned_batch_jobs_failed(db=db_session)
+    assert swept == 1
+    assert db_session.get(EuV2BatchJob, "job-x").status == "failed"
+    assert db_session.get(EuV2BatchRun, "run-x").status == "failed"
+    report = db_session.get(ReportEu, report_id)
+    assert report.status == "failed"
+    assert "restart" in report.error_message
