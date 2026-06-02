@@ -98,6 +98,7 @@ class SettingsOut(BaseModel):
     enabled_provider_ids: list[str]
     web_search_enabled: bool
     instructions_id: str | None
+    batch_enabled: bool
 
 
 class InstructionsOut(BaseModel):
@@ -132,6 +133,7 @@ class SettingsUpdateIn(BaseModel):
     enabled_provider_ids: list[str]
     web_search_enabled: bool
     instructions_id: str | None = None
+    batch_enabled: bool = False
 
 
 class WatchlistEntryOut(BaseModel):
@@ -463,6 +465,7 @@ def build_earnings_update_v2_router(
             enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
             instructions_id=dto.instructions_id,
+            batch_enabled=dto.batch_enabled,
         )
 
     @router.get("/data-sources", response_model=DataSourcesOut)
@@ -505,6 +508,7 @@ def build_earnings_update_v2_router(
                 enabled_provider_ids=payload.enabled_provider_ids,
                 web_search_enabled=payload.web_search_enabled,
                 instructions_id=payload.instructions_id,
+                batch_enabled=payload.batch_enabled,
             )
         except ValueError as exc:
             raise HTTPException(
@@ -520,6 +524,7 @@ def build_earnings_update_v2_router(
             enabled_provider_ids=list(dto.enabled_provider_ids),
             web_search_enabled=dto.web_search_enabled,
             instructions_id=dto.instructions_id,
+            batch_enabled=dto.batch_enabled,
         )
 
     # ----- Watchlist -----

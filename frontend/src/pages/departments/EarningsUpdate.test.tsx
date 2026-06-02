@@ -26,6 +26,7 @@ const baseSettings: api.EuSettings = {
   enabled_provider_ids: ["eodhd"],
   web_search_enabled: false,
   instructions_id: null,
+  batch_enabled: false,
 };
 
 function makeRun(over: Partial<api.RunSummary>): api.RunSummary {

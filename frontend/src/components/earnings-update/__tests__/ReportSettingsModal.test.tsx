@@ -14,7 +14,7 @@ const base: euApi.EuSettings = {
   provider_kind: "anthropic", model: "claude-sonnet-4-6", template_id: "eu_default",
   language: "en", length: "normal", reasoning_effort: null,
   enabled_provider_ids: ["eodhd"], web_search_enabled: false,
-  instructions_id: null,
+  instructions_id: null, batch_enabled: false,
 };
 
 const EODHD: DataSource = {
@@ -97,6 +97,30 @@ describe("ReportSettingsModal (v2)", () => {
         expect.objectContaining({ web_search_enabled: true }),
       ),
     );
+  });
+
+  it("toggling batch mode flips batch_enabled on save", async () => {
+    const onSave = vi.fn().mockResolvedValue(base);
+    renderModal(onSave);
+    fireEvent.click(screen.getByTestId("eu-v2-batch-enabled"));
+    fireEvent.click(screen.getByTestId("eu-v2-settings-save"));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ batch_enabled: true }),
+      ),
+    );
+  });
+
+  it("disables the batch toggle for an unsupported provider", () => {
+    renderModal(vi.fn().mockResolvedValue(base), {
+      ...base,
+      provider_kind: "ollama",
+      model: "llama3",
+    });
+    expect(screen.getByTestId("eu-v2-batch-enabled")).toBeDisabled();
+    expect(
+      screen.getByText(/requires an OpenAI or Anthropic model/i),
+    ).toBeInTheDocument();
   });
 
   it("disables an unavailable web-search source and shows its reason", () => {

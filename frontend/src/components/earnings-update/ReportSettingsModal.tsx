@@ -109,6 +109,12 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
   const { templates, upload, remove } = useEuTemplates();
   const { sources } = useEuDataSources(draft.provider_kind, draft.model);
 
+  // Batch (provider Batch API) is wired only for OpenAI + Anthropic; other
+  // providers fall back to the live path server-side, so the toggle is
+  // disabled and explained when an unsupported provider is selected.
+  const batchSupported =
+    draft.provider_kind === "openai" || draft.provider_kind === "anthropic";
+
   const refreshInstructions = useCallback(async () => {
     setInstructions(await listEuInstructions());
   }, []);
@@ -440,6 +446,33 @@ export function ReportSettingsModal({ settings, onSave, onClose }: Props) {
                   {(sources ?? []).map((s) => renderSource(s))}
                 </div>
               )}
+            </section>
+
+            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+
+            {/* Batch mode */}
+            <section className="mb-7">
+              {sectionTitle(t("earnings.settings_modal.batch_title"))}
+              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+                {t("earnings.settings_modal.batch_hint")}
+              </p>
+              <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden">
+                <Toggle
+                  on={draft.batch_enabled && batchSupported}
+                  onClick={() =>
+                    setDraft((d) => ({ ...d, batch_enabled: !d.batch_enabled }))
+                  }
+                  testId="eu-v2-batch-enabled"
+                  label={t("earnings.settings_modal.batch_label")}
+                  ariaLabel={t("earnings.settings_modal.batch_title")}
+                  disabled={!batchSupported}
+                />
+              </div>
+              {!batchSupported ? (
+                <p className="text-[12.5px] text-[--color-text-tertiary] leading-[1.5] mt-2">
+                  {t("earnings.settings_modal.batch_unsupported")}
+                </p>
+              ) : null}
             </section>
 
             <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
