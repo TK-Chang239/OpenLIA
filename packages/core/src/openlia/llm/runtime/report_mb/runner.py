@@ -1,4 +1,4 @@
-"""Top-level runner for Earnings Update v2 runs.
+"""Top-level runner for Morning Briefing runs.
 
 One LLM session. One tool-use loop. One final emit. The loop:
 
@@ -12,11 +12,10 @@ One LLM session. One tool-use loop. One final emit. The loop:
      returned into the ledger.
   5. Repeat until the workspace is finalized OR a hard limit trips.
 
-Forked from report_v3 with the revision flow, attachment materialization,
-and tool-discovery paths removed: EU v2 has a fixed connector-gated
-catalog and no revise pass. Persistence and rendering live in a later
-phase; this module owns the in-memory flow that produces a populated
-``RunResult``.
+Forked from the Earnings Update v2 engine: a fixed connector-gated
+catalog of market-wide tools, no revise pass, and no batch mode.
+Persistence and rendering live in a later phase; this module owns the
+in-memory flow that produces a populated ``RunResult``.
 """
 
 from __future__ import annotations
@@ -50,7 +49,7 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class Runner:
-    """Executes one EU v2 run end-to-end.
+    """Executes one Morning Briefing run end-to-end.
 
     Construct with the run's ``request`` and an ``MbDataTransports``
     bundle (the EODHD callables the data tools dispatch against). The
@@ -61,8 +60,8 @@ class Runner:
     request: RunRequest
     transports: MbDataTransports
     max_turns: int = 60
-    # 30 min default: earnings updates with web search can take 20-30
-    # turns at 30-90s each (web search + long-context latency compound).
+    # 30 min default: a briefing with web search can take 20-30 turns at
+    # 30-90s each (web search + long-context latency compound).
     max_wall_time_seconds: int = 30 * 60
     # Optional connector dispatcher. Duck-typed: when set, must expose an
     # async ``in_department(department)`` context manager. The runner runs
@@ -77,7 +76,7 @@ class Runner:
         emitter: EventEmitter | None = None,
         cancel_token: CancelToken | None = None,
     ) -> RunResult:
-        """Execute the EU v2 run.
+        """Execute the Morning Briefing run.
 
         Pass ``session`` to use a pre-built session (tests inject a fake
         adapter via ``LLMSession.attach_adapter``). When omitted a fresh
@@ -137,7 +136,7 @@ class Runner:
         deadline = time.monotonic() + self.max_wall_time_seconds
 
         if self.dispatcher is not None:
-            ctx = self.dispatcher.in_department("earnings_update")
+            ctx = self.dispatcher.in_department("morning_briefing")
         else:
             ctx = contextlib.nullcontext()
 
@@ -179,7 +178,9 @@ class Runner:
                     workspace,
                     emitter,
                     status="failed",
-                    message=f"EU v2 run cancelled at turn {turn}. Partial work preserved.",
+                    message=(
+                        f"Morning Briefing run cancelled at turn {turn}. Partial work preserved."
+                    ),
                     event_type="run.cancelled",
                 )
             if time.monotonic() > deadline:
@@ -188,7 +189,7 @@ class Runner:
                     emitter,
                     status="failed",
                     message=(
-                        f"EU v2 run exceeded {self.max_wall_time_seconds}s wall "
+                        f"Morning Briefing run exceeded {self.max_wall_time_seconds}s wall "
                         f"time after {turn} turns. Partial work preserved."
                     ),
                 )
@@ -261,7 +262,7 @@ class Runner:
             emitter,
             status="failed",
             message=(
-                f"EU v2 run hit hard limit of {self.max_turns} model turns "
+                f"Morning Briefing run hit hard limit of {self.max_turns} model turns "
                 f"without calling finalize(). Partial work preserved."
             ),
         )
@@ -292,10 +293,10 @@ def _initial_user_turn(request: RunRequest) -> Message:
     return Message(
         role="user",
         content=(
-            f"Produce the earnings update for {request.subject!r}. Follow "
+            f"Produce the market briefing for {request.subject!r}. Follow "
             f"the template described in the system prompt. Use the enabled "
-            f"tools to research, compute, chart, and write. Call `finalize` "
-            f"only after every required section is written."
+            f"tools to research, chart, and write. Call `finalize` only "
+            f"after every required section is written."
         ),
     )
 
@@ -333,7 +334,7 @@ async def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) 
         body = json.dumps({"error": str(exc)})
         return Message(role="tool", content=body, tool_call_id=call.id)
     except Exception as exc:
-        log.exception("EU v2 tool %s raised unexpectedly", call.name)
+        log.exception("Morning Briefing tool %s raised unexpectedly", call.name)
         body = json.dumps({"error": f"unexpected: {exc}"})
         return Message(role="tool", content=body, tool_call_id=call.id)
 
