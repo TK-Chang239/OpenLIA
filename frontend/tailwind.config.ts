@@ -113,10 +113,6 @@ const config: Config = {
           "0%": { left: "-32%" },
           "100%": { left: "100%" },
         },
-        lcgPipFill: {
-          "0%": { transform: "scaleX(0)" },
-          "100%": { transform: "scaleX(1)" },
-        },
       },
       animation: {
         "live-pulse": "livePulse 1.6s var(--ease-in-out) infinite",
@@ -124,7 +120,6 @@ const config: Config = {
         "feed-fade-in": "feedFadeIn 320ms var(--ease-out) both",
         "lcg-scan": "lcgScan 2.4s linear infinite",
         "lcg-sweep": "lcgSweep 1.9s var(--ease-in-out) infinite",
-        "lcg-pip-fill": "lcgPipFill 1200ms var(--ease-out) forwards",
       },
     },
   },
