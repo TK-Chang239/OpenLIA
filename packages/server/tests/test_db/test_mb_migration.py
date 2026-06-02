@@ -17,7 +17,8 @@ _MB_TABLES = {
 }
 
 # Revision immediately before the MB v2 migration. Downgrading here reverts
-# the whole MB v2 stack and restores ``mb_user_configs``.
+# the whole MB v2 stack. ``mb_user_configs`` is untouched by this migration
+# (it predates MB v2 and is dropped later, in Phase 6).
 _PRE_MB_REVISION = "eu_batch_state_0602"
 
 
@@ -62,8 +63,11 @@ def test_migration_upgrade_creates_mb_tables_and_seeds_default(tmp_path, monkeyp
     repo_cols = {c["name"] for c in insp.get_columns("repo_items")}
     assert "mb_v2_report_id" in repo_cols
 
-    # The old per-user config table is gone.
-    assert "mb_user_configs" not in names
+    # The old per-user config table is intentionally left in place by this
+    # migration; it is dropped later in Phase 6 atomically with the removal
+    # of its MbUserConfig model, to keep metadata and the alembic head in
+    # sync through the intervening phases.
+    assert "mb_user_configs" in names
 
     # report_mb has no ticker / fiscal_date columns.
     report_mb_cols = {c["name"] for c in insp.get_columns("report_mb")}
@@ -92,7 +96,8 @@ def test_migration_downgrade_reverses(tmp_path, monkeypatch):
     insp = inspect(engine)
     names = set(insp.get_table_names())
 
-    # MB v2 tables dropped, original config table restored.
+    # MB v2 tables dropped; mb_user_configs remains (this migration never
+    # touched it).
     assert not (_MB_TABLES & names)
     assert "mb_user_configs" in names
 

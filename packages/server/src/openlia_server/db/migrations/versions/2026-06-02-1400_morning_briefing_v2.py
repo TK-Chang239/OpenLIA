@@ -5,10 +5,11 @@ engine (forked from ``report_eu*`` with the MB deltas: no ticker /
 fiscal_date, plus ``trigger_kind`` / ``schedule_id`` /
 ``instructions_id``), extends ``mb_schedules`` with per-schedule config
 binding, adds the ``repo_items.mb_v2_report_id`` polymorphic target, and
-seeds the single built-in ``mb_default`` template. Drops the obsolete
-per-user ``mb_user_configs`` table — MB v2 is fully
-template/instructions-driven and schedule-bound, so there is no longer a
-single per-user config row.
+seeds the single built-in ``mb_default`` template. The obsolete per-user
+``mb_user_configs`` table is dropped later, in Phase 6, atomically with
+the removal of its ``MbUserConfig`` ORM model and the legacy MB service
+stack — so this migration leaves it in place to keep metadata and the
+alembic head in sync through the intervening phases.
 
 Revision ID: morning_briefing_v2
 Revises: eu_batch_state_0602
@@ -341,47 +342,8 @@ def upgrade() -> None:
         ],
     )
 
-    # --- 5. drop the obsolete per-user config table ---------------------
-    op.drop_table("mb_user_configs")
-
 
 def downgrade() -> None:
-    # --- 5. recreate mb_user_configs (original shape) -------------------
-    op.create_table(
-        "mb_user_configs",
-        sa.Column("id", sa.String(36), nullable=False),
-        sa.Column("user_id", sa.String(36), nullable=False),
-        sa.Column("report_length", sa.String(16), nullable=False, server_default="normal"),
-        sa.Column("enabled_section_ids", sa.JSON(), nullable=False, server_default=sa.text("'[]'")),
-        sa.Column("section_topics", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
-        sa.Column("custom_sections", sa.JSON(), nullable=False, server_default=sa.text("'[]'")),
-        sa.Column("reference_portfolio", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
-        ),
-        sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
-            name=op.f("fk_mb_user_configs_user_id_users"),
-            ondelete="CASCADE",
-        ),
-        sa.PrimaryKeyConstraint("id", name="pk_mb_user_configs"),
-        sa.UniqueConstraint("user_id", name="uq_mb_user_configs_user_id"),
-        sa.CheckConstraint(
-            "report_length IN ('concise', 'normal', 'elaborative')",
-            name="ck_mb_user_configs_length",
-        ),
-    )
-
     # --- 3. drop repo_items.mb_v2_report_id target ----------------------
     with op.batch_alter_table("repo_items", schema=None) as batch_op:
         batch_op.drop_constraint("ck_repo_items_exactly_one_target", type_="check")
