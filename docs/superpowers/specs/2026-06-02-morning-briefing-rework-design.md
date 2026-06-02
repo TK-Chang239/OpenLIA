@@ -257,6 +257,16 @@ written; they remain readable in the archive listing.
 Batch mode, MB watchlist, portfolio coupling, revision/edit flow. Add later only
 if a concrete need appears.
 
+### Tracked follow-up (surfaced during execution)
+
+- **Schedule enable/disable toggle.** `mb_v2_schedules` + the route cannot flip
+  `is_enabled` on PATCH (create hardcodes `True`); pausing a schedule means
+  delete + recreate. This matches EU v2 (no toggle there either), so it is not a
+  rework regression, but the legacy MB supported it. Proper support needs
+  `is_enabled` on `ScheduleIn` + `update_schedule`, plus `scheduler/service.py`
+  `modify_schedule` honoring the flag (skip `_register_schedule` when disabled).
+  Touches shared scheduler code, so deferred out of the mirror-EU scope.
+
 ## 13. Implementation phasing (hand-off to writing-plans)
 
 1. Core `report_mb` engine fork (schemas, transports, tools, prompts, runner,
