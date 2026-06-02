@@ -105,11 +105,21 @@ const config: Config = {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
         },
+        lcgScan: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(100%)" },
+        },
+        lcgSweep: {
+          "0%": { left: "-32%" },
+          "100%": { left: "100%" },
+        },
       },
       animation: {
         "live-pulse": "livePulse 1.6s var(--ease-in-out) infinite",
         "feed-fade-up": "feedFadeUp 480ms var(--ease-out) both",
         "feed-fade-in": "feedFadeIn 320ms var(--ease-out) both",
+        "lcg-scan": "lcgScan 2.4s linear infinite",
+        "lcg-sweep": "lcgSweep 1.9s var(--ease-in-out) infinite",
       },
     },
   },

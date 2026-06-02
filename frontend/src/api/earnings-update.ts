@@ -111,6 +111,7 @@ export interface RunSummary {
   created_at: string;
   completed_at: string | null;
   reasoning_effort: ReasoningEffort;
+  highlights?: CardHighlights | null;
 }
 
 export interface SectionRow {
@@ -141,6 +142,13 @@ export interface CoverMetric {
   change: string | null;
   tone: string | null;
 }
+
+export interface CardHighlights {
+  subtitle: string | null;
+  rating: string | null;
+  metrics: CoverMetric[];
+}
+
 export interface CoverSpec {
   subtitle?: string | null;
   tagline?: string | null;

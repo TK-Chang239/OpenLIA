@@ -834,6 +834,16 @@
       "today": "今日",
       "open_update": "開啟更新",
       "generating": "生成中...",
+      "gen": {
+        "badge": "正在生成更新",
+        "title_fallback": "{{ticker}} — 財報更新",
+        "cancel": "取消",
+        "elapsed_aria": "已用時間",
+        "phase_connect": "正在連接資料來源",
+        "phase_research": "正在閱讀財報",
+        "phase_write": "正在撰寫更新",
+        "phase_finalize": "正在完成"
+      },
       "empty_title": "尚無財報",
       "empty_sub": "請將代號加入觀察名單，LIA 會於各公司發布財報時自動生成報告。",
       "open_watchlist": "開啟觀察清單",

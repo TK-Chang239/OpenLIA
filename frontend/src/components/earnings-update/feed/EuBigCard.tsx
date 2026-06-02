@@ -1,6 +1,10 @@
 import { FileText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import type { CardHighlights } from "../../../api/earnings-update";
+
+import { MetricChip, RatingPill } from "./highlightBits";
+
 interface Props {
   ticker: string;
   title: string;
@@ -8,6 +12,7 @@ interface Props {
   stamp?: string;
   status: "streaming" | "complete";
   reportId?: string | null;
+  highlights?: CardHighlights | null;
   onOpen?: (id: string) => void;
 }
 
@@ -18,10 +23,13 @@ export function EuBigCard({
   stamp,
   status,
   reportId,
+  highlights,
   onOpen,
 }: Props) {
   const { t } = useTranslation();
   const live = status === "streaming";
+  const resolvedSubtitle = subtitle ?? highlights?.subtitle ?? undefined;
+  const metrics = highlights?.metrics?.slice(0, 4) ?? [];
   return (
     <article
       data-testid="eu-big-card"
@@ -49,14 +57,22 @@ export function EuBigCard({
               </span>
             ) : null}
           </span>
+          {highlights?.rating ? <RatingPill rating={highlights.rating} /> : null}
         </div>
         <h2 className="text-[24px] font-semibold tracking-[-0.01em] m-0 text-[--color-text-primary] leading-[1.2]">
           {title}
         </h2>
-        {subtitle ? (
+        {resolvedSubtitle ? (
           <p className="text-[14.5px] text-[--color-text-secondary] leading-[1.5] m-0">
-            {subtitle}
+            {resolvedSubtitle}
           </p>
+        ) : null}
+        {metrics.length > 0 ? (
+          <div className="flex flex-wrap gap-2 mt-0.5">
+            {metrics.map((metric, i) => (
+              <MetricChip key={`${metric.label}-${i}`} metric={metric} />
+            ))}
+          </div>
         ) : null}
         <div className="flex gap-2 mt-1">
           {reportId && onOpen ? (

@@ -834,6 +834,16 @@
       "today": "Today",
       "open_update": "Open update",
       "generating": "Generating...",
+      "gen": {
+        "badge": "Generating Update",
+        "title_fallback": "{{ticker}} — Earnings Update",
+        "cancel": "Cancel",
+        "elapsed_aria": "Time elapsed",
+        "phase_connect": "Connecting to data sources",
+        "phase_research": "Reading the release",
+        "phase_write": "Writing the update",
+        "phase_finalize": "Finalizing"
+      },
       "empty_title": "No earnings reports yet",
       "empty_sub": "Add tickers to your watchlist and LIA will auto-generate reports as each company releases earnings.",
       "open_watchlist": "Open Watchlist",

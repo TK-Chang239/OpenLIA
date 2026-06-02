@@ -19,6 +19,7 @@ import { OnDemandReportModal } from "../../components/earnings-update/OnDemandRe
 import { ReportSettingsModal } from "../../components/earnings-update/ReportSettingsModal";
 import { EuCalendar } from "../../components/earnings-update/calendar/EuCalendar";
 import { EuBigCard } from "../../components/earnings-update/feed/EuBigCard";
+import { EuGeneratingCard } from "../../components/earnings-update/feed/EuGeneratingCard";
 import { EuEmptyPage } from "../../components/earnings-update/feed/EuEmptyPage";
 import {
   EuFeedSection,
@@ -125,6 +126,12 @@ export default function EarningsUpdate() {
 
   useEffect(() => {
     if (stream.status === "completed") {
+      void refreshRuns();
+    } else if (stream.status === "cancelled" || stream.status === "failed") {
+      // Cancelled/failed runs have no completed card to show — dismiss the
+      // live card so it doesn't linger as a frozen generating card, and
+      // refresh so any partial report surfaces in the feed.
+      setLive(null);
       void refreshRuns();
     }
   }, [stream.status, refreshRuns]);
@@ -350,13 +357,18 @@ export default function EarningsUpdate() {
                     >
                       {live ? (
                         <div className="mb-2">
-                          <EuBigCard
-                            ticker={live.ticker}
-                            title={liveTitle}
-                            status={stream.status === "completed" ? "complete" : "streaming"}
-                            reportId={stream.status === "completed" ? live.reportId : null}
-                            onOpen={openReport}
-                          />
+                          {stream.status === "completed" ? (
+                            <EuBigCard
+                              ticker={live.ticker}
+                              title={liveTitle}
+                              status="complete"
+                              reportId={live.reportId}
+                              highlights={findRun(runs, live.reportId)?.highlights ?? null}
+                              onOpen={openReport}
+                            />
+                          ) : (
+                            <EuGeneratingCard ticker={live.ticker} stream={stream} />
+                          )}
                         </div>
                       ) : null}
                       {heroToday ? (
@@ -367,6 +379,7 @@ export default function EarningsUpdate() {
                             stamp={formatHeroStamp(heroToday.created_at)}
                             status="complete"
                             reportId={heroToday.report_id}
+                            highlights={heroToday.highlights ?? null}
                             onOpen={openReport}
                           />
                         </div>
