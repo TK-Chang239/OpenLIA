@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { MbSchedule } from "../../../api/morning-briefing";
-import {
-  formatNextBriefing,
-  pickEarliestNextBriefing,
-} from "../next-briefing";
+import { formatNextBriefing, pickEarliestNextBriefing } from "../next-briefing";
 
 const baseSchedule: MbSchedule = {
   id: "s1",
@@ -13,6 +10,15 @@ const baseSchedule: MbSchedule = {
   days_of_week: ["mon", "tue", "wed", "thu", "fri"],
   label: "Pre-market",
   is_enabled: true,
+  template_id: "freeform",
+  instructions_id: null,
+  enabled_connectors: { provider_ids: [], web_search: false },
+  provider_kind: null,
+  model: null,
+  language: "en",
+  length: "normal",
+  reasoning_effort: null,
+  web_search: false,
 };
 
 describe("formatNextBriefing", () => {
@@ -21,15 +27,13 @@ describe("formatNextBriefing", () => {
   });
 
   it("returns em-dash when schedule is disabled", () => {
-    expect(
-      formatNextBriefing({ ...baseSchedule, is_enabled: false }),
-    ).toBe("—");
+    expect(formatNextBriefing({ ...baseSchedule, is_enabled: false })).toBe(
+      "—",
+    );
   });
 
   it("returns em-dash when no days are selected", () => {
-    expect(
-      formatNextBriefing({ ...baseSchedule, days_of_week: [] }),
-    ).toBe("—");
+    expect(formatNextBriefing({ ...baseSchedule, days_of_week: [] })).toBe("—");
   });
 
   it("formats today when current time is before scheduled time on a scheduled day", () => {
