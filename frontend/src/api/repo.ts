@@ -19,6 +19,10 @@ export interface RepoItem {
  *     Open via ``{kind: "eu_v2_report"}``; repo state lives in
  *     ``SavedReportsContext.isEuSaved``.
  *
+ *   - "mb_v2" — Morning Briefing engine (``report_mb.id``). Open
+ *     via ``{kind: "mb_report"}``; repo state lives in
+ *     ``SavedReportsContext.isMbSaved``.
+ *
  *  v2.2 still lists via its own ``/repo/v2-runs`` surface; pending
  *  fanout follow-up. */
 export type RepoEngine = "v1" | "v3" | "eu_v2" | "mb_v2";
