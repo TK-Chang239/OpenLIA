@@ -1,5 +1,5 @@
 import type { Ref } from "react";
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
@@ -20,6 +20,7 @@ interface Props {
   initialSaved?: boolean;
   hideSaveToRepoButton?: boolean;
   onClose: () => void;
+  onRequestDelete?: () => void;
   closeButtonRef?: Ref<HTMLButtonElement>;
 }
 
@@ -32,6 +33,7 @@ export function ViewerHeader({
   initialSaved = false,
   hideSaveToRepoButton = false,
   onClose,
+  onRequestDelete,
   closeButtonRef,
 }: Props): JSX.Element {
   const { t } = useTranslation();
@@ -71,6 +73,16 @@ export function ViewerHeader({
         ) : (
           <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         )}
+        {onRequestDelete ? (
+          <button
+            type="button"
+            aria-label={t("chat.viewer_delete_aria")}
+            onClick={onRequestDelete}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-text-secondary transition-colors duration-normal ease-out hover:bg-surface-hover hover:text-feedback-error"
+          >
+            <Trash2 size={14} strokeWidth={1.5} />
+          </button>
+        ) : null}
         <button
           ref={closeButtonRef}
           type="button"

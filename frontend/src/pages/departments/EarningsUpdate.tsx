@@ -94,6 +94,14 @@ export default function EarningsUpdate() {
   const fv = useFileViewer();
   const stream = useEuRunStream(live?.reportId ?? null);
 
+  const removeReport = useCallback(
+    async (reportId: string) => {
+      await deleteRun(reportId);
+      await refreshRuns();
+    },
+    [refreshRuns],
+  );
+
   const openReport = useCallback(
     (reportId: string) => {
       const match = findRun(runs, reportId);
@@ -102,17 +110,10 @@ export default function EarningsUpdate() {
         kind: "report",
         metadata: match ? `EU v2 · ${match.ticker}` : "Earnings Update",
         source: { kind: "eu_v2_report", reportId },
+        onDelete: () => removeReport(reportId),
       });
     },
-    [fv, runs],
-  );
-
-  const removeReport = useCallback(
-    async (reportId: string) => {
-      await deleteRun(reportId);
-      await refreshRuns();
-    },
-    [refreshRuns],
+    [fv, runs, removeReport],
   );
 
   const retryFetch = useCallback(() => {
