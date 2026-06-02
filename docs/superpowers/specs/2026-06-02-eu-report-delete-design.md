@@ -114,8 +114,12 @@ Other departments don't pass `onDelete`, so no delete button and no behavior cha
 
 ## i18n
 
-- **Reuse** (no new keys): `earnings.cabinet.remove_title/description/confirm` (feed
-  page confirm), `earnings.report_row.remove_aria` (card trash aria).
+- **Reuse**: `earnings.cabinet.remove_title/description/confirm` (feed page confirm —
+  verb "Remove", matching the cabinet).
+- **New** `earnings.feed.remove_aria` — en "Remove report" / zh-TW "移除報告" — for the
+  card trash buttons. (The existing `earnings.report_row.remove_aria` is the bare word
+  "Remove", which is too terse and collides with the confirm button label in tests, so
+  the feed cards use this dedicated key instead.)
 - **New** in en + zh-TW, added to the existing `chat` namespace alongside the other
   `chat.viewer_*` keys (there is no top-level `viewer` namespace; viewer strings live
   under `chat`):
