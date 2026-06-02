@@ -357,6 +357,7 @@ export default function EarningsUpdate() {
                               title={liveTitle}
                               status="complete"
                               reportId={live.reportId}
+                              highlights={findRun(runs, live.reportId)?.highlights ?? null}
                               onOpen={openReport}
                             />
                           ) : (
@@ -372,6 +373,7 @@ export default function EarningsUpdate() {
                             stamp={formatHeroStamp(heroToday.created_at)}
                             status="complete"
                             reportId={heroToday.report_id}
+                            highlights={heroToday.highlights ?? null}
                             onOpen={openReport}
                           />
                         </div>
