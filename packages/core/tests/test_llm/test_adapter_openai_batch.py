@@ -139,9 +139,7 @@ async def test_fetch_results_reads_error_file():
         mock.get(f"{_BASE}/v1/files/file-err-1/content").mock(
             return_value=httpx.Response(
                 200,
-                text=json.dumps(
-                    {"custom_id": "r9", "error": {"message": "rate limited"}}
-                ),
+                text=json.dumps({"custom_id": "r9", "error": {"message": "rate limited"}}),
             )
         )
         results = await _transport().fetch_results("batch-2")
