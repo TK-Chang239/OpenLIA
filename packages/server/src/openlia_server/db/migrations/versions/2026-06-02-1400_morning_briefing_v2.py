@@ -78,6 +78,11 @@ def upgrade() -> None:
         "report_mb",
         ["user_id", "status"],
     )
+    op.create_index(
+        "ix_report_mb_schedule_id",
+        "report_mb",
+        ["schedule_id"],
+    )
 
     op.create_table(
         "report_mb_sections",
@@ -258,8 +263,8 @@ def upgrade() -> None:
 
     # --- 2. mb_schedules per-schedule config binding --------------------
     with op.batch_alter_table("mb_schedules", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("template_id", sa.String(length=36), nullable=True))
-        batch_op.add_column(sa.Column("instructions_id", sa.String(length=36), nullable=True))
+        batch_op.add_column(sa.Column("template_id", sa.String(length=64), nullable=True))
+        batch_op.add_column(sa.Column("instructions_id", sa.String(length=64), nullable=True))
         batch_op.add_column(
             sa.Column(
                 "enabled_connectors",
@@ -403,6 +408,7 @@ def downgrade() -> None:
     op.drop_index("ix_report_mb_sections_report_id", table_name="report_mb_sections")
     op.drop_table("report_mb_sections")
 
+    op.drop_index("ix_report_mb_schedule_id", table_name="report_mb")
     op.drop_index("ix_report_mb_user_id_status", table_name="report_mb")
     op.drop_index("ix_report_mb_user_id_created_at", table_name="report_mb")
     op.drop_table("report_mb")
