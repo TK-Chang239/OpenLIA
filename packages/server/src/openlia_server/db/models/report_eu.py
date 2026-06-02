@@ -410,6 +410,13 @@ class EuV2Settings(Base):
     web_search_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("0")
     )
+    # Opt-in: route this user's scheduled EU runs through the provider Batch
+    # API (OpenAI / Anthropic) for ~50% cost at the cost of async delivery.
+    # Default off keeps the live (on-demand) path. Honored only for
+    # scheduled dispatch and only when the provider supports batch.
+    batch_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
