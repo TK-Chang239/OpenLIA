@@ -107,6 +107,7 @@ class FakeRunService:
         trigger_kind: str = "scheduled",
         schedule_id: str | None = None,
         instructions_id: str | None = None,
+        cancel_token: Any = None,
     ) -> tuple[str, RunResult]:
         self.run_calls.append(
             {
@@ -114,6 +115,7 @@ class FakeRunService:
                 "trigger_kind": trigger_kind,
                 "schedule_id": schedule_id,
                 "instructions_id": instructions_id,
+                "cancel_token": cancel_token,
             }
         )
         report_id = str(uuid.uuid4())
@@ -204,6 +206,45 @@ async def test_mb_executor_produces_report_sets_last_run_and_notifies(
     assert cfg["time_label"] == "07:00"
     assert cfg["timezone"] == "UTC"
     assert run_service.run_calls[0]["schedule_id"] == "sch_mb"
+
+
+def test_cancel_bridge_reflects_source_token() -> None:
+    from openlia.llm.runtime.cancellation import CancellationToken
+    from openlia_server.scheduler.executors.mb import _CancelBridge
+
+    source = CancellationToken()
+    bridge = _CancelBridge(source)
+    # ``cancelled`` is a property (the engine polls it without calling),
+    # delegating to the scheduler token's ``is_cancelled`` property.
+    assert bridge.cancelled is False
+    source.cancel()
+    assert bridge.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_mb_executor_forwards_cancellation_to_engine(session_factory) -> None:
+    from openlia.llm.runtime.cancellation import CancellationToken
+
+    with session_factory() as s:
+        _seed(s)
+
+    run_service = FakeRunService(request=_make_request())
+    ex = MBBriefingExecutor(
+        session_factory=session_factory,
+        run_service=run_service,
+        sleep=FakeSleep(),
+    )
+    token = CancellationToken()
+    await ex.execute(user_id="u_1", schedule_id="sch_mb", cancel_token=token)
+
+    # The executor bridged its scheduler CancellationToken into a report_mb
+    # CancelToken and forwarded it to the engine run (so graceful-shutdown
+    # cancels actually reach the LLM loop).
+    forwarded = run_service.run_calls[0]["cancel_token"]
+    assert forwarded is not None
+    assert forwarded.cancelled is False
+    token.cancel()
+    assert forwarded.cancelled is True
 
 
 @pytest.mark.asyncio

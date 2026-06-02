@@ -97,7 +97,14 @@ def _validate_binding(
     instructions_id: str | None,
     enabled_connectors: dict,
 ) -> None:
-    """Validate the per-schedule binding resolves against the artifact stores."""
+    """Validate the per-schedule binding resolves against the artifact stores.
+
+    Note: a ``freeform`` template with no ``instructions_id`` is accepted
+    here — it only fails at fire time with ``EmptyBriefError`` (matching the
+    run service's freeform contract). We deliberately do not reject it at
+    bind time so the validation stays a pure artifact-resolution check; the
+    composer (Phase 5) guards the empty combination in the UI.
+    """
     _validate_connectors_shape(enabled_connectors)
     if template_id is not None and template_id != _FREEFORM_TEMPLATE_ID:
         try:

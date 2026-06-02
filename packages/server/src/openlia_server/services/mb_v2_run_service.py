@@ -626,11 +626,13 @@ async def run_to_completion(
     )
 
     persist_result(db, report_id=report_id, result=result)
+    # The row was just inserted on this same session, so it is always
+    # present in the identity map here (unlike the background path, which
+    # reloads on a fresh session).
     row = db.get(ReportMb, report_id)
-    if row is not None:
-        row.status = result.status
-        row.error_message = result.message or None
-        row.completed_at = datetime.now(UTC)
+    row.status = result.status
+    row.error_message = result.message or None
+    row.completed_at = datetime.now(UTC)
     db.flush()
     return report_id, result
 
