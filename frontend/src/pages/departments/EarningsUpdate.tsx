@@ -7,9 +7,14 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { deleteRun, type RunSummary } from "../../api/earnings-update";
+import {
+  deleteRun,
+  type RunSummary,
+  syncWatchlist,
+} from "../../api/earnings-update";
 import { CoverageDrawer } from "../../components/earnings-update/CoverageDrawer";
 import { EUCabinetView } from "../../components/earnings-update/EUCabinetView";
+import { EuRefreshButton } from "../../components/earnings-update/EuRefreshButton";
 import { OnDemandReportModal } from "../../components/earnings-update/OnDemandReportModal";
 import { ReportSettingsModal } from "../../components/earnings-update/ReportSettingsModal";
 import { EuCalendar } from "../../components/earnings-update/calendar/EuCalendar";
@@ -73,7 +78,7 @@ export default function EarningsUpdate() {
   } = useEuRuns();
   const { settings, save: saveSettings, disabled: settingsDisabled } =
     useEuSettings();
-  const { schedule, byTicker } = useEuSchedule();
+  const { schedule, byTicker, refresh: refreshSchedule } = useEuSchedule();
 
   const [coverageOpen, setCoverageOpen] = useState(false);
   const [cabinetOpen, setCabinetOpen] = useState(false);
@@ -111,6 +116,12 @@ export default function EarningsUpdate() {
     void refreshWatchlist();
     void refreshRuns();
   }, [refreshWatchlist, refreshRuns]);
+
+  const handleRefreshDates = useCallback(async () => {
+    const { synced } = await syncWatchlist();
+    await Promise.all([refreshWatchlist(), refreshSchedule()]);
+    return synced;
+  }, [refreshWatchlist, refreshSchedule]);
 
   useEffect(() => {
     if (stream.status === "completed") {
@@ -208,6 +219,10 @@ export default function EarningsUpdate() {
             {t("earnings.live_pill", { count: liveCount })}
           </span>
         ) : null}
+        <EuRefreshButton
+          onRefresh={handleRefreshDates}
+          disabled={entries.length === 0}
+        />
         <button
           type="button"
           onClick={() => setCoverageOpen(true)}

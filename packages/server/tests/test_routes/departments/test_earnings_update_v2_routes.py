@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import inspect
 import json
+import sys
+import types
 from datetime import UTC, datetime
 
 import pytest
@@ -221,6 +223,63 @@ def test_watchlist_sync_no_transports_returns_zero(client_eu_v2):
     r = client_eu_v2.post(f"{_BASE}/watchlist/sync")
     assert r.status_code == 200
     assert r.json()["synced"] == 0
+
+
+def _install_fake_eodhd_calendar(monkeypatch) -> None:
+    """Fake eodhd whose upcoming-earnings call returns the real dict shape.
+
+    EODHD returns ``{"type", "description", "symbols", "earnings": [...]}`` --
+    the event dicts are nested under ``earnings``, not at the top level.
+    """
+    fake = types.ModuleType("eodhd")
+
+    class FakeClient:
+        def __init__(self, api_key: str) -> None:
+            self.api_key = api_key
+
+        def get_upcoming_earnings_data(
+            self, from_date=None, to_date=None, symbols=None
+        ) -> dict:
+            return {
+                "type": "Earnings",
+                "description": "Historical and upcoming Earnings",
+                "symbols": symbols,
+                "earnings": [
+                    {
+                        "code": symbols,
+                        "report_date": "2026-07-30",
+                        "before_after_market": "AfterMarket",
+                        "estimate": 1.9,
+                    }
+                ],
+            }
+
+    fake.APIClient = FakeClient
+    monkeypatch.setitem(sys.modules, "eodhd", fake)
+
+
+def test_watchlist_sync_with_eodhd_populates_schedule(client_eu_v2, monkeypatch):
+    # Regression: the manual sync endpoint 500'd because the EODHD transport
+    # returned ``list(result)`` (the dict's keys) instead of the nested event
+    # list, so sync_user_watchlist called ``str.get`` and crashed. With a
+    # configured transport the endpoint must return 200 and schedule the row.
+    monkeypatch.setenv("EODHD_API_KEY", "k")
+    _install_fake_eodhd_calendar(monkeypatch)
+
+    assert (
+        client_eu_v2.post(f"{_BASE}/watchlist", json={"ticker": "AAPL"}).status_code
+        == 201
+    )
+
+    r = client_eu_v2.post(f"{_BASE}/watchlist/sync")
+    assert r.status_code == 200
+    assert r.json()["synced"] == 1
+
+    schedule = client_eu_v2.get(f"{_BASE}/schedule").json()["schedule"]
+    assert any(
+        row["ticker"] == "AAPL" and row["fiscal_date"] == "2026-07-30"
+        for row in schedule
+    )
 
 
 def test_templates_list_has_builtin(client_eu_v2):

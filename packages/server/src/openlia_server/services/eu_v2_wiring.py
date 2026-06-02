@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from openlia.connectors.types import ConnectorStatus
@@ -21,6 +22,11 @@ from sqlalchemy.orm import Session
 from .eodhd_payload import trim_eodhd_fundamentals
 
 log = logging.getLogger(__name__)
+
+# EODHD's upcoming-earnings endpoint defaults to a narrow ~7-day window when
+# no dates are given, so a ticker reporting later returns no events. Query a
+# forward quarter to reliably capture each watchlist ticker's next release.
+_EARNINGS_LOOKAHEAD_DAYS = 90
 
 
 def build_eu_v2_transports(api_key: str | None = None) -> EuDataTransports | None:
@@ -61,8 +67,16 @@ def build_eu_v2_transports(api_key: str | None = None) -> EuDataTransports | Non
 
     def earnings_calendar(ticker: str) -> list[dict[str, Any]]:
         symbol = ticker if "." in ticker else f"{ticker}.US"
-        rows = client.get_upcoming_earnings_data(symbols=symbol)
-        return list(rows) if rows else []
+        today = datetime.now(UTC).date()
+        result = client.get_upcoming_earnings_data(
+            from_date=today.isoformat(),
+            to_date=(today + timedelta(days=_EARNINGS_LOOKAHEAD_DAYS)).isoformat(),
+            symbols=symbol,
+        )
+        # EODHD returns {"type", "description", "symbols", "earnings": [...]};
+        # the event dicts live under "earnings", not at the top level.
+        events = result.get("earnings", []) if isinstance(result, dict) else []
+        return list(events)
 
     return EuDataTransports(
         fundamentals=fundamentals,
