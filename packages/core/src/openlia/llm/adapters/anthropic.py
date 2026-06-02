@@ -213,6 +213,71 @@ def _build_system_with_cache_control(system: str) -> str | list[dict]:
     ]
 
 
+def build_messages_payload(model: str, request: LLMRequest) -> dict:
+    """Build a non-streaming /v1/messages request body.
+
+    Single source of truth for the wire shape shared by the live adapter
+    (which adds ``stream=True`` and reassembles the body) and the batch
+    transport (which submits this as a Message Batches request's ``params``
+    and reads back the same body shape). Does NOT set ``stream``.
+    """
+    payload: dict = {
+        "model": model,
+        "messages": render_anthropic_messages(request.messages),
+        "max_tokens": request.max_tokens,
+        "temperature": request.temperature,
+    }
+    if request.cache_conversation:
+        apply_message_cache_breakpoint(payload["messages"])
+    if request.system:
+        payload["system"] = _build_system_with_cache_control(request.system)
+    if request.stop:
+        payload["stop_sequences"] = request.stop
+    anthropic_tools = _build_anthropic_tools(request)
+    if anthropic_tools is not None:
+        payload["tools"] = anthropic_tools
+    if request.tool_choice is not None:
+        payload["tool_choice"] = request.tool_choice
+    # Extended thinking: only emit on models that support it (non-supporting
+    # models return 400). Anthropic requires temperature=1.0 when thinking is
+    # enabled and max_tokens > budget_tokens (the caller grows max_tokens).
+    if request.reasoning_effort is not None and _supports_thinking(model):
+        payload["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": _REASONING_BUDGET_BY_EFFORT[request.reasoning_effort],
+        }
+        payload["temperature"] = 1.0
+    return payload
+
+
+def parse_messages_body(body: dict) -> LLMResponse:
+    """Map a /v1/messages response body into an ``LLMResponse``.
+
+    Shared by the live adapter (which reassembles this shape from the
+    stream) and the batch transport (which reads it from the batch result
+    ``message``).
+    """
+    (
+        text_parts,
+        tool_calls,
+        server_tool_calls,
+        citations,
+        server_tool_failures,
+    ) = _parse_anthropic_content(body.get("content", []))
+    usage = body.get("usage") or {}
+    return LLMResponse(
+        text="".join(text_parts),
+        finish_reason=body.get("stop_reason", "end_turn"),
+        input_tokens=int(usage.get("input_tokens", 0)),
+        output_tokens=int(usage.get("output_tokens", 0)),
+        cached_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
+        tool_calls=tool_calls,
+        citations=citations,
+        server_tool_calls=server_tool_calls,
+        server_tool_failures=server_tool_failures,
+    )
+
+
 class AnthropicAdapter(LLMProvider):
     kind = "anthropic"
 
@@ -249,34 +314,7 @@ class AnthropicAdapter(LLMProvider):
         return await with_retries(_call)
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
-        payload: dict = {
-            "model": self.model,
-            "messages": render_anthropic_messages(request.messages),
-            "max_tokens": request.max_tokens,
-            "temperature": request.temperature,
-        }
-        if request.cache_conversation:
-            apply_message_cache_breakpoint(payload["messages"])
-        if request.system:
-            payload["system"] = _build_system_with_cache_control(request.system)
-        if request.stop:
-            payload["stop_sequences"] = request.stop
-        anthropic_tools = _build_anthropic_tools(request)
-        if anthropic_tools is not None:
-            payload["tools"] = anthropic_tools
-        if request.tool_choice is not None:
-            payload["tool_choice"] = request.tool_choice
-        # Extended thinking: only emit on models that support it (non-
-        # supporting models return 400). Anthropic *requires* temperature=1.0
-        # when thinking is enabled and *requires* max_tokens > budget_tokens
-        # — the v2_3 wiring grows max_tokens to base+overhead so the
-        # inequality holds.
-        if request.reasoning_effort is not None and _supports_thinking(self.model):
-            payload["thinking"] = {
-                "type": "enabled",
-                "budget_tokens": _REASONING_BUDGET_BY_EFFORT[request.reasoning_effort],
-            }
-            payload["temperature"] = 1.0
+        payload = build_messages_payload(self.model, request)
         # Stream the completion and reassemble the same `body` dict the
         # non-streaming endpoint would have returned. Streaming keeps bytes
         # flowing so long completions (big context + reasoning) don't hit a
@@ -409,26 +447,7 @@ class AnthropicAdapter(LLMProvider):
             }
 
         body = await with_retries(_stream_and_assemble)
-
-        (
-            text_parts,
-            tool_calls,
-            server_tool_calls,
-            citations,
-            server_tool_failures,
-        ) = _parse_anthropic_content(body.get("content", []))
-        usage = body.get("usage") or {}
-        return LLMResponse(
-            text="".join(text_parts),
-            finish_reason=body.get("stop_reason", "end_turn"),
-            input_tokens=int(usage.get("input_tokens", 0)),
-            output_tokens=int(usage.get("output_tokens", 0)),
-            cached_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
-            tool_calls=tool_calls,
-            citations=citations,
-            server_tool_calls=server_tool_calls,
-            server_tool_failures=server_tool_failures,
-        )
+        return parse_messages_body(body)
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
         payload: dict = {
