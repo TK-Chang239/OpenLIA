@@ -144,6 +144,9 @@ describe("SaveToRepoButton", () => {
     (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
       saved_report_ids: ["eu-1"],
     });
+    (repoApi.listSavedMbRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
     render(
       <SavedReportsProvider>
         <SaveToRepoButton
@@ -168,6 +171,9 @@ describe("SaveToRepoButton", () => {
       saved_report_ids: [],
     });
     (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedMbRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
       saved_report_ids: [],
     });
     (repoApi.saveEuRunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -204,6 +210,9 @@ describe("SaveToRepoButton", () => {
     (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
       saved_report_ids: ["eu-1"],
     });
+    (repoApi.listSavedMbRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
     (repoApi.unsaveEuRunFromRepo as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     render(
       <SavedReportsProvider>
@@ -224,6 +233,70 @@ describe("SaveToRepoButton", () => {
     expect(
       await screen.findByRole("button", { name: /save to repository/i }),
     ).toBeInTheDocument();
+  });
+
+  it("routes to the mb save endpoint when engine=mb", async () => {
+    (repoApi.listRepoItems as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+    (repoApi.listSavedV2Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_run_ids: [],
+    });
+    (repoApi.listSavedV3Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedMbRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.saveMbRunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "x",
+      mb_v2_report_id: "mb-1",
+      created_at: "",
+    });
+    render(
+      <SavedReportsProvider>
+        <SaveToRepoButton
+          reportId="mb-1"
+          initialSaved={false}
+          variant="viewer-header"
+          engine="mb"
+        />
+      </SavedReportsProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save to repository/i }));
+    await waitFor(() => expect(repoApi.saveMbRunToRepo).toHaveBeenCalledWith("mb-1"));
+    expect(repoApi.saveToRepo).not.toHaveBeenCalled();
+  });
+
+  it("routes to the mb unsave endpoint when engine=mb and already saved", async () => {
+    (repoApi.listRepoItems as ReturnType<typeof vi.fn>).mockResolvedValue({ items: [] });
+    (repoApi.listSavedV2Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_run_ids: [],
+    });
+    (repoApi.listSavedV3Runs as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.listSavedMbRuns as ReturnType<typeof vi.fn>).mockResolvedValue({
+      saved_report_ids: [],
+    });
+    (repoApi.unsaveMbRunFromRepo as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    render(
+      <SavedReportsProvider>
+        <SaveToRepoButton
+          reportId="mb-1"
+          initialSaved={true}
+          variant="viewer-header"
+          engine="mb"
+        />
+      </SavedReportsProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove from repository/i }));
+    await waitFor(() => expect(repoApi.unsaveMbRunFromRepo).toHaveBeenCalledWith("mb-1"));
+    expect(repoApi.unsaveFromRepo).not.toHaveBeenCalled();
   });
 
   it("routes to the v2 save endpoint when engine=v2", async () => {

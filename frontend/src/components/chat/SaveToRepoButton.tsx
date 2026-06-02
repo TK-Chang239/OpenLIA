@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
 import {
   saveEuRunToRepo,
+  saveMbRunToRepo,
   saveToRepo,
   saveV2RunToRepo,
   saveV3RunToRepo,
   unsaveEuRunFromRepo,
+  unsaveMbRunFromRepo,
   unsaveFromRepo,
   unsaveV2RunFromRepo,
   unsaveV3RunFromRepo,
@@ -18,7 +20,7 @@ export type SaveToRepoVariant = "chip" | "viewer-header";
  *  endpoint (``/items`` for v1, ``/v2-runs`` for v2.2, ``/v3-runs``
  *  for v3, ``/eu-runs`` for Earnings Update v2) and the right
  *  SavedReportsContext bucket. */
-export type SaveToRepoEngine = "v1" | "v2" | "v3" | "eu";
+export type SaveToRepoEngine = "v1" | "v2" | "v3" | "eu" | "mb";
 
 export interface SaveToRepoButtonProps {
   reportId: string;
@@ -58,7 +60,9 @@ export function SaveToRepoButton({
         ? ctx?.isV3Saved(reportId)
         : engine === "eu"
           ? ctx?.isEuSaved(reportId)
-          : ctx?.isSaved(reportId);
+          : engine === "mb"
+            ? ctx?.isMbSaved(reportId)
+            : ctx?.isSaved(reportId);
   const saved = ctxIsSaved || localSaved;
 
   const ariaLabel = saved ? "Remove from repository" : "Save to repository";
@@ -78,6 +82,9 @@ export function SaveToRepoButton({
         } else if (engine === "eu") {
           await unsaveEuRunFromRepo(reportId);
           ctx?.markEuUnsaved(reportId);
+        } else if (engine === "mb") {
+          await unsaveMbRunFromRepo(reportId);
+          ctx?.markMbUnsaved(reportId);
         } else {
           await unsaveFromRepo(reportId);
           ctx?.markUnsaved(reportId);
@@ -95,6 +102,9 @@ export function SaveToRepoButton({
         } else if (engine === "eu") {
           await saveEuRunToRepo(reportId);
           ctx?.markEuSaved(reportId);
+        } else if (engine === "mb") {
+          await saveMbRunToRepo(reportId);
+          ctx?.markMbSaved(reportId);
         } else {
           await saveToRepo(reportId);
           ctx?.markSaved(reportId);
