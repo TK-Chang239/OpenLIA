@@ -301,9 +301,13 @@ def _build_macro_indicators_tool(
         descriptor=ToolDescriptor(
             name="get_macro_indicators",
             description=(
-                "Fetch current readings for macro indicators by key (e.g. "
-                "'us_10y', 'vix', 'dxy', 'wti'). Use for the rates, "
-                "volatility, dollar, and commodity backdrop."
+                "Fetch recent sovereign macroeconomic readings by indicator "
+                "name, optionally country-prefixed (defaults to the US): "
+                "e.g. 'inflation_consumer_prices_annual', "
+                "'unemployment_total_percent', 'DEU:gdp_growth_annual'. Use "
+                "for the economic backdrop (growth, inflation, jobs). For the "
+                "rates, volatility, dollar, and commodity backdrop, read the "
+                "matching index/commodity tickers via get_quotes instead."
             ),
             parameters={
                 "type": "object",
@@ -311,7 +315,11 @@ def _build_macro_indicators_tool(
                     "keys": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Indicator keys, e.g. ['us_10y', 'vix', 'dxy'].",
+                        "description": (
+                            "Macro indicator names, optionally 'COUNTRY:indicator' "
+                            "prefixed (ISO-3 country, default USA), e.g. "
+                            "['inflation_consumer_prices_annual', 'DEU:gdp_growth_annual']."
+                        ),
                     },
                 },
                 "required": ["keys"],
