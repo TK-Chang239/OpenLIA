@@ -52,6 +52,31 @@ def test_instructions_id_defaults_to_none_without_row(db_session):
     assert dto.instructions_id is None
 
 
+def test_batch_enabled_defaults_false_without_row(db_session):
+    dto = get_settings(db_session, user_id="nobody")
+    assert dto.batch_enabled is False
+
+
+def test_update_persists_batch_enabled(db_session):
+    dto = update_settings(
+        db_session,
+        user_id="u-1",
+        provider_kind="openai",
+        model="gpt-5.4-2026-03-05",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=["eodhd"],
+        web_search_enabled=False,
+        instructions_id=None,
+        batch_enabled=True,
+    )
+    assert dto.batch_enabled is True
+    again = get_settings(db_session, user_id="u-1")
+    assert again.batch_enabled is True
+
+
 def test_update_persists_instructions_id(db_session):
     update_settings(
         db_session,
