@@ -1195,8 +1195,11 @@ git commit -m "feat(report-mb): rewrite Morning Briefing page in EU shape"
 
 ### Task 6.1: Delete old MB code
 
+> **Sequencing note (revised during execution):** Phase 2's migration intentionally does NOT drop `mb_user_configs` — doing so while the `MbUserConfig` model still exists would leave the migration-parity and alembic-hygiene guardrail tests red through Phases 3-5. This task removes the `MbUserConfig` model AND adds a new migration that drops the `mb_user_configs` table, atomically, so metadata and the alembic head stay in sync.
+
 **Files:**
 - Delete: `packages/server/src/openlia_server/services/mb_config.py`, `mb_request_builder.py`, old `mb_schedules.py` (if replaced by `mb_v2_schedules.py`)
+- Delete: `MbUserConfig` model + its export; add a new alembic migration `<timestamp>_drop_mb_user_configs.py` (down_revision = `morning_briefing_v2` or the latest head) that `drop_table("mb_user_configs")` in upgrade and recreates it in downgrade (original shape — copy from the now-removed recreate block in git history of the `morning_briefing_v2` migration). Update `EXPECTED_TABLES` in `test_migrations.py` to remove `mb_user_configs`.
 - Delete: old MB frontend components no longer imported (`frontend/src/components/morning-briefing/` legacy files: `MBArchiveView`, `MBRunNowView`, `MBSettingsView`, `MBScheduleView` if superseded, `MBSettings` sections UI)
 - Modify: `packages/core/src/openlia/prompts/morning_briefing.yaml` — remove the report-mode prompt blocks (keep chat mode only if still referenced by Secretary; grep first)
 - Modify: any imports referencing deleted modules
