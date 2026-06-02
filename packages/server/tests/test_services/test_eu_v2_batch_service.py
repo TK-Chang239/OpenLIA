@@ -176,6 +176,13 @@ async def test_run_batch_group_completes_and_persists(db_session, db_session_fac
     assert len(batch_runs) == 2
     assert all(br.status == "completed" for br in batch_runs)
 
+    # Each completed report fires a REPORT_READY notification for the user.
+    from openlia_server.db.models.scheduler import UserNotification
+
+    notifs = db_session.query(UserNotification).filter(UserNotification.user_id == user.id).all()
+    assert len(notifs) == 2
+    assert all(n.type == "report_ready" and n.department == "earnings_update" for n in notifs)
+
 
 @pytest.mark.asyncio
 async def test_run_batch_group_marks_failed_run(db_session, db_session_factory, make_user):
@@ -204,6 +211,13 @@ async def test_run_batch_group_marks_failed_run(db_session, db_session_factory, 
     db_session.refresh(row)
     assert row.status == "failed"
     assert row.error_message == "exhausted"
+
+    # A failed run does NOT fire a REPORT_READY notification.
+    from openlia_server.db.models.scheduler import UserNotification
+
+    assert (
+        db_session.query(UserNotification).filter(UserNotification.user_id == user.id).count() == 0
+    )
 
 
 def test_run_batch_group_empty_raises(db_session_factory):
