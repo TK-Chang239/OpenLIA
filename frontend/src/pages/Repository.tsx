@@ -8,14 +8,17 @@ import {
   saveToRepo,
   saveV3RunToRepo,
   saveEuRunToRepo,
+  saveMbRunToRepo,
   unsaveFromRepo,
   unsaveV3RunFromRepo,
   unsaveEuRunFromRepo,
+  unsaveMbRunFromRepo,
   type RepoFacets,
   type RepoRow,
 } from "../api/repo";
 import { deleteReport } from "../api/reports";
 import { deleteV3Run } from "../api/equity-research-v3";
+import { deleteMbRun } from "../api/morning-briefing";
 import { DeleteReportDialog } from "../components/report/DeleteReportDialog";
 import { useRepoList } from "../hooks/useRepoList";
 import { useFileViewer } from "../components/viewer/FileViewerContext";
@@ -142,6 +145,17 @@ export default function Repository(): JSX.Element {
       });
       return;
     }
+    if (row.engine === "mb_v2") {
+      openViewer({
+        filename: row.filename,
+        kind: "report",
+        metadata,
+        source: { kind: "mb_report", reportId: row.report_id },
+        initialSaved: true,
+        hideSaveToRepoButton: true,
+      });
+      return;
+    }
     openViewer({
       filename: row.filename,
       kind: "report",
@@ -189,6 +203,9 @@ export default function Repository(): JSX.Element {
         // EU has no hard-delete endpoint; mirror remove (unsave only).
         await unsaveEuRunFromRepo(row.report_id);
         savedReports?.markEuUnsaved(row.report_id);
+      } else if (row.engine === "mb_v2") {
+        await deleteMbRun(row.report_id);
+        savedReports?.markMbUnsaved(row.report_id);
       } else {
         await deleteReport(row.report_id);
         savedReports?.markUnsaved(row.report_id);
@@ -220,6 +237,9 @@ export default function Repository(): JSX.Element {
       } else if (row.engine === "eu_v2") {
         await unsaveEuRunFromRepo(row.report_id);
         savedReports?.markEuUnsaved(row.report_id);
+      } else if (row.engine === "mb_v2") {
+        await unsaveMbRunFromRepo(row.report_id);
+        savedReports?.markMbUnsaved(row.report_id);
       } else {
         await unsaveFromRepo(row.report_id);
         savedReports?.markUnsaved(row.report_id);
@@ -237,6 +257,9 @@ export default function Repository(): JSX.Element {
               } else if (row.engine === "eu_v2") {
                 await saveEuRunToRepo(row.report_id);
                 savedReports?.markEuSaved(row.report_id);
+              } else if (row.engine === "mb_v2") {
+                await saveMbRunToRepo(row.report_id);
+                savedReports?.markMbSaved(row.report_id);
               } else {
                 await saveToRepo(row.report_id);
                 savedReports?.markSaved(row.report_id);

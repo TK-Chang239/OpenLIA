@@ -116,6 +116,8 @@ describe("MorningBriefing page", () => {
         source: { kind: "mb_report", reportId: "rX" },
       }),
     );
+    const target = openSpy.mock.calls.at(-1)?.[0];
+    expect(target?.hideSaveToRepoButton).not.toBe(true);
   });
 
   it("opens the Run now modal", async () => {

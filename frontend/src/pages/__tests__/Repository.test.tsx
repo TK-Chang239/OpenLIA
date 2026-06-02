@@ -49,8 +49,11 @@ const saveV3RunToRepo = vi.fn();
 const unsaveV3RunFromRepo = vi.fn();
 const saveEuRunToRepo = vi.fn();
 const unsaveEuRunFromRepo = vi.fn();
+const saveMbRunToRepo = vi.fn();
+const unsaveMbRunFromRepo = vi.fn();
 const deleteReport = vi.fn();
 const deleteV3Run = vi.fn();
+const deleteMbRun = vi.fn();
 
 vi.mock("../../api/repo", async () => {
   return {
@@ -62,8 +65,15 @@ vi.mock("../../api/repo", async () => {
     unsaveV3RunFromRepo: (...a: unknown[]) => unsaveV3RunFromRepo(...a),
     saveEuRunToRepo: (...a: unknown[]) => saveEuRunToRepo(...a),
     unsaveEuRunFromRepo: (...a: unknown[]) => unsaveEuRunFromRepo(...a),
+    saveMbRunToRepo: (...a: unknown[]) => saveMbRunToRepo(...a),
+    unsaveMbRunFromRepo: (...a: unknown[]) => unsaveMbRunFromRepo(...a),
+    listSavedMbRuns: vi.fn(),
   };
 });
+
+vi.mock("../../api/morning-briefing", () => ({
+  deleteMbRun: (...a: unknown[]) => deleteMbRun(...a),
+}));
 
 vi.mock("../../api/reports", () => ({
   reportPdfUrl: (id: string) => `/api/reports/${id}/export/pdf`,
@@ -131,6 +141,14 @@ const SAMPLE_EU_ROW = {
   filename: "AAPL_earnings_update_2026-05-30.pdf",
   generated_at: new Date(Date.now() - 86_400_000).toISOString(),
   saved_at: new Date(Date.now() - 3_600_000).toISOString(),
+};
+
+const SAMPLE_MB_ROW = {
+  ...SAMPLE_EU_ROW,
+  id: "repo-mb-1",
+  engine: "mb_v2" as const,
+  report_id: "mb-report-1",
+  filename: "briefing.pdf",
 };
 
 describe("Repository page", () => {
@@ -415,5 +433,83 @@ describe("Repository page", () => {
         source: { kind: "eu_v2_report", reportId: SAMPLE_EU_ROW.report_id },
       }),
     );
+  });
+
+  // ----- MB v2 fanout (Task 6) -----
+
+  it("opens an mb_v2 row via the mb_report file source", async () => {
+    const openSpy = vi.fn();
+    vi.spyOn(viewerCtx, "useFileViewer").mockReturnValue({
+      current: null,
+      lastTrigger: null,
+      open: openSpy,
+      close: vi.fn(),
+    } as unknown as ReturnType<typeof viewerCtx.useFileViewer>);
+    listRepoItemsFiltered.mockReset();
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [SAMPLE_MB_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    renderPage();
+    const row = await screen.findByText(SAMPLE_MB_ROW.filename);
+    fireEvent.click(row);
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: { kind: "mb_report", reportId: SAMPLE_MB_ROW.report_id },
+        initialSaved: true,
+        hideSaveToRepoButton: true,
+      }),
+    );
+  });
+
+  it("removes an mb_v2 row via unsaveMbRunFromRepo, not the v1 unsave", async () => {
+    listRepoItemsFiltered.mockReset();
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [SAMPLE_MB_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    unsaveMbRunFromRepo.mockResolvedValueOnce(undefined);
+    renderPage();
+    const removeBtn = await screen.findByRole("button", {
+      name: new RegExp(`Remove ${SAMPLE_MB_ROW.filename}`),
+    });
+    fireEvent.click(removeBtn);
+    fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
+    await waitFor(() =>
+      expect(unsaveMbRunFromRepo).toHaveBeenCalledWith(SAMPLE_MB_ROW.report_id),
+    );
+    expect(unsaveFromRepo).not.toHaveBeenCalled();
+  });
+
+  it("hard-deletes an mb_v2 row via deleteMbRun", async () => {
+    const OLD_MB_ROW = {
+      ...SAMPLE_MB_ROW,
+      generated_at: new Date(Date.now() - 8 * 86_400_000).toISOString(),
+    };
+    listRepoItemsFiltered.mockReset();
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [OLD_MB_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    deleteMbRun.mockResolvedValueOnce(undefined);
+    renderPage();
+    const removeBtn = await screen.findByRole("button", {
+      name: new RegExp(`Remove ${SAMPLE_MB_ROW.filename}`),
+    });
+    fireEvent.click(removeBtn);
+    // The destructive DeleteReportDialog (not the soft RemoveConfirmDialog) opens.
+    expect(screen.getByTestId("delete-report-dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(deleteMbRun).toHaveBeenCalledWith(SAMPLE_MB_ROW.report_id),
+    );
+    expect(deleteReport).not.toHaveBeenCalled();
   });
 });
