@@ -1,4 +1,4 @@
-import { FileText } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { CardHighlights } from "../../../api/earnings-update";
@@ -14,6 +14,7 @@ interface Props {
   reportId?: string | null;
   highlights?: CardHighlights | null;
   onOpen?: (id: string) => void;
+  onRemove?: (id: string) => void;
 }
 
 export function EuBigCard({
@@ -25,6 +26,7 @@ export function EuBigCard({
   reportId,
   highlights,
   onOpen,
+  onRemove,
 }: Props) {
   const { t } = useTranslation();
   const live = status === "streaming";
@@ -36,6 +38,16 @@ export function EuBigCard({
       className="bg-[--color-bg-elevated] border rounded-[12px] overflow-hidden relative transition-all duration-[--duration-normal] border-[rgba(var(--color-accent-primary-rgb),0.4)] hover:border-[--color-accent-primary] hover:-translate-y-0.5"
     >
       <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[--color-accent-primary]" />
+      {!live && reportId && onRemove ? (
+        <button
+          type="button"
+          onClick={() => onRemove(reportId)}
+          aria-label={t("earnings.feed.remove_aria")}
+          className="absolute top-3 right-3 z-10 inline-flex h-7 w-7 items-center justify-center rounded-md text-[--color-text-tertiary] hover:text-[--color-feedback-error] hover:bg-[--color-surface-hover] transition-colors duration-[--duration-normal]"
+        >
+          <Trash2 size={14} />
+        </button>
+      ) : null}
       <div className="px-[26px] py-5 flex flex-col gap-3">
         <div className="flex items-center gap-2.5 flex-wrap">
           {live ? (
