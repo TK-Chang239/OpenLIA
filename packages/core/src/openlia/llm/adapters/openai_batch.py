@@ -242,7 +242,13 @@ def _parse_output_line(line: str) -> dict[str, BatchResultItem]:
                 error=f"http {status_code}: {json.dumps(response_body, default=str)[:300]}",
             )
         }
-    return {cid: BatchResultItem(custom_id=cid, response=parse_responses_body(response_body), error=None)}
+    return {
+        cid: BatchResultItem(
+            custom_id=cid,
+            response=parse_responses_body(response_body),
+            error=None,
+        )
+    }
 
 
 def _error_text(entry: dict) -> str:
