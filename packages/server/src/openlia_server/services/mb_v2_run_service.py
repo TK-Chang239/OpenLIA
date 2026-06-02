@@ -51,6 +51,7 @@ from openlia.llm.runtime.report_mb import (
     Language,
     LLMSession,
     MbDataTransports,
+    NullEmitter,
     ReportLength,
     Runner,
     RunRequest,
@@ -566,6 +567,73 @@ def cancel_run(*, cancel_registry: dict[str, CancelToken], report_id: str) -> bo
     return True
 
 
+async def run_to_completion(
+    db: DBSession,
+    *,
+    user_id: str,
+    request: RunRequest,
+    trigger_kind: str = "scheduled",
+    schedule_id: str | None = None,
+    instructions_id: str | None = None,
+    transports: MbDataTransports | None = None,
+    session: LLMSession | None = None,
+    cancel_token: CancelToken | None = None,
+) -> tuple[str, RunResult]:
+    """Run the report_mb engine inline and persist into the caller's session.
+
+    Unlike ``start_run_async`` (which detaches the runner onto a background
+    asyncio task so an HTTP route can return immediately), this awaits the
+    engine to completion and persists the outcome using the *caller's* DB
+    session. It is the seam the scheduled dispatcher (``MBBriefingExecutor``)
+    calls: the executor is itself the background job, so it owns the session
+    lifecycle and there is no SSE consumer — events go to a ``NullEmitter``.
+
+    Inserts the ``report_mb`` running row, builds transports + dispatcher,
+    awaits ``Runner.run``, writes the artifact children, flips the row to its
+    terminal status, and returns ``(report_id, RunResult)``. No ``repo_items``
+    pointer is created (save-on-demand only, mirroring EU).
+    """
+    report_id = insert_report_row(
+        db,
+        user_id=user_id,
+        request=request,
+        trigger_kind=trigger_kind,
+        schedule_id=schedule_id,
+        instructions_id=instructions_id,
+    )
+
+    if transports is None:
+        transports = build_mb_transports(api_key=resolve_eodhd_api_key(db))
+    dispatcher = build_mb_dispatcher(
+        db, enabled_provider_ids=request.enabled_connectors.provider_ids
+    )
+
+    runner = Runner(
+        request=request,
+        transports=_resolve_transports(transports),
+        dispatcher=dispatcher,
+    )
+    if session is None:
+        session = LLMSession.create(
+            provider_kind=request.provider_kind,
+            model=request.model,
+        )
+    result = await runner.run(
+        session=session,
+        emitter=NullEmitter(),
+        cancel_token=cancel_token or CancelToken(),
+    )
+
+    persist_result(db, report_id=report_id, result=result)
+    row = db.get(ReportMb, report_id)
+    if row is not None:
+        row.status = result.status
+        row.error_message = result.message or None
+        row.completed_at = datetime.now(UTC)
+    db.flush()
+    return report_id, result
+
+
 def persist_result(db: DBSession, *, report_id: str, result: RunResult) -> None:
     """Write sections + charts + citations + tool-call log + cover.
 
@@ -711,5 +779,6 @@ __all__ = [
     "get_run",
     "insert_report_row",
     "persist_result",
+    "run_to_completion",
     "start_run_async",
 ]

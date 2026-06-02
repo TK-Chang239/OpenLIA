@@ -16,8 +16,8 @@ from openlia_server.scheduler.executors.base import (
     JobOutcome,
     NotificationSpec,
     SessionFactory,
+    raise_from_report_error,
 )
-from openlia_server.scheduler.executors.mb import _raise_from_report_error
 from openlia_server.scheduler.payloads import EUScanPlanner, ReportStore
 from openlia_server.scheduler.registry import JobType, NotificationType
 
@@ -74,7 +74,7 @@ class EUScanExecutor(BaseExecutor):
                 cancel_token=cancel_token,
             ):
                 if isinstance(event, ReportError):
-                    _raise_from_report_error(event)
+                    raise_from_report_error(event)
                 if isinstance(event, ReportComplete):
                     payload = event.schema
 

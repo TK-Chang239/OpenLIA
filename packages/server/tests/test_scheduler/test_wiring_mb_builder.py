@@ -33,6 +33,12 @@ def test_wiring_accepts_real_mb_builder(session_factory) -> None:
         report_store=FakeReportStore(),
         mr_cache_store=FakeMRCacheStore(),
     )
+    # MB rework Phase 3: the MB executor no longer consumes the legacy
+    # mb_builder; build_scheduler_service still accepts it (the EU executor +
+    # app wiring depend on the shared signature) but the MB executor runs the
+    # report_mb engine inline via its module-default run-service collaborator.
     mb_exec = svc.executors[JobType.MB_BRIEFING]
     assert isinstance(mb_exec, MBBriefingExecutor)
-    assert mb_exec._mb_builder is builder
+    from openlia_server.services import mb_v2_run_service
+
+    assert mb_exec._run_service is mb_v2_run_service
