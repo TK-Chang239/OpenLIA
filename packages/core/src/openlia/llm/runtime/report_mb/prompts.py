@@ -13,12 +13,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .schemas import (
+    BriefingContext,
     EnabledConnectors,
     Language,
     ReportLength,
     RunRequest,
     TemplateSpec,
-    TriggerContext,
 )
 
 _LANGUAGE_LABELS: dict[Language, str] = {
@@ -71,7 +71,7 @@ def build_system_prompt(
         template_name=template.name,
         shape_description=template.shape_description,
         instructions_block=_render_instructions_block(request.instructions),
-        trigger_block=_render_trigger_block(request.trigger_context),
+        trigger_block=_render_briefing_block(request.briefing_context),
         structure_block=_render_structure_block(template),
         connectors_block=_render_connectors_block(request.enabled_connectors, connector_tools),
     )
@@ -94,34 +94,18 @@ def _render_instructions_block(instructions: str | None) -> str:
     )
 
 
-def _render_trigger_block(trigger: TriggerContext | None) -> str:
-    """The earnings-event context block, or empty when no trigger given.
+def _render_briefing_block(briefing: BriefingContext | None) -> str:
+    """The briefing context block, or empty when no briefing given.
 
-    Only non-None fields render, so on-demand runs that know only the
-    ticker still produce a clean, accurate block.
+    Reworked for market-briefing content in Task 1.5; this minimal form
+    keeps the package importable after the schema rename.
     """
-    if trigger is None:
+    if briefing is None:
         return ""
-    lines: list[str] = ["# Earnings event you are covering", ""]
-    head = trigger.ticker
-    if trigger.company_name:
-        head = f"{trigger.company_name} ({trigger.ticker})"
-    lead = f"You are covering: {head}"
-    if trigger.fiscal_period:
-        lead += f" {trigger.fiscal_period}"
-    if trigger.report_date:
-        lead += f", reported {trigger.report_date}"
-    if trigger.release_timing:
-        lead += f" ({trigger.release_timing})"
-    lead += "."
-    lines.append(lead)
-    estimate_bits: list[str] = []
-    if trigger.eps_estimate:
-        estimate_bits.append(f"consensus EPS {trigger.eps_estimate}")
-    if trigger.revenue_estimate:
-        estimate_bits.append(f"consensus revenue {trigger.revenue_estimate}")
-    if estimate_bits:
-        lines.append("Score the print against: " + ", ".join(estimate_bits) + ".")
+    lines: list[str] = ["# Briefing you are writing", ""]
+    lines.append(f"Run date: {briefing.run_date}")
+    if briefing.schedule_label:
+        lines.append(f"Schedule: {briefing.schedule_label}")
     return "\n".join(lines) + "\n\n"
 
 

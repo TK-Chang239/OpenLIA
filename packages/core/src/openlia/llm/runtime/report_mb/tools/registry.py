@@ -11,7 +11,7 @@ tools (``write_section``, ``set_cover``, ``emit_chart``, ``finalize``)
 are always present; data tools, the earnings-calendar tool, and native
 web search are each included only when their connector is enabled.
 
-Data tool transports (EODHD callables) arrive via the ``EuDataTransports``
+Data tool transports (EODHD callables) arrive via the ``MbDataTransports``
 bundle passed in by the wiring layer — same dependency-injection shape
 v2.3 uses, so the core layer stays free of EODHD SDK imports.
 """
@@ -29,7 +29,7 @@ from .output_tools import build_output_tools
 from .web_search import WEB_SEARCH_TOOL_NAME, build_web_search_descriptor
 
 if TYPE_CHECKING:
-    from .. import EuDataTransports
+    from .. import MbDataTransports
     from ..ledger import CitationLedger
     from ..workspace import RunWorkspace
 
@@ -75,7 +75,7 @@ def build_catalog(
     *,
     ledger: CitationLedger,
     workspace: RunWorkspace,
-    transports: EuDataTransports,
+    transports: MbDataTransports,
     enabled_connectors: EnabledConnectors,
     dispatcher: object | None = None,
 ) -> ToolCatalog:
