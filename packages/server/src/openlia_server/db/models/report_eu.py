@@ -421,3 +421,66 @@ class EuV2Settings(Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
     __table_args__ = (PrimaryKeyConstraint("user_id", name="pk_eu_v2_settings"),)
+
+
+class EuV2BatchJob(Base):
+    """One turn-synchronized batch orchestration cycle over the provider Batch API.
+
+    A job groups all scheduled EU runs that share one (provider_kind, model)
+    — a provider batch is single-model. ``status`` walks
+    submitted -> polling -> completed / failed. ``provider_batch_id`` holds
+    the in-flight batch handle for the current turn (overwritten each turn);
+    ``turn_index`` is the current lockstep turn. The per-run reports live in
+    ``report_eu`` (one row each); ``eu_v2_batch_run`` links them to the job.
+    """
+
+    __tablename__ = "eu_v2_batch_job"
+
+    id: Mapped[str] = mapped_column(String(36), nullable=False)
+    provider_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="submitted", server_default="submitted"
+    )
+    provider_batch_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    turn_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_eu_v2_batch_job"),
+        Index("ix_eu_v2_batch_job_status", "status"),
+    )
+
+
+class EuV2BatchRun(Base):
+    """One report inside a batch job, linking the run handle to its report row.
+
+    ``custom_id`` is the orchestrator's per-run handle (maps batch results
+    back to the run); ``report_id`` is the ``report_eu`` row the run
+    persists into; ``status`` walks active -> completed / failed.
+    """
+
+    __tablename__ = "eu_v2_batch_run"
+
+    id: Mapped[str] = mapped_column(String(36), nullable=False)
+    batch_job_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("eu_v2_batch_job.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    report_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("report_eu.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    custom_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="active", server_default="active"
+    )
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_eu_v2_batch_run"),
+        Index("ix_eu_v2_batch_run_batch_job_id", "batch_job_id"),
+    )
