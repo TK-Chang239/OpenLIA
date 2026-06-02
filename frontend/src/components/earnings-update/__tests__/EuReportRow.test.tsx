@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { RunSummary } from "../../../api/earnings-update";
 import { EuReportRow } from "../feed/EuReportRow";
@@ -48,5 +48,23 @@ describe("EuReportRow", () => {
     expect(screen.getByText(/Reality Labs/)).toBeTruthy();
     expect(screen.queryByTestId("eu-row-subtitle")).toBeNull();
     expect(screen.queryByTestId("eu-metric-chip")).toBeNull();
+  });
+
+  it("renders a delete control that calls onRemove without opening the report", () => {
+    const onOpen = vi.fn();
+    const onRemove = vi.fn();
+    render(
+      <EuReportRow report={makeReport(null)} onOpen={onOpen} onRemove={onRemove} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove report/i }));
+    expect(onRemove).toHaveBeenCalledWith("r1");
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("renders no delete control when onRemove is absent", () => {
+    render(<EuReportRow report={makeReport(null)} onOpen={() => {}} />);
+    expect(
+      screen.queryByRole("button", { name: /remove report/i }),
+    ).toBeNull();
   });
 });
