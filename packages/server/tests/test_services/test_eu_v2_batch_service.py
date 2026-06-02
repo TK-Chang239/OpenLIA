@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
+
 import pytest
 from openlia.llm.batch_transport import BatchResultItem, BatchStatus
 from openlia.llm.runtime.report_eu import EuDataTransports
@@ -214,9 +217,151 @@ def test_run_batch_group_empty_raises(db_session_factory):
         )
 
 
-def test_mark_orphaned_batch_jobs_failed(db_session, make_user):
-    from datetime import UTC, datetime
+@pytest.mark.asyncio
+async def test_recover_inflight_batches_resumes(db_session, db_session_factory, make_user):
+    user = make_user(email="resume@example.com")
+    req = _req("EEE.US earnings")
+    report_id = insert_report_row(
+        db_session, user_id=user.id, request=req, trigger_kind="scheduled"
+    )
+    # Build a mid-run state (quick_take written) and snapshot it, as the
+    # checkpoint would have just before the crash.
+    state = EuRunState.from_request(req, transports=_transports(), custom_id=report_id)
+    state.pending_request()
+    await state.apply_response(_write())
+    now = datetime.now(UTC)
+    db_session.add(
+        EuV2BatchJob(
+            id="job-r",
+            provider_kind="anthropic",
+            model="claude-sonnet-4-6",
+            status="polling",
+            provider_batch_id="batch-resumed",
+            turn_index=1,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        EuV2BatchRun(
+            id="run-r",
+            batch_job_id="job-r",
+            report_id=report_id,
+            custom_id=report_id,
+            status="active",
+            state_json=json.dumps(state.snapshot()),
+            updated_at=now,
+        )
+    )
+    db_session.commit()
 
+    transport = FakeBatchTransport(scripts={report_id: [_finalize()]})
+    transport._pending["batch-resumed"] = [report_id]  # the in-flight batch
+    collected = []
+    resumed = svc.recover_inflight_batches(
+        session_factory=db_session_factory,
+        transport_factory=lambda **kw: transport,
+        transports=_transports(),
+        spawn=lambda coro: collected.append(coro),
+    )
+    assert resumed == 1
+    await collected[0]
+
+    row = db_session.get(ReportEu, report_id)
+    db_session.refresh(row)
+    assert row.status == "completed"
+    sections = (
+        db_session.query(ReportEuSection).filter(ReportEuSection.report_id == report_id).all()
+    )
+    assert any(s.section_id == "quick_take" for s in sections)
+
+
+def test_recover_fails_unresumable_job(db_session, db_session_factory, make_user):
+    user = make_user(email="unres@example.com")
+    req = _req("FFF.US earnings")
+    report_id = insert_report_row(
+        db_session, user_id=user.id, request=req, trigger_kind="scheduled"
+    )
+    now = datetime.now(UTC)
+    db_session.add(
+        EuV2BatchJob(
+            id="job-u",
+            provider_kind="anthropic",
+            model="claude-sonnet-4-6",
+            status="polling",
+            provider_batch_id=None,  # never checkpointed -> can't resume
+            turn_index=0,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        EuV2BatchRun(
+            id="run-u",
+            batch_job_id="job-u",
+            report_id=report_id,
+            custom_id=report_id,
+            status="active",
+            state_json=None,
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    resumed = svc.recover_inflight_batches(
+        session_factory=db_session_factory, transports=_transports(), spawn=lambda c: c
+    )
+    assert resumed == 0
+    assert db_session.get(EuV2BatchJob, "job-u").status == "failed"
+    row = db_session.get(ReportEu, report_id)
+    db_session.refresh(row)
+    assert row.status == "failed"
+
+
+def test_cleanup_skips_resumable_batch_reports(db_session, make_user):
+    from openlia_server.services.eu_v2_run_service import cleanup_orphaned_running_rows
+
+    user = make_user(email="cleanup@example.com")
+    batch_report = insert_report_row(
+        db_session, user_id=user.id, request=_req("GGG.US earnings"), trigger_kind="scheduled"
+    )
+    plain_report = insert_report_row(
+        db_session, user_id=user.id, request=_req("HHH.US earnings"), trigger_kind="on_demand"
+    )
+    now = datetime.now(UTC)
+    db_session.add(
+        EuV2BatchJob(
+            id="job-c",
+            provider_kind="anthropic",
+            model="claude-sonnet-4-6",
+            status="polling",
+            provider_batch_id="b",
+            turn_index=1,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db_session.add(
+        EuV2BatchRun(
+            id="run-c",
+            batch_job_id="job-c",
+            report_id=batch_report,
+            custom_id=batch_report,
+            status="active",
+            state_json="{}",
+            updated_at=now,
+        )
+    )
+    db_session.commit()
+
+    cleanup_orphaned_running_rows(db=db_session)
+    db_session.expire_all()
+    # Batch-linked report survives (recovery will resume it); plain one fails.
+    assert db_session.get(ReportEu, batch_report).status == "running"
+    assert db_session.get(ReportEu, plain_report).status == "failed"
+
+
+def test_mark_orphaned_batch_jobs_failed(db_session, make_user):
     user = make_user(email="orphan@example.com")
     req = _req("DDD.US earnings")
     report_id = insert_report_row(

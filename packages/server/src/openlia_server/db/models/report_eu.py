@@ -478,6 +478,10 @@ class EuV2BatchRun(Base):
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="active", server_default="active"
     )
+    # JSON snapshot of the run's resumable state (EuRunState.snapshot), written
+    # each turn right after the batch is submitted. NULL until the first
+    # checkpoint. Used by startup recovery to resume an in-flight batch.
+    state_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
     __table_args__ = (

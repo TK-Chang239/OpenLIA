@@ -20,6 +20,7 @@ batch job; ``mark_orphaned_batch_jobs_failed`` cleans those at startup).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import uuid
@@ -128,16 +129,61 @@ def run_batch_group(
             )
         db.commit()
 
+    _drive_group(
+        session_factory=session_factory,
+        job_id=job_id,
+        states=[state for _, state in runs],
+        transport=transport,
+        spawn=spawn,
+        poll_interval_s=poll,
+        max_wait_s=max_wait,
+    )
+    return job_id
+
+
+def _drive_group(
+    *,
+    session_factory: SessionFactory,
+    job_id: str,
+    states: list[Any],
+    transport: BatchTransport,
+    spawn: SpawnFn,
+    poll_interval_s: float,
+    max_wait_s: float,
+    resume_batch_id: str | None = None,
+) -> None:
+    """Wire the orchestrator callbacks + spawn it for one batch job.
+
+    Shared by ``run_batch_group`` (fresh dispatch) and
+    ``recover_inflight_batches`` (``resume_batch_id`` set). Callbacks persist
+    the per-turn checkpoint (batch id + run snapshots) and each terminal run's
+    outcome, then mark the job completed when the orchestrator returns.
+    """
+
     def _on_turn_persisted(batch_id: str, active: dict[str, Any]) -> None:
-        del active
+        # Checkpoint: record the in-flight batch id + snapshot each active run's
+        # pre-apply state so startup recovery can resume this exact batch.
+        now_ts = datetime.now(UTC)
         with session_factory() as db:
             job = db.get(EuV2BatchJob, job_id)
             if job is not None:
                 job.provider_batch_id = batch_id
                 job.turn_index = (job.turn_index or 0) + 1
                 job.status = "polling"
-                job.updated_at = datetime.now(UTC)
-                db.commit()
+                job.updated_at = now_ts
+            run_rows = {
+                r.custom_id: r
+                for r in db.execute(
+                    select(EuV2BatchRun).where(EuV2BatchRun.batch_job_id == job_id)
+                ).scalars()
+            }
+            for custom_id, state in active.items():
+                run_row = run_rows.get(custom_id)
+                snapshot_fn = getattr(state, "snapshot", None)
+                if run_row is not None and callable(snapshot_fn):
+                    run_row.state_json = json.dumps(snapshot_fn())
+                    run_row.updated_at = now_ts
+            db.commit()
 
     def _on_run_complete(custom_id: str, result: Any) -> None:
         _persist_run_outcome(session_factory, report_id=custom_id, result=result)
@@ -147,9 +193,9 @@ def run_batch_group(
 
     orchestrator = BatchOrchestrator(
         transport=transport,
-        runs=[state for _, state in runs],
-        poll_interval_s=poll,
-        max_wait_s=max_wait,
+        runs=states,
+        poll_interval_s=poll_interval_s,
+        max_wait_s=max_wait_s,
         on_turn_persisted=_on_turn_persisted,
         on_run_complete=_on_run_complete,
         on_run_failed=_on_run_failed,
@@ -157,7 +203,7 @@ def run_batch_group(
 
     async def _drive() -> None:
         try:
-            await orchestrator.run()
+            await orchestrator.run(resume_batch_id=resume_batch_id)
         except Exception:
             log.exception("EU v2 batch job %s crashed", job_id)
         finally:
@@ -172,7 +218,6 @@ def run_batch_group(
     if isinstance(task, asyncio.Task):
         _BACKGROUND_TASKS.add(task)
         task.add_done_callback(_BACKGROUND_TASKS.discard)
-    return job_id
 
 
 def dispatch_due_batches(
@@ -263,34 +308,121 @@ def dispatch_due_batches(
     return handled
 
 
-def mark_orphaned_batch_jobs_failed(*, db: DBSession) -> int:
-    """Flip non-terminal batch jobs (and their active runs / running reports)
-    to failed. Call at startup: an in-flight batch from a prior process can't
-    be resumed yet, so its reports must not hang in ``running`` forever."""
+def _fail_job_in_session(
+    db: DBSession,
+    job: EuV2BatchJob,
+    *,
+    message: str = "batch interrupted by server restart",
+) -> None:
+    """Mark a job + its active runs + their running reports failed (no commit)."""
     now = datetime.now(UTC)
+    job.status = "failed"
+    job.updated_at = now
+    runs = list(
+        db.execute(select(EuV2BatchRun).where(EuV2BatchRun.batch_job_id == job.id)).scalars()
+    )
+    for run in runs:
+        if run.status != "active":
+            continue
+        run.status = "failed"
+        run.updated_at = now
+        report = db.get(ReportEu, run.report_id)
+        if report is not None and report.status == "running":
+            report.status = "failed"
+            report.error_message = message
+            report.completed_at = now
+
+
+def mark_orphaned_batch_jobs_failed(*, db: DBSession) -> int:
+    """Flip every non-terminal batch job (+ its active runs / running reports)
+    to failed. Use when resume is unavailable; ``recover_inflight_batches`` is
+    preferred at startup and only falls back to this per un-resumable job."""
     jobs = list(
         db.execute(
             select(EuV2BatchJob).where(EuV2BatchJob.status.in_(("submitted", "polling")))
         ).scalars()
     )
     for job in jobs:
-        job.status = "failed"
-        job.updated_at = now
-        runs = list(
-            db.execute(select(EuV2BatchRun).where(EuV2BatchRun.batch_job_id == job.id)).scalars()
-        )
-        for run in runs:
-            if run.status != "active":
-                continue
-            run.status = "failed"
-            run.updated_at = now
-            report = db.get(ReportEu, run.report_id)
-            if report is not None and report.status == "running":
-                report.status = "failed"
-                report.error_message = "batch interrupted by server restart"
-                report.completed_at = now
+        _fail_job_in_session(db, job)
     db.commit()
     return len(jobs)
+
+
+def recover_inflight_batches(
+    *,
+    session_factory: SessionFactory,
+    transport_factory: Callable[..., BatchTransport | None] = build_batch_transport,
+    transports: Any = None,
+    spawn: SpawnFn = asyncio.create_task,
+) -> int:
+    """Resume in-flight batch jobs after a restart; return the count resumed.
+
+    For each non-terminal job with a recorded ``provider_batch_id`` and at
+    least one active run carrying a ``state_json`` snapshot, restore the run
+    states and re-drive the orchestrator from that batch id (it re-polls +
+    applies the in-flight batch, then continues). Jobs that can't be resumed
+    (no batch id / no snapshots / no batch transport / no EODHD) are failed
+    along with their active runs + running reports.
+    """
+    from openlia.llm.runtime.report_eu.run_state import EuRunState, request_from_snapshot
+
+    resumed = 0
+    with session_factory() as db:
+        jobs = list(
+            db.execute(
+                select(EuV2BatchJob).where(EuV2BatchJob.status.in_(("submitted", "polling")))
+            ).scalars()
+        )
+        run_transports = transports or build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))
+        for job in jobs:
+            active_runs = list(
+                db.execute(
+                    select(EuV2BatchRun).where(
+                        EuV2BatchRun.batch_job_id == job.id,
+                        EuV2BatchRun.status == "active",
+                    )
+                ).scalars()
+            )
+            snapshotted = [r for r in active_runs if r.state_json]
+            transport = transport_factory(
+                provider_kind=job.provider_kind,
+                credentials=_resolve_credentials(job.provider_kind),
+                model=job.model,
+            )
+            if (
+                not job.provider_batch_id
+                or not snapshotted
+                or transport is None
+                or run_transports is None
+            ):
+                _fail_job_in_session(db, job)
+                continue
+
+            states: list[Any] = []
+            for run in snapshotted:
+                snap = json.loads(run.state_json)
+                request = request_from_snapshot(snap)
+                dispatcher = build_eu_dispatcher(
+                    db, enabled_provider_ids=request.enabled_connectors.provider_ids
+                )
+                states.append(
+                    EuRunState.restore(snap, transports=run_transports, dispatcher=dispatcher)
+                )
+            job.status = "polling"
+            job.updated_at = datetime.now(UTC)
+            _drive_group(
+                session_factory=session_factory,
+                job_id=job.id,
+                states=states,
+                transport=transport,
+                spawn=spawn,
+                poll_interval_s=_POLL_INTERVAL_S,
+                max_wait_s=_MAX_WAIT_S,
+                resume_batch_id=job.provider_batch_id,
+            )
+            resumed += 1
+        db.commit()
+    return resumed
 
 
 def _persist_run_outcome(session_factory: SessionFactory, *, report_id: str, result: Any) -> None:
@@ -335,5 +467,6 @@ __all__ = [
     "dispatch_due_batches",
     "is_batch_eligible",
     "mark_orphaned_batch_jobs_failed",
+    "recover_inflight_batches",
     "run_batch_group",
 ]
