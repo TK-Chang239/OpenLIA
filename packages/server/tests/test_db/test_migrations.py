@@ -142,6 +142,9 @@ EXPECTED_TABLES = {
     "report_mb_tool_call_log",
     "report_mb_templates",
     "report_mb_instructions",
+    # Legacy v1 MB config table — superseded by per-schedule binding but not
+    # yet dropped; removed in Phase 6 with its MbUserConfig model.
+    "mb_user_configs",
 }
 
 
