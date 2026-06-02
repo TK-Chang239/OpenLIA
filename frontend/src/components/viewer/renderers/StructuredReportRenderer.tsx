@@ -6,6 +6,7 @@ import { RendererError, RendererLoading } from "./RendererStates";
 import { type FileSource } from "../FileViewerContext";
 import { V3ReportRenderer } from "./V3ReportRenderer";
 import { EUV2ReportRenderer } from "./EUV2ReportRenderer";
+import { MBReportRenderer } from "./MBReportRenderer";
 
 type Status = "loading" | "ok" | "error";
 
@@ -15,17 +16,28 @@ type Status = "loading" | "ok" | "error";
  * ReportRenderer; v3 and Earnings-Update v2 each have a dedicated
  * renderer. FileViewer chrome (header, tabs, close) is shared.
  */
-export function StructuredReportRenderer({ source }: { source: FileSource }): JSX.Element {
+export function StructuredReportRenderer({
+  source,
+}: {
+  source: FileSource;
+}): JSX.Element {
   if (source.kind === "v3_report") {
     return <V3ReportRenderer source={source} />;
   }
   if (source.kind === "eu_v2_report") {
     return <EUV2ReportRenderer source={source} />;
   }
+  if (source.kind === "mb_report") {
+    return <MBReportRenderer source={source} />;
+  }
   return <V1SchemaReportRenderer source={source} />;
 }
 
-function V1SchemaReportRenderer({ source }: { source: FileSource }): JSX.Element {
+function V1SchemaReportRenderer({
+  source,
+}: {
+  source: FileSource;
+}): JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [schema, setSchema] = useState<ReportSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,11 +82,23 @@ function V1SchemaReportRenderer({ source }: { source: FileSource }): JSX.Element
   }, []);
 
   if (!reportId) {
-    return <RendererError message="Report viewer requires a report source." onRetry={load} />;
+    return (
+      <RendererError
+        message="Report viewer requires a report source."
+        onRetry={load}
+      />
+    );
   }
   if (status === "loading") return <RendererLoading />;
   if (status === "error" || !schema)
-    return <RendererError message={error ?? "Failed to load report."} onRetry={load} />;
+    return (
+      <RendererError
+        message={error ?? "Failed to load report."}
+        onRetry={load}
+      />
+    );
 
-  return <ReportRenderer schema={schema} reportId={reportId} devMode={devMode} />;
+  return (
+    <ReportRenderer schema={schema} reportId={reportId} devMode={devMode} />
+  );
 }
