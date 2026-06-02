@@ -244,6 +244,15 @@ class CoverMetricOut(BaseModel):
     tone: str | None = None
 
 
+class CardHighlightsOut(BaseModel):
+    subtitle: str | None = None
+    rating: str | None = None
+    metrics: list[CoverMetricOut] = Field(default_factory=list)
+
+
+RunSummaryOut.model_rebuild()
+
+
 class CoverOut(BaseModel):
     subtitle: str | None = None
     tagline: str | None = None
@@ -251,12 +260,6 @@ class CoverOut(BaseModel):
     key_metrics: list[CoverMetricOut] = Field(default_factory=list)
     rating: str | None = None
     upside_pct: float | None = None
-
-
-class CardHighlightsOut(BaseModel):
-    subtitle: str | None = None
-    rating: str | None = None
-    metrics: list[CoverMetricOut] = Field(default_factory=list)
 
 
 class RunDetailOut(BaseModel):
@@ -354,7 +357,7 @@ def _card_highlights(raw: str | None) -> CardHighlightsOut | None:
     if cover is None:
         return None
     metrics = cover.key_metrics[:4]
-    if not (cover.subtitle or cover.rating or metrics):
+    if not cover.subtitle and not cover.rating and not metrics:
         return None
     return CardHighlightsOut(
         subtitle=cover.subtitle,
