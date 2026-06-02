@@ -65,9 +65,11 @@ class MbSchedule(Base):
     is_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("1")
     )
-    # Per-schedule config binding.
-    template_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    instructions_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Per-schedule config binding. template_id / instructions_id are
+    # String(64) to match the report_mb_templates / report_mb_instructions
+    # primary keys (same width as the EU settings columns).
+    template_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    instructions_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     enabled_connectors: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )

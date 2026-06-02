@@ -100,6 +100,7 @@ class ReportMb(Base):
         PrimaryKeyConstraint("id", name="pk_report_mb"),
         Index("ix_report_mb_user_id_created_at", "user_id", "created_at"),
         Index("ix_report_mb_user_id_status", "user_id", "status"),
+        Index("ix_report_mb_schedule_id", "schedule_id"),
     )
 
 
