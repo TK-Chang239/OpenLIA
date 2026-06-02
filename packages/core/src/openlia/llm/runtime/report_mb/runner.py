@@ -42,7 +42,7 @@ from .schemas import RunRequest, RunResult
 from .session import LLMSession
 from .tools import build_catalog
 from .tools.web_search import format_web_citation_notice, ingest_web_citations
-from .transports import EuDataTransports
+from .transports import MbDataTransports
 from .workspace import RunWorkspace
 
 log = logging.getLogger(__name__)
@@ -52,14 +52,14 @@ log = logging.getLogger(__name__)
 class Runner:
     """Executes one EU v2 run end-to-end.
 
-    Construct with the run's ``request`` and an ``EuDataTransports``
+    Construct with the run's ``request`` and an ``MbDataTransports``
     bundle (the EODHD callables the data tools dispatch against). The
     tuning knobs (``max_turns``, ``max_wall_time_seconds``) hang here so
     callers don't need to wire them through ``run``.
     """
 
     request: RunRequest
-    transports: EuDataTransports
+    transports: MbDataTransports
     max_turns: int = 60
     # 30 min default: earnings updates with web search can take 20-30
     # turns at 30-90s each (web search + long-context latency compound).

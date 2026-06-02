@@ -1,4 +1,4 @@
-"""Data transport bundle for the Earnings Update v2 engine.
+"""Data transport bundle for the Morning Briefing engine.
 
 Lives in its own module (rather than ``__init__.py``) so ``runner.py``
 can import the type for its ``transports`` annotation without a forward
@@ -15,15 +15,19 @@ from typing import Any
 
 
 @dataclass(frozen=True)
-class EuDataTransports:
-    """Callables the EU v2 data tools dispatch against.
+class MbDataTransports:
+    """Callables the Morning Briefing data tools dispatch against.
 
     Supplied by the server wiring layer so the core package stays free
-    of the EODHD SDK. ``earnings_calendar`` returns the upcoming-events
-    list for a ticker.
+    of the EODHD SDK. The Morning Briefing tools are market-wide rather
+    than single-ticker: ``quotes`` takes a list of tickers, ``prices``
+    takes a ticker and a range token, ``news`` takes an optional symbol
+    (market-wide when omitted), ``economic_calendar`` takes a window
+    token, and ``macro_indicators`` takes a list of indicator keys.
     """
 
-    fundamentals: Callable[[str], dict[str, Any]]
-    prices: Callable[[str, str, str], list[dict[str, Any]]]
-    news: Callable[[str, int], list[dict[str, Any]]]
-    earnings_calendar: Callable[[str], list[dict[str, Any]]]
+    quotes: Callable[[list[str]], list[dict[str, Any]]]
+    prices: Callable[[str, str], list[dict[str, Any]]]
+    news: Callable[..., list[dict[str, Any]]]
+    economic_calendar: Callable[[str], list[dict[str, Any]]]
+    macro_indicators: Callable[[list[str]], dict[str, Any]]
