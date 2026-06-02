@@ -296,7 +296,7 @@ def _make_request(*, run_date: str = "2026-06-02") -> RunRequest:
     )
 
 
-def test_insert_report_row_creates_running_row_and_repo_pointer(db_session_with_seed):
+def test_insert_report_row_creates_running_row_without_repo_pointer(db_session_with_seed):
     _seed_schedule(db_session_with_seed)
     request = _make_request()
     report_id = svc.insert_report_row(
@@ -316,13 +316,13 @@ def test_insert_report_row_creates_running_row_and_repo_pointer(db_session_with_
     assert row.schedule_id == "sched-1"
     assert row.subject == request.subject
 
+    # No repo_items pointer is created on run — briefings list from
+    # report_mb directly; a pointer is created only on explicit save
+    # (mirroring EU). This keeps scheduled briefings out of the repo.
     pointer = db_session_with_seed.execute(
         select(RepoItem).where(RepoItem.mb_v2_report_id == report_id)
-    ).scalar_one()
-    assert pointer.user_id == "u-1"
-    assert pointer.mb_v2_report_id == report_id
-    assert pointer.eu_v2_report_id is None
-    assert pointer.v3_report_id is None
+    ).scalar_one_or_none()
+    assert pointer is None
 
 
 def test_persist_result_writes_children_and_completes(db_session_with_seed):
@@ -497,7 +497,8 @@ async def test_start_run_async_completes_and_persists(db_session_with_seed, db_s
         )
         assert len(sections) == len(build_default_template().sections)
 
+        # The run does not auto-create a repo pointer (save-on-demand only).
         pointer = check.execute(
             select(RepoItem).where(RepoItem.mb_v2_report_id == report_id)
-        ).scalar_one()
-        assert pointer.user_id == "u-1"
+        ).scalar_one_or_none()
+        assert pointer is None

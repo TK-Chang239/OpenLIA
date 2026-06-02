@@ -799,9 +799,11 @@ git commit -m "feat(report-mb): EODHD market transports + data sources"
   bound config + resolved template/instructions yields a `report_mb.RunRequest`
   with the right `subject`, `briefing_context`, `enabled_connectors`, `model`;
   (b) `persist_result` writes `ReportMb` + sections/charts/citations and flips
-  status to `completed`; (c) `insert_report_row` creates a `running` row and the
-  `repo_items` pointer. Use a fake engine `Runner` that yields a scripted
-  `RunResult` (inject it, mirroring how EU tests stub the runner).
+  status to `completed`; (c) `insert_report_row` creates a `running` row and does
+  NOT create a `repo_items` pointer (briefings list from `report_mb` directly;
+  the pointer is created only on explicit save — see Task 3.7, mirroring EU). Use
+  a fake engine `Runner` that yields a scripted `RunResult` (inject it, mirroring
+  how EU tests stub the runner).
 
 - [ ] **Step 3: Run tests to verify they fail**
 
@@ -810,10 +812,11 @@ Expected: FAIL.
 
 - [ ] **Step 4: Implement** — fork `eu_v2_run_service.py`. Swap: `report_eu` engine
   imports → `report_mb`; `ReportEu*` models → `ReportMb*`; `TriggerContext` build →
-  `BriefingContext` build (from schedule label/time/tz + run date); set
-  `repo_items.mb_v2_report_id`. `build_run_request` accepts either a schedule row or
-  an ad-hoc on-demand config dict. Resolve template via `mb_v2_template_service`,
-  instructions via `mb_v2_instructions_service`, transports via `mb_v2_wiring`.
+  `BriefingContext` build (from schedule label/time/tz + run date). Do NOT create a
+  `repo_items` pointer here (EU's run service does not touch repo_items either).
+  `build_run_request` accepts either a schedule row or an ad-hoc on-demand config
+  dict. Resolve template via `mb_v2_template_service`, instructions via
+  `mb_v2_instructions_service`, transports via `mb_v2_wiring`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -951,26 +954,39 @@ git add packages/server/src/openlia_server/scheduler packages/server/tests/test_
 git commit -m "feat(report-mb): rewire cron executor to report_mb engine"
 ```
 
-### Task 3.7: Repo listing fan-out for MB
+### Task 3.7: Repo save/unsave/list integration for MB
+
+Mirror EU end-to-end: the run service never creates a `repo_items` pointer; the
+pointer is created on explicit save. So MB needs the same three repo seams EU has —
+`save_mb_report_to_repo`, `unsave_mb_report_from_repo`, and the listing join — plus
+the `routes/repo.py` wiring.
 
 **Files:**
 - Modify: `packages/server/src/openlia_server/services/repo.py`
+- Modify: `packages/server/src/openlia_server/routes/repo.py`
 - Test: `packages/server/tests/test_services/test_repo_mb_listing.py`
 
-- [ ] **Step 1: Read** — `services/repo.py` listing fan-out (how it merges v1/v2.2/v3/eu sources).
+- [ ] **Step 1: Read** — `services/repo.py` (the EU functions `save_eu_report_to_repo`,
+  `unsave_eu_report_from_repo`, and the `eu_v2_report_id` listing join at the
+  `select(...).join(ReportEu, RepoItem.eu_v2_report_id == ReportEu.id)` sites) and
+  `routes/repo.py` (the EU save/unsave/list endpoints).
 
-- [ ] **Step 2: Write failing test** — with one `ReportMb` + `repo_items.mb_v2_report_id`
-  row, `list_items_filtered(user_id=...)` includes the MB report in the merged result
-  with the right title/department.
+- [ ] **Step 2: Write failing tests** — (a) `save_mb_report_to_repo(db, user_id, mb_report_id)`
+  creates exactly one `repo_items` row with `mb_v2_report_id` set; calling it twice is
+  idempotent (no duplicate); (b) with a saved `ReportMb`, `list_items_filtered(user_id=...)`
+  includes the MB report in the merged result with department `"morning_briefing"` and the
+  right title; (c) `unsave_mb_report_from_repo` removes the pointer.
 
-- [ ] **Step 3: Run test to verify it fails**
+- [ ] **Step 3: Run tests to verify they fail**
 
 Run: `uv run pytest packages/server/tests/test_services/test_repo_mb_listing.py -v`
 Expected: FAIL.
 
-- [ ] **Step 4: Add the MB branch** to the fan-out (mirror the `eu_v2_report_id`
-  branch): join `report_mb`, map to the common `RepoRow` shape, department
-  `"morning_briefing"`.
+- [ ] **Step 4: Implement** — add `save_mb_report_to_repo` / `unsave_mb_report_from_repo`
+  (mirror the EU functions, swapping `eu_v2_report_id` → `mb_v2_report_id`, `ReportEu` →
+  `ReportMb`), and add the MB branch to the listing fan-out (join `report_mb`, map to the
+  common `RepoRow` shape, department `"morning_briefing"`). Wire the matching
+  save/unsave/list endpoints into `routes/repo.py` mirroring the EU ones.
 
 - [ ] **Step 5: Run test to verify it passes**
 

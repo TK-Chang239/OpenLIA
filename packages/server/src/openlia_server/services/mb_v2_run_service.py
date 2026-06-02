@@ -60,7 +60,6 @@ from openlia.llm.runtime.report_mb import (
 from openlia.llm.types import ReasoningEffort
 from sqlalchemy.orm import Session as DBSession
 
-from openlia_server.db.models.content import RepoItem
 from openlia_server.db.models.report_mb import (
     ReportMb,
     ReportMbChart,
@@ -309,13 +308,15 @@ def insert_report_row(
     schedule_id: str | None = None,
     instructions_id: str | None = None,
 ) -> str:
-    """Insert the ``report_mb`` row + its ``repo_items`` pointer; return id.
+    """Insert the ``report_mb`` run row in ``running`` status; return id.
 
-    Creates the run in ``running`` status (the engine flips it to
-    completed / failed) and a ``repo_items`` row with ``mb_v2_report_id``
-    set so the briefing appears in the repository immediately.
+    The engine flips the row to completed / failed. Briefings appear in
+    the Morning Briefing feed by listing ``report_mb`` directly (mirroring
+    the EU feed); a ``repo_items`` pointer is created only when the user
+    explicitly saves a briefing to the repository (see
+    ``services/repo.save_mb_report_to_repo``), so scheduled briefings do
+    not auto-clutter the cross-department repo.
     """
-    context = request.briefing_context
     report_id = str(uuid.uuid4())
     row = ReportMb(
         id=report_id,
@@ -340,16 +341,6 @@ def insert_report_row(
     )
     db.add(row)
     db.flush()
-
-    db.add(
-        RepoItem(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            mb_v2_report_id=report_id,
-        )
-    )
-    db.flush()
-    del context  # briefing metadata rides on the request, not the row
     return report_id
 
 
