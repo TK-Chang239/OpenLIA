@@ -645,6 +645,13 @@
     "generate_report": "Generate report",
     "live_pill": "{{count}} live",
     "report_settings_aria": "Report settings",
+    "refresh": {
+      "aria": "Refresh earnings dates",
+      "syncing": "Refreshing...",
+      "done": "Updated · {{n}} tickers",
+      "failed": "Refresh failed",
+      "empty_hint": "Add tickers first"
+    },
     "load_failed": "Failed to load earnings data. Try again.",
     "retry": "Retry",
     "view_all_reports": "View all reports →",

@@ -61,6 +61,7 @@ The Earnings Updates page uses a **two-section stacked layout** within the main 
 | Background | `--color-bg-base` |
 | Border | 1px bottom, `--color-border-subtle` |
 | Page title | "Earnings Updates" — `text-xl font-semibold text-[--color-text-primary]`, `pl-6` |
+| Refresh-dates button | Left of the Watchlist button; icon-only (`RefreshCw`, 14px) `h-8 w-8` outline button. On click, runs the watchlist→calendar sync now (`POST /watchlist/sync`), re-fetching each watchlist ticker's next earnings release date from EODHD, then refreshes the on-screen schedule/calendar/coverage. Icon spins while syncing; an inline status appears to its left — "Updated · N tickers" on success, "Refresh failed" on error — auto-clearing after ~4s. Disabled when the watchlist is empty (`title` = "Add tickers first"). Component: `EuRefreshButton`. |
 | Settings icon | Right of header (left of On-Demand button); 18px `Settings` icon; `text-[--color-text-secondary] hover:text-[--color-text-primary] p-1`; opens the Report Settings modal (mirrors Morning Briefing's Settings entry — see "Page Settings" below) |
 | On-Demand Report button | `pr-6`; `Plus` icon (16px) + "On-Demand Report" label; `bg-[--color-accent-primary] text-white text-sm px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover]`; opens On-Demand modal |
 

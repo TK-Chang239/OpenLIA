@@ -4,7 +4,6 @@ import {
   addWatchlistEntry,
   fetchWatchlist,
   removeWatchlistEntry,
-  syncWatchlist,
   type WatchlistEntry,
 } from "../api/earnings-update";
 
@@ -50,10 +49,5 @@ export function useEuWatchlist() {
     [entries],
   );
 
-  const syncNow = useCallback(async () => {
-    await syncWatchlist();
-    await refresh();
-  }, [refresh]);
-
-  return { entries, loading, error, refresh, add, remove, syncNow };
+  return { entries, loading, error, refresh, add, remove };
 }
