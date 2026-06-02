@@ -21,7 +21,7 @@ export interface RepoItem {
  *
  *  v2.2 still lists via its own ``/repo/v2-runs`` surface; pending
  *  fanout follow-up. */
-export type RepoEngine = "v1" | "v3" | "eu_v2";
+export type RepoEngine = "v1" | "v3" | "eu_v2" | "mb_v2";
 
 export interface RepoRow {
   id: string;
@@ -189,3 +189,23 @@ export const unsaveEuRunFromRepo = (reportId: string) =>
 /** Returns the EU v2 report ids the current user has saved. */
 export const listSavedEuRuns = () =>
   fetchJson<{ saved_report_ids: string[] }>("/api/repo/eu-runs");
+
+// Morning Briefing repo mirrors of the EU helpers. Polymorphic pointer
+// column ``mb_v2_report_id`` lives in ``repo_items`` alongside the
+// v1/v2/v3/eu pointers; the routes keep each engine's surface explicit.
+
+export const saveMbRunToRepo = (reportId: string) =>
+  fetchJson<RepoItem>("/api/repo/mb-runs", {
+    method: "POST",
+    json: { mb_v2_report_id: reportId },
+  });
+
+export const unsaveMbRunFromRepo = (reportId: string) =>
+  fetchJson<void>(
+    `/api/repo/mb-runs?mb_v2_report_id=${encodeURIComponent(reportId)}`,
+    { method: "DELETE" },
+  );
+
+/** Returns the MB report ids the current user has saved. */
+export const listSavedMbRuns = () =>
+  fetchJson<{ saved_report_ids: string[] }>("/api/repo/mb-runs");
