@@ -383,6 +383,12 @@ export function V3ReportSettingsModal({
                   Upload
                 </button>
               </div>
+              <p className="mb-[10px] text-[12px] leading-[1.5] text-[--color-text-secondary]">
+                A template is the report's outline — the sections it includes
+                and the order they appear in, like a fill-in-the-blanks
+                document. Upload your own, or pick No template below to let the
+                analyst design the layout itself.
+              </p>
               <button
                 type="button"
                 onClick={pickNoTemplate}
@@ -398,7 +404,7 @@ export function V3ReportSettingsModal({
                   No template
                 </span>
                 <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-                  instructions only — model designs the structure
+                  instructions only — analyst designs the structure
                 </span>
               </button>
               {templates === null ? (
@@ -475,8 +481,11 @@ export function V3ReportSettingsModal({
                 </button>
               </div>
               <p className="mb-[10px] text-[12px] leading-[1.5] text-[--color-text-secondary]">
-                Optional free-form methodology fed to the model verbatim.
-                Required when no template is selected.
+                Instructions are your standing guidance for how the analyst
+                should work — what to focus on, the angle to take, the tone to
+                use — like a brief you'd hand a human analyst. Optional, but
+                required when no template is selected so the analyst knows what
+                to produce.
               </p>
               <button
                 type="button"
