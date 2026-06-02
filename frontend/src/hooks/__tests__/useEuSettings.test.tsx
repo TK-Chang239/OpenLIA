@@ -7,7 +7,7 @@ const base: api.EuSettings = {
   provider_kind: "anthropic", model: "claude-sonnet-4-6", template_id: "eu_default",
   language: "en", length: "normal", reasoning_effort: null,
   enabled_provider_ids: ["eodhd"], web_search_enabled: false,
-  instructions_id: null,
+  instructions_id: null, batch_enabled: false,
 };
 
 afterEach(() => { vi.restoreAllMocks(); });

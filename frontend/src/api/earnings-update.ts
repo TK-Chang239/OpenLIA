@@ -39,6 +39,7 @@ export interface EuSettings {
   enabled_provider_ids: string[];
   web_search_enabled: boolean;
   instructions_id: string | null;
+  batch_enabled: boolean;
 }
 
 export type DataSourceCategory = "financial" | "news" | "social" | "web_search";
