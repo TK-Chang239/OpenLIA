@@ -246,6 +246,46 @@ def build_run_request(
     )
 
 
+def insert_report_row(
+    db: DBSession,
+    *,
+    user_id: str,
+    request: RunRequest,
+    trigger_kind: str,
+) -> str:
+    """Insert the ``report_eu`` row for a run and return its new id.
+
+    Shared by ``start_run_async`` (sync path) and the batch service so both
+    create identical rows (status ``running`` until the engine finishes).
+    """
+    trigger = request.trigger_context
+    report_id = str(uuid.uuid4())
+    row = ReportEu(
+        id=report_id,
+        user_id=user_id,
+        subject=request.subject,
+        ticker=trigger.ticker if trigger is not None else request.subject,
+        trigger_kind=trigger_kind,
+        fiscal_date=trigger.report_date if trigger is not None else None,
+        template_id=request.template.template_id,
+        language=request.language.value,
+        length=request.length.value,
+        provider_kind=request.provider_kind,
+        model=request.model,
+        status="running",
+        error_message=None,
+        created_at=datetime.now(UTC),
+        completed_at=None,
+        cover_json=None,
+        reasoning_effort=(
+            request.reasoning_effort.value if request.reasoning_effort is not None else None
+        ),
+    )
+    db.add(row)
+    db.flush()
+    return report_id
+
+
 def build_eu_dispatcher(
     db: DBSession,
     *,
@@ -306,33 +346,9 @@ def start_run_async(
     fake adapter); when omitted the runner builds one from env on first
     generate. ``transports`` overrides the env-resolved EODHD bundle.
     """
-    trigger = request.trigger_context
-    report_id = str(uuid.uuid4())
-    created_at = datetime.now(UTC)
-
-    row = ReportEu(
-        id=report_id,
-        user_id=user_id,
-        subject=request.subject,
-        ticker=trigger.ticker if trigger is not None else request.subject,
-        trigger_kind=trigger_kind,
-        fiscal_date=trigger.report_date if trigger is not None else None,
-        template_id=request.template.template_id,
-        language=request.language.value,
-        length=request.length.value,
-        provider_kind=request.provider_kind,
-        model=request.model,
-        status="running",
-        error_message=None,
-        created_at=created_at,
-        completed_at=None,
-        cover_json=None,
-        reasoning_effort=(
-            request.reasoning_effort.value if request.reasoning_effort is not None else None
-        ),
+    report_id = insert_report_row(
+        db, user_id=user_id, request=request, trigger_kind=trigger_kind
     )
-    db.add(row)
-    db.flush()
 
     if transports is None:
         transports = build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))
@@ -629,6 +645,7 @@ __all__ = [
     "cleanup_orphaned_running_rows",
     "get_report_row",
     "get_run",
+    "insert_report_row",
     "persist_result",
     "start_run_async",
 ]

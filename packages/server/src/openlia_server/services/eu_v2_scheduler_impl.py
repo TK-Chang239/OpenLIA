@@ -22,6 +22,7 @@ from openlia_server.services.eu_v2_dispatch import (
     mark_reported,
     select_due_rows,
 )
+from openlia_server.services.eu_v2_batch_service import dispatch_due_batches
 from openlia_server.services.eu_v2_run_service import build_run_request, start_run_async
 from openlia_server.services.eu_v2_wiring import build_eu_v2_transports
 
@@ -68,8 +69,20 @@ class EuV2DispatcherImpl:
         self._session_factory = session_factory
 
     def dispatch_due(self, *, session: DBSession, now: datetime) -> int:
-        fired = 0
-        for row in select_due_rows(session, now=now):
+        due_rows = select_due_rows(session, now=now)
+        # Batch-eligible rows (user opted in + provider has a batch transport)
+        # are grouped and run through the provider Batch API; the rest take
+        # the existing live (sync) path below.
+        batched = dispatch_due_batches(
+            session=session,
+            session_factory=self._session_factory,
+            now=now,
+            due_rows=due_rows,
+        )
+        fired = len(batched)
+        for row in due_rows:
+            if row.id in batched:
+                continue
             try:
                 request = build_run_request(
                     session,
