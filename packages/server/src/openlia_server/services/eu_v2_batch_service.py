@@ -277,9 +277,7 @@ def mark_orphaned_batch_jobs_failed(*, db: DBSession) -> int:
         job.status = "failed"
         job.updated_at = now
         runs = list(
-            db.execute(
-                select(EuV2BatchRun).where(EuV2BatchRun.batch_job_id == job.id)
-            ).scalars()
+            db.execute(select(EuV2BatchRun).where(EuV2BatchRun.batch_job_id == job.id)).scalars()
         )
         for run in runs:
             if run.status != "active":
@@ -323,9 +321,11 @@ def _fail_run(session_factory: SessionFactory, *, report_id: str, message: str) 
 
 
 def _mark_batch_run(db: DBSession, *, report_id: str, status: str) -> None:
-    run = db.execute(
-        select(EuV2BatchRun).where(EuV2BatchRun.report_id == report_id)
-    ).scalars().first()
+    run = (
+        db.execute(select(EuV2BatchRun).where(EuV2BatchRun.report_id == report_id))
+        .scalars()
+        .first()
+    )
     if run is not None:
         run.status = status
         run.updated_at = datetime.now(UTC)

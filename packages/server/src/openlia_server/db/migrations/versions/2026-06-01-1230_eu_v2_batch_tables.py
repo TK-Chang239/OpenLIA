@@ -41,9 +41,7 @@ def upgrade() -> None:
         sa.Column("custom_id", sa.String(length=64), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False, server_default="active"),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["batch_job_id"], ["eu_v2_batch_job.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["batch_job_id"], ["eu_v2_batch_job.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["report_id"], ["report_eu.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id", name="pk_eu_v2_batch_run"),
     )
