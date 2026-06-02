@@ -9,6 +9,7 @@ Key resolution order:
 Fernet provides authenticated symmetric encryption. The key is a urlsafe
 base64-encoded 32-byte value as produced by `Fernet.generate_key()`.
 """
+
 from __future__ import annotations
 
 import os

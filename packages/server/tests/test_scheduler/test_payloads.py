@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 from _scheduler_fakes import (
     StubEUScanPlanner,
-    StubMBRequestBuilder,
     StubMRAssessmentBuilder,
     StubMRCacheStore,
     StubReportStore,
@@ -47,12 +46,6 @@ def test_mr_assessment_payload_carries_items_schema_and_synthesize() -> None:
     req = payload.synthesize([BatchResult(id="i1", ok=True, data={"score": 1.0}, error=None)])
     assert req.mode == "mr_synthesis"
     assert "synth(i1)" in req.user_input
-
-
-def test_stub_mb_builder_raises() -> None:
-    stub = StubMBRequestBuilder()
-    with pytest.raises(DepartmentPayloadBuilderNotWired):
-        stub.build(session=None, user_id="u_1", schedule_id="s_1")
 
 
 def test_stub_eu_planner_raises() -> None:

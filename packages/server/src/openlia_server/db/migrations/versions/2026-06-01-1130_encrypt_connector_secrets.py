@@ -4,6 +4,7 @@ Revision ID: enc_secrets_0601
 Revises: 1c6b0cda0ed9
 Create Date: 2026-06-01 11:30:00.000000+00:00
 """
+
 from __future__ import annotations
 
 import json
@@ -43,9 +44,7 @@ def upgrade() -> None:
             {"s": token, "id": row_id},
         )
     with op.batch_alter_table("connectors", schema=None) as batch_op:
-        batch_op.alter_column(
-            "secrets", type_=sa.Text(), postgresql_using="secrets::text"
-        )
+        batch_op.alter_column("secrets", type_=sa.Text(), postgresql_using="secrets::text")
 
 
 def downgrade() -> None:
@@ -62,6 +61,4 @@ def downgrade() -> None:
             {"s": plain, "id": row_id},
         )
     with op.batch_alter_table("connectors", schema=None) as batch_op:
-        batch_op.alter_column(
-            "secrets", type_=sa.JSON(), postgresql_using="secrets::json"
-        )
+        batch_op.alter_column("secrets", type_=sa.JSON(), postgresql_using="secrets::json")

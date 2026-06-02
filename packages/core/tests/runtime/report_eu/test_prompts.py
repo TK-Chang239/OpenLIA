@@ -100,9 +100,7 @@ def test_prompt_fallback_when_no_connectors_and_no_tools():
 
 
 def test_prompt_includes_earnings_data_priority_when_tools_available():
-    prompt = build_system_prompt(
-        _req(EnabledConnectors(provider_ids=frozenset({"eodhd"})), None)
-    )
+    prompt = build_system_prompt(_req(EnabledConnectors(provider_ids=frozenset({"eodhd"})), None))
     lowered = prompt.lower()
     assert "earnings call transcript" in lowered
     assert "beat/miss" in lowered

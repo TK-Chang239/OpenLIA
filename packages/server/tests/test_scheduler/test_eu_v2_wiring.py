@@ -6,7 +6,6 @@ import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
-    FakeMBBuilder,
     FakeMRBuilder,
     FakeMRCacheStore,
     FakeReportRunner,
@@ -31,7 +30,6 @@ class _FakeDispatcher:
 
 def _builders():
     return dict(
-        mb_builder=FakeMBBuilder(request=ReportRequest(mode="stock_update", user_input="x")),
         eu_planner=StubEUScanPlanner(),
         mr_builder=FakeMRBuilder(
             items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")

@@ -12,7 +12,6 @@ import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
-    FakeMBBuilder,
     FakeMRBuilder,
     FakeMRCacheStore,
     FakeReportRunner,
@@ -107,7 +106,6 @@ async def test_added_ticker_picked_up_on_next_fire(session_factory) -> None:
             ]
         ),
         batch_runner=FakeBatchRunner(results=[]),
-        mb_builder=FakeMBBuilder(request=ReportRequest(mode="stock_update", user_input="x")),
         eu_planner=planner,
         mr_builder=FakeMRBuilder(
             items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")

@@ -237,9 +237,7 @@ def _install_fake_eodhd_calendar(monkeypatch) -> None:
         def __init__(self, api_key: str) -> None:
             self.api_key = api_key
 
-        def get_upcoming_earnings_data(
-            self, from_date=None, to_date=None, symbols=None
-        ) -> dict:
+        def get_upcoming_earnings_data(self, from_date=None, to_date=None, symbols=None) -> dict:
             return {
                 "type": "Earnings",
                 "description": "Historical and upcoming Earnings",
@@ -266,20 +264,14 @@ def test_watchlist_sync_with_eodhd_populates_schedule(client_eu_v2, monkeypatch)
     monkeypatch.setenv("EODHD_API_KEY", "k")
     _install_fake_eodhd_calendar(monkeypatch)
 
-    assert (
-        client_eu_v2.post(f"{_BASE}/watchlist", json={"ticker": "AAPL"}).status_code
-        == 201
-    )
+    assert client_eu_v2.post(f"{_BASE}/watchlist", json={"ticker": "AAPL"}).status_code == 201
 
     r = client_eu_v2.post(f"{_BASE}/watchlist/sync")
     assert r.status_code == 200
     assert r.json()["synced"] == 1
 
     schedule = client_eu_v2.get(f"{_BASE}/schedule").json()["schedule"]
-    assert any(
-        row["ticker"] == "AAPL" and row["fiscal_date"] == "2026-07-30"
-        for row in schedule
-    )
+    assert any(row["ticker"] == "AAPL" and row["fiscal_date"] == "2026-07-30" for row in schedule)
 
 
 def test_templates_list_has_builtin(client_eu_v2):
