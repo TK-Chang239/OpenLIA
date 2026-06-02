@@ -29,7 +29,11 @@ export type FileSource =
   // EU v2 runs persist sections/charts/citations in the eu_v2_*
   // tables. The viewer adapts the RunDetail to the shared ReportSchema
   // and renders through EUV2ReportRenderer (same pipeline as v3).
-  | { kind: "eu_v2_report"; reportId: string };
+  | { kind: "eu_v2_report"; reportId: string }
+  // Morning Briefing runs persist sections/charts/citations in the
+  // report_mb* tables. The viewer adapts the RunDetail to the shared
+  // ReportSchema and renders through MBReportRenderer (same pipeline as v3).
+  | { kind: "mb_report"; reportId: string };
 
 export interface FileViewerTarget {
   filename: string;
@@ -59,7 +63,11 @@ interface ContextShape {
 
 const FileViewerContext = createContext<ContextShape | null>(null);
 
-export function FileViewerProvider({ children }: { children: React.ReactNode }): JSX.Element {
+export function FileViewerProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
   const [current, setCurrent] = useState<FileViewerTarget | null>(null);
   const lastTriggerRef = useRef<HTMLElement | null>(null);
   const scrollMemoryRef = useRef<Map<string, number>>(new Map());
@@ -68,7 +76,9 @@ export function FileViewerProvider({ children }: { children: React.ReactNode }):
     if (t.trigger) lastTriggerRef.current = t.trigger;
     else if (typeof document !== "undefined") {
       lastTriggerRef.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
     }
     setCurrent(t);
   }, []);
@@ -97,7 +107,11 @@ export function FileViewerProvider({ children }: { children: React.ReactNode }):
     }),
     [current, open, close, rememberScroll],
   );
-  return <FileViewerContext.Provider value={value}>{children}</FileViewerContext.Provider>;
+  return (
+    <FileViewerContext.Provider value={value}>
+      {children}
+    </FileViewerContext.Provider>
+  );
 }
 
 export function useFileViewer(): ContextShape {
@@ -118,9 +132,11 @@ export function kindFromFilename(name: string): FileKind {
   if (ext === "pdf") return "pdf";
   if (ext === "md" || ext === "markdown") return "markdown";
   if (ext === "txt" || ext === "log") return "text";
-  if (["py", "js", "ts", "tsx", "json", "yaml", "yml", "toml"].includes(ext)) return "code";
+  if (["py", "js", "ts", "tsx", "json", "yaml", "yml", "toml"].includes(ext))
+    return "code";
   if (ext === "csv" || ext === "tsv") return "csv";
-  if (["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext)) return "image";
+  if (["png", "jpg", "jpeg", "gif", "svg", "webp"].includes(ext))
+    return "image";
   if (ext === "docx" || ext === "pptx") return "docx";
   return "unknown";
 }

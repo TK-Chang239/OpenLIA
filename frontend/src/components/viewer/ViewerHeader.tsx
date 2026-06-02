@@ -3,7 +3,7 @@ import { ExternalLink, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
-import { euHtmlUrl } from "../../api/reports";
+import { euHtmlUrl, mbHtmlUrl } from "../../api/reports";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { FileDownloadButton } from "../chat/FileDownloadButton";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
@@ -16,7 +16,7 @@ interface Props {
   /** Engine that produced the report — selects the right repo
    *  endpoint. Defaults to "v1" for back-compat with existing v1
    *  callers. */
-  saveEngine?: "v1" | "v2" | "v3" | "eu";
+  saveEngine?: "v1" | "v2" | "v3" | "eu" | "mb";
   initialSaved?: boolean;
   hideSaveToRepoButton?: boolean;
   onClose: () => void;
@@ -40,7 +40,9 @@ export function ViewerHeader({
   return (
     <div className="flex min-h-[56px] flex-shrink-0 items-start justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-4 py-3">
       <div className="flex min-w-0 flex-1 flex-col">
-        <p className="truncate text-[14px] font-medium font-display text-text-primary">{filename}</p>
+        <p className="truncate text-[14px] font-medium font-display text-text-primary">
+          {filename}
+        </p>
         <p className="mt-0.5 truncate ol-label-sm">{metadata}</p>
       </div>
       <div className="ml-2 flex flex-shrink-0 items-center gap-1.5">
@@ -48,7 +50,9 @@ export function ViewerHeader({
           <SaveToRepoButton
             variant="viewer-header"
             reportId={reportId}
-            engine={saveEngine}
+            // MB has no repo-save endpoint; the button is never rendered for
+            // it (reportId is undefined), so "mb" collapses to "v1" here.
+            engine={saveEngine === "mb" ? "v1" : saveEngine}
             initialSaved={initialSaved}
           />
         ) : null}
@@ -70,8 +74,26 @@ export function ViewerHeader({
               Standalone
             </a>
           </>
+        ) : source.kind === "mb_report" ? (
+          <>
+            <ReportDownloadButton reportId={source.reportId} engine="mb" />
+            <a
+              href={mbHtmlUrl(source.reportId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open the printable HTML in a new tab (use the browser's Save As to grab a Word or PDF copy)"
+              className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[12px] text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-secondary"
+            >
+              <ExternalLink size={12} strokeWidth={1.7} />
+              Standalone
+            </a>
+          </>
         ) : (
-          <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
+          <FileDownloadButton
+            variant="viewer-header"
+            url={sourceUrl(source)}
+            filename={filename}
+          />
         )}
         {onRequestDelete ? (
           <button
