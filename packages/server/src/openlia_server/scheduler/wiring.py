@@ -64,10 +64,10 @@ def build_scheduler_service(
 
     executors: dict[JobType, Any] = {
         # MB rework Phase 3: the executor runs the report_mb engine inline
-        # via mb_v2_run_service (its module-default collaborator) and no
-        # longer needs the legacy mb_builder/report_runner/report_store
-        # pipeline. Those params stay on build_scheduler_service for the EU
-        # executor + app wiring, but MB ignores them.
+        # via mb_v2_run_service (its module-default collaborator). The legacy
+        # `mb_builder` param is now dead (no executor consumes it) and is
+        # removed in Phase 6 along with mb_request_builder.py. `report_runner`
+        # / `report_store` stay — the EU scan executor below still uses them.
         JobType.MB_BRIEFING: MBBriefingExecutor(
             session_factory=session_factory,
         ),

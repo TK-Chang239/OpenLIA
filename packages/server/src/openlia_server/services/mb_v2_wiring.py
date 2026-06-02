@@ -128,8 +128,8 @@ def build_mb_transports(api_key: str | None = None) -> MbDataTransports | None:
         # ``COUNTRY:indicator``); the reading is filed back under the
         # original key so the model can cite what it asked for.
         out: dict[str, Any] = {}
-        for key in keys:
-            country, _, indicator = key.partition(":")
+        for macro_key in keys:
+            country, _, indicator = macro_key.partition(":")
             if indicator:
                 country = country.strip().upper() or _DEFAULT_MACRO_COUNTRY
             else:
@@ -138,7 +138,7 @@ def build_mb_transports(api_key: str | None = None) -> MbDataTransports | None:
             rows = client.get_macro_indicators_data(
                 country=country, indicator=indicator.strip() or None
             )
-            out[key] = list(rows) if rows else []
+            out[macro_key] = list(rows) if rows else []
         return out
 
     return MbDataTransports(

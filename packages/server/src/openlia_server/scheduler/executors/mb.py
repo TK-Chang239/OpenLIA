@@ -13,9 +13,10 @@ emits one ``REPORT_READY`` notification.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from openlia.llm.runtime.cancellation import CancellationToken
+from openlia.llm.runtime.report_mb import CancelToken as MbCancelToken
 
 from openlia_server.db.models.scheduler import MbSchedule
 from openlia_server.scheduler.executors.base import (
@@ -31,6 +32,31 @@ from openlia_server.services import mb_v2_run_service
 DEPARTMENT = "morning_briefing"
 
 
+class _CancelBridge(MbCancelToken):
+    """Bridge the scheduler's ``CancellationToken`` to the engine's polled
+    ``CancelToken``.
+
+    The two are different classes from different layers — the scheduler
+    job framework hands the executor an asyncio-``Event``-backed
+    ``CancellationToken``, while the ``report_mb`` engine polls a plain
+    boolean ``CancelToken``. Without this bridge a graceful-shutdown
+    cancel would mark the job cancelled while the LLM generation ran on to
+    completion (the gap EU/MR avoid by forwarding their token).
+    """
+
+    def __init__(self, source: CancellationToken) -> None:
+        super().__init__()
+        self._source = source
+
+    @property
+    def cancelled(self) -> bool:
+        # The engine polls ``cancel_token.cancelled`` as a property (no
+        # call), so this MUST stay a property — a plain method would read
+        # as an always-truthy bound method and cancel every run.
+        # ``CancellationToken.is_cancelled`` is also a property.
+        return self._source.is_cancelled
+
+
 class MBBriefingExecutor(BaseExecutor):
     job_type: ClassVar[JobType] = JobType.MB_BRIEFING
 
@@ -38,7 +64,7 @@ class MBBriefingExecutor(BaseExecutor):
         self,
         *,
         session_factory: SessionFactory,
-        run_service=mb_v2_run_service,
+        run_service: Any = mb_v2_run_service,
         sleep: AsyncSleep | None = None,
     ) -> None:
         super().__init__(session_factory=session_factory, sleep=sleep)
@@ -89,6 +115,7 @@ class MBBriefingExecutor(BaseExecutor):
                 trigger_kind="scheduled",
                 schedule_id=schedule_id,
                 instructions_id=schedule.instructions_id,
+                cancel_token=_CancelBridge(cancel_token) if cancel_token is not None else None,
             )
 
             schedule.last_run_at = datetime.now(UTC)
