@@ -439,6 +439,10 @@
     "viewer_next_page": "Next page",
     "viewer_tab_preview": "Preview",
     "viewer_tab_raw": "Raw",
+    "viewer_delete_title": "Delete report?",
+    "viewer_delete_description": "This permanently deletes the report. This action cannot be undone.",
+    "viewer_delete_confirm": "Delete",
+    "viewer_delete_aria": "Delete report",
     "pdf_page_of": "Page {{page}} of {{total}}",
     "thinking": "Thinking…",
     "load_failed": "Failed to load messages",
@@ -834,6 +838,7 @@
       "today": "Today",
       "open_update": "Open update",
       "generating": "Generating...",
+      "remove_aria": "Remove report",
       "gen": {
         "badge": "Generating Update",
         "title_fallback": "{{ticker}} — Earnings Update",

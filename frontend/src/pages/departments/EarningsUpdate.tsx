@@ -12,6 +12,7 @@ import {
   type RunSummary,
   syncWatchlist,
 } from "../../api/earnings-update";
+import { ConfirmDialog } from "../../components/primitives/ConfirmDialog";
 import { CoverageDrawer } from "../../components/earnings-update/CoverageDrawer";
 import { EUCabinetView } from "../../components/earnings-update/EUCabinetView";
 import { EuRefreshButton } from "../../components/earnings-update/EuRefreshButton";
@@ -86,11 +87,20 @@ export default function EarningsUpdate() {
   const [onDemandOpen, setOnDemandOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [live, setLive] = useState<LiveCard | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
   const [view, setView] = useState<EuView>("stream");
   const [search, setSearch] = useState("");
 
   const fv = useFileViewer();
   const stream = useEuRunStream(live?.reportId ?? null);
+
+  const removeReport = useCallback(
+    async (reportId: string) => {
+      await deleteRun(reportId);
+      await refreshRuns();
+    },
+    [refreshRuns],
+  );
 
   const openReport = useCallback(
     (reportId: string) => {
@@ -100,17 +110,10 @@ export default function EarningsUpdate() {
         kind: "report",
         metadata: match ? `EU v2 · ${match.ticker}` : "Earnings Update",
         source: { kind: "eu_v2_report", reportId },
+        onDelete: () => removeReport(reportId),
       });
     },
-    [fv, runs],
-  );
-
-  const removeReport = useCallback(
-    async (reportId: string) => {
-      await deleteRun(reportId);
-      await refreshRuns();
-    },
-    [refreshRuns],
+    [fv, runs, removeReport],
   );
 
   const retryFetch = useCallback(() => {
@@ -365,6 +368,7 @@ export default function EarningsUpdate() {
                               reportId={live.reportId}
                               highlights={findRun(runs, live.reportId)?.highlights ?? null}
                               onOpen={openReport}
+                              onRemove={(id) => setPendingRemoval(id)}
                             />
                           ) : (
                             <EuGeneratingCard ticker={live.ticker} stream={stream} />
@@ -381,6 +385,7 @@ export default function EarningsUpdate() {
                             reportId={heroToday.report_id}
                             highlights={heroToday.highlights ?? null}
                             onOpen={openReport}
+                            onRemove={(id) => setPendingRemoval(id)}
                           />
                         </div>
                       ) : null}
@@ -396,7 +401,12 @@ export default function EarningsUpdate() {
                       {restToday.length > 0 ? (
                         <div className="flex flex-col gap-2">
                           {restToday.map((r) => (
-                            <EuReportRow key={r.report_id} report={r} onOpen={openReport} />
+                            <EuReportRow
+                              key={r.report_id}
+                              report={r}
+                              onOpen={openReport}
+                              onRemove={(id) => setPendingRemoval(id)}
+                            />
                           ))}
                         </div>
                       ) : null}
@@ -442,7 +452,12 @@ export default function EarningsUpdate() {
                       ) : (
                         <div className="flex flex-col gap-2">
                           {groups.earlierThisWeek.map((r) => (
-                            <EuReportRow key={r.report_id} report={r} onOpen={openReport} />
+                            <EuReportRow
+                              key={r.report_id}
+                              report={r}
+                              onOpen={openReport}
+                              onRemove={(id) => setPendingRemoval(id)}
+                            />
                           ))}
                         </div>
                       )}
@@ -509,6 +524,22 @@ export default function EarningsUpdate() {
           onSave={saveSettings}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title={t("earnings.cabinet.remove_title")}
+        description={t("earnings.cabinet.remove_description")}
+        confirmLabel={t("earnings.cabinet.remove_confirm")}
+        destructive
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          const id = pendingRemoval;
+          setPendingRemoval(null);
+          if (!id) return;
+          if (id === live?.reportId) setLive(null);
+          void removeReport(id);
+        }}
+      />
     </div>
   );
 }

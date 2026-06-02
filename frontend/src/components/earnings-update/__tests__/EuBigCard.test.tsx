@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { CardHighlights } from "../../../api/earnings-update";
 import { EuBigCard } from "../feed/EuBigCard";
@@ -49,5 +49,45 @@ describe("EuBigCard", () => {
     expect(screen.getByText("Apple Inc. — Earnings Update")).toBeTruthy();
     expect(screen.queryByTestId("eu-metric-chip")).toBeNull();
     expect(screen.queryByTestId("eu-rating-pill")).toBeNull();
+  });
+
+  it("renders a delete control that calls onRemove on a completed card", () => {
+    const onRemove = vi.fn();
+    render(
+      <EuBigCard
+        ticker="AAPL"
+        title="Apple Inc. — Earnings Update"
+        status="complete"
+        reportId="r1"
+        onRemove={onRemove}
+        onOpen={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove report/i }));
+    expect(onRemove).toHaveBeenCalledWith("r1");
+  });
+
+  it("renders no delete control when streaming or when onRemove is absent", () => {
+    const { rerender } = render(
+      <EuBigCard
+        ticker="AAPL"
+        title="t"
+        status="streaming"
+        reportId="r1"
+        onRemove={() => {}}
+        onOpen={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /remove report/i })).toBeNull();
+    rerender(
+      <EuBigCard
+        ticker="AAPL"
+        title="t"
+        status="complete"
+        reportId="r1"
+        onOpen={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /remove report/i })).toBeNull();
   });
 });
