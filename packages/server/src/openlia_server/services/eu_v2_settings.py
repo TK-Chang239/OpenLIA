@@ -31,6 +31,7 @@ class EuSettingsDTO:
     enabled_provider_ids: frozenset[str]
     web_search_enabled: bool
     instructions_id: str | None
+    batch_enabled: bool
 
 
 def _row_to_dto(row: EuV2Settings) -> EuSettingsDTO:
@@ -45,6 +46,7 @@ def _row_to_dto(row: EuV2Settings) -> EuSettingsDTO:
         enabled_provider_ids=frozenset(row.enabled_provider_ids or []),
         web_search_enabled=row.web_search_enabled,
         instructions_id=row.instructions_id,
+        batch_enabled=row.batch_enabled,
     )
 
 
@@ -63,6 +65,7 @@ def get_settings(db: Session, *, user_id: str) -> EuSettingsDTO:
             enabled_provider_ids=frozenset({"eodhd"}),
             web_search_enabled=False,
             instructions_id=None,
+            batch_enabled=False,
         )
     return _row_to_dto(row)
 
@@ -80,6 +83,7 @@ def update_settings(
     enabled_provider_ids: frozenset[str] | list[str],
     web_search_enabled: bool,
     instructions_id: str | None = None,
+    batch_enabled: bool = False,
 ) -> EuSettingsDTO:
     """Upsert the user's settings row and return the resulting DTO.
 
@@ -109,6 +113,7 @@ def update_settings(
             enabled_provider_ids=provider_ids_sorted,
             web_search_enabled=web_search_enabled,
             instructions_id=instructions_id,
+            batch_enabled=batch_enabled,
             created_at=now,
             updated_at=now,
         )
@@ -123,6 +128,7 @@ def update_settings(
         row.enabled_provider_ids = provider_ids_sorted
         row.web_search_enabled = web_search_enabled
         row.instructions_id = instructions_id
+        row.batch_enabled = batch_enabled
         row.updated_at = now
 
     db.commit()

@@ -375,6 +375,64 @@ def _parse_responses_output(
     return text_parts, tool_calls, tuple(server_tool_calls), tuple(citations), tuple(failures)
 
 
+def build_responses_payload(model: str, request: LLMRequest) -> dict:
+    """Render an ``LLMRequest`` into a /v1/responses request body.
+
+    Single source of truth for the wire shape so the live adapter and the
+    batch transport build byte-identical bodies. Does NOT set ``stream``;
+    the streaming caller adds it.
+    """
+    payload: dict = {
+        "model": model,
+        "input": _to_responses_input(list(request.messages)),
+    }
+    if request.system:
+        payload["instructions"] = strip_cache_breakpoint(request.system)
+    if request.max_tokens:
+        payload["max_output_tokens"] = request.max_tokens
+    tools = _build_responses_tools(request)
+    if tools is not None:
+        payload["tools"] = tools
+    if request.tool_choice is not None:
+        payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
+    # Responses API takes reasoning as a nested object. The model silently
+    # ignores it when not a reasoning model, but only when absent — sending
+    # `{"effort": "high"}` against gpt-4o returns 400. Caller guards by model.
+    if request.reasoning_effort is not None:
+        payload["reasoning"] = {"effort": request.reasoning_effort.value}
+    return payload
+
+
+def parse_responses_body(body: dict) -> LLMResponse:
+    """Map a /v1/responses JSON body into an ``LLMResponse``.
+
+    Single source of truth shared by the live adapter and the batch
+    transport (which reads the same body shape from the batch output file).
+    """
+    (
+        text_parts,
+        tool_calls,
+        server_tool_calls,
+        citations,
+        failures,
+    ) = _parse_responses_output(body.get("output", []))
+    usage = body.get("usage") or {}
+    cached_tokens = int((usage.get("input_tokens_details") or {}).get("cached_tokens", 0))
+    reasoning_tokens = int((usage.get("output_tokens_details") or {}).get("reasoning_tokens", 0))
+    return LLMResponse(
+        text="".join(text_parts),
+        finish_reason=body.get("status", "completed"),
+        input_tokens=int(usage.get("input_tokens", 0)),
+        output_tokens=int(usage.get("output_tokens", 0)),
+        cached_input_tokens=cached_tokens,
+        reasoning_output_tokens=reasoning_tokens,
+        tool_calls=tool_calls,
+        citations=citations,
+        server_tool_calls=server_tool_calls,
+        server_tool_failures=failures,
+    )
+
+
 class OpenAIResponsesAdapter(LLMProvider):
     kind = "openai_responses"
 
@@ -417,32 +475,13 @@ class OpenAIResponsesAdapter(LLMProvider):
         return await with_retries(_call)
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
-        payload: dict = {
-            "model": self.model,
-            "input": _to_responses_input(list(request.messages)),
-        }
-        if request.system:
-            payload["instructions"] = strip_cache_breakpoint(request.system)
-        if request.max_tokens:
-            payload["max_output_tokens"] = request.max_tokens
-        tools = _build_responses_tools(request)
-        if tools is not None:
-            payload["tools"] = tools
+        payload = build_responses_payload(self.model, request)
         log.info(
             "openai_responses outbound: model=%s tool_types=%s native_tools=%s",
             self.model,
-            [t.get("type") for t in (tools or [])],
+            [t.get("type") for t in (payload.get("tools") or [])],
             list(request.native_tools),
         )
-        if request.tool_choice is not None:
-            payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
-        # Responses API takes reasoning as a nested object. The model
-        # silently ignores it when not a reasoning model, but only when
-        # absent — sending `{"effort": "high"}` against gpt-4o returns
-        # 400. Caller is responsible for guarding by model when needed
-        # (v2_3_wiring scopes this to PLAN + SYNTHESIZE on gpt-5.4).
-        if request.reasoning_effort is not None:
-            payload["reasoning"] = {"effort": request.reasoning_effort.value}
 
         async def _post() -> dict:
             async with make_client(base_url=self._base_url, headers=self._headers()) as client:
@@ -459,31 +498,7 @@ class OpenAIResponsesAdapter(LLMProvider):
                 return resp.json()
 
         body = await with_retries(_post)
-
-        (
-            text_parts,
-            tool_calls,
-            server_tool_calls,
-            citations,
-            failures,
-        ) = _parse_responses_output(body.get("output", []))
-        usage = body.get("usage") or {}
-        cached_tokens = int((usage.get("input_tokens_details") or {}).get("cached_tokens", 0))
-        reasoning_tokens = int(
-            (usage.get("output_tokens_details") or {}).get("reasoning_tokens", 0)
-        )
-        return LLMResponse(
-            text="".join(text_parts),
-            finish_reason=body.get("status", "completed"),
-            input_tokens=int(usage.get("input_tokens", 0)),
-            output_tokens=int(usage.get("output_tokens", 0)),
-            cached_input_tokens=cached_tokens,
-            reasoning_output_tokens=reasoning_tokens,
-            tool_calls=tool_calls,
-            citations=citations,
-            server_tool_calls=server_tool_calls,
-            server_tool_failures=failures,
-        )
+        return parse_responses_body(body)
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
         """Real Responses-API SSE parsing.
@@ -497,28 +512,14 @@ class OpenAIResponsesAdapter(LLMProvider):
         Unknown event types are ignored, keeping the adapter forward-
         compatible with future SSE additions from OpenAI.
         """
-        payload: dict = {
-            "model": self.model,
-            "input": _to_responses_input(list(request.messages)),
-            "stream": True,
-        }
-        if request.system:
-            payload["instructions"] = strip_cache_breakpoint(request.system)
-        if request.max_tokens:
-            payload["max_output_tokens"] = request.max_tokens
-        tools = _build_responses_tools(request)
-        if tools is not None:
-            payload["tools"] = tools
+        payload = build_responses_payload(self.model, request)
+        payload["stream"] = True
         log.info(
             "openai_responses outbound (stream): model=%s tool_types=%s native_tools=%s",
             self.model,
-            [t.get("type") for t in (tools or [])],
+            [t.get("type") for t in (payload.get("tools") or [])],
             list(request.native_tools),
         )
-        if request.tool_choice is not None:
-            payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
-        if request.reasoning_effort is not None:
-            payload["reasoning"] = {"effort": request.reasoning_effort.value}
 
         async with make_client(base_url=self._base_url, headers=self._headers()) as client:
             try:

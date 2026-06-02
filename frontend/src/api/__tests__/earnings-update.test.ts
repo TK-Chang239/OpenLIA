@@ -67,6 +67,7 @@ describe("earnings-update v2 client", () => {
       enabled_provider_ids: ["eodhd"],
       web_search_enabled: false,
       instructions_id: null,
+      batch_enabled: false,
     };
     const spy = mockJson(settings);
     await updateSettings(settings);
@@ -87,6 +88,7 @@ describe("earnings-update v2 client", () => {
       enabled_provider_ids: ["eodhd"],
       web_search_enabled: false,
       instructions_id: null,
+      batch_enabled: false,
     });
     await fetchSettings();
     expect(spy).toHaveBeenCalledWith(
