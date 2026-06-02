@@ -9,7 +9,6 @@ from openlia.llm.runtime.report_eu.run_state import EuRunState
 from openlia.llm.runtime.report_eu.schemas import EnabledConnectors, RunRequest
 from openlia.llm.runtime.report_v2_3.templates.spec import SectionSpec, TemplateSpec
 from openlia.llm.types import LLMResponse, ToolCall
-
 from openlia_server.db.models.report_eu import (
     EuV2BatchJob,
     EuV2BatchRun,
