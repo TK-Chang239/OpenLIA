@@ -1,12 +1,12 @@
-"""EU v2 tool catalog.
+"""Morning Briefing tool catalog.
 
 Each module here exposes one or more ``ResearchTool`` factories.
-``registry.py`` assembles the per-request catalog the runner
-dispatches against. EU v2 has no tool discovery — the catalog is a
-fixed, connector-gated set.
+``registry.py`` assembles the per-request catalog the runner dispatches
+against. The engine has no tool discovery — the catalog is a fixed,
+connector-gated set of market-wide tools plus the output tools.
 """
 
-from .data_tools import build_data_tools, build_earnings_calendar_tool
+from .data_tools import build_data_tools
 from .output_tools import build_output_tools
 from .registry import ToolCatalog, build_catalog
 from .web_search import WEB_SEARCH_TOOL_NAME, build_web_search_descriptor
@@ -16,7 +16,6 @@ __all__ = [
     "ToolCatalog",
     "build_catalog",
     "build_data_tools",
-    "build_earnings_calendar_tool",
     "build_output_tools",
     "build_web_search_descriptor",
 ]
