@@ -1,364 +1,477 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { CalendarClock, FileText, Library, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import {
-  Archive,
-  CalendarClock,
-  ChevronLeft,
-  Printer,
-  Settings as SettingsIcon,
-  Zap,
-} from "lucide-react";
-
-import { type RecentReport } from "../../api/morning-briefing";
-import { fetchReport, type ReportSchema } from "../../api/reports";
-import { ReportDownloadButton } from "../../components/report/ReportDownloadButton";
-import { MBArchiveView } from "../../components/morning-briefing/MBArchiveView";
-import { MBRunNowView } from "../../components/morning-briefing/MBRunNowView";
-import { MBScheduleView } from "../../components/morning-briefing/MBScheduleView";
-import { MBSettingsView } from "../../components/morning-briefing/MBSettingsView";
-import { ReportRenderer } from "../../components/report/ReportRenderer";
-import { useMbConfig } from "../../hooks/useMbConfig";
-import { useMbReports } from "../../hooks/useMbReports";
+  deleteMbRun,
+  type MbRunSummary,
+  type MbSchedule,
+} from "../../api/morning-briefing";
+import { MbBigCard } from "../../components/morning-briefing/feed/MbBigCard";
+import { MbGeneratingCard } from "../../components/morning-briefing/feed/MbGeneratingCard";
+import {
+  MbFeedSection,
+  MbSectionEmpty,
+} from "../../components/morning-briefing/feed/MbFeedSection";
+import { MbReportRow } from "../../components/morning-briefing/feed/MbReportRow";
+import {
+  groupReports,
+  searchReports,
+} from "../../components/morning-briefing/feed/mbFeedHelpers";
+import { MbCabinetView } from "../../components/morning-briefing/MbCabinetView";
+import { MbRunNowModal } from "../../components/morning-briefing/MbRunNowModal";
+import { MbSchedulesView } from "../../components/morning-briefing/MbSchedulesView";
+import { ScheduleEditorModal } from "../../components/morning-briefing/ScheduleEditorModal";
+import { ConfirmDialog } from "../../components/primitives/ConfirmDialog";
+import { useFileViewer } from "../../components/viewer/FileViewerContext";
+import { useMbInstructions } from "../../hooks/useMbInstructions";
+import { useMbRunStream } from "../../hooks/useMbRunStream";
+import { useMbRuns } from "../../hooks/useMbRuns";
 import { useMbSchedules } from "../../hooks/useMbSchedules";
+import { useMbTemplates } from "../../hooks/useMbTemplates";
 
-type Tab = "archive" | "run" | "schedule" | "settings";
+function findRun(
+  runs: MbRunSummary[],
+  reportId: string,
+): MbRunSummary | undefined {
+  return runs.find((r) => r.report_id === reportId);
+}
+
+function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div
+      data-testid="mb-skeleton"
+      className={`bg-[--color-surface-hover] rounded-[--radius-md] animate-pulse ${className}`}
+    />
+  );
+}
 
 export default function MorningBriefing() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { config, save: saveConfig, loading: configLoading } = useMbConfig();
+  const {
+    runs,
+    refresh: refreshRuns,
+    loading: runsLoading,
+    error: runsError,
+  } = useMbRuns();
   const {
     schedules,
-    loading: schedulesLoading,
     create: createSchedule,
     update: updateSchedule,
     remove: removeSchedule,
   } = useMbSchedules();
-  const { reports, loading: reportsLoading, refresh } = useMbReports();
-  const [tab, setTab] = useState<Tab>("archive");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [viewing, setViewing] = useState<RecentReport | null>(null);
-  const [viewingSchema, setViewingSchema] = useState<ReportSchema | null>(null);
-  const [viewingError, setViewingError] = useState<string | null>(null);
+  const {
+    templates,
+    create: createTemplate,
+    upload: uploadTemplate,
+    remove: removeTemplate,
+  } = useMbTemplates();
+  const {
+    instructions,
+    upload: uploadInstructions,
+    remove: removeInstructions,
+  } = useMbInstructions();
 
-  const onOpen = useCallback((report: RecentReport) => {
-    setViewing(report);
-    setViewingSchema(null);
-    setViewingError(null);
-  }, []);
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [cabinetOpen, setCabinetOpen] = useState(false);
+  const [runNowOpen, setRunNowOpen] = useState(false);
+  const [editorSchedule, setEditorSchedule] = useState<MbSchedule | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [liveReportId, setLiveReportId] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-  const closeViewer = useCallback(() => {
-    setViewing(null);
-    setViewingSchema(null);
-    setViewingError(null);
-  }, []);
+  const fv = useFileViewer();
+  const stream = useMbRunStream(liveReportId);
+
+  const removeReport = useCallback(
+    async (reportId: string) => {
+      await deleteMbRun(reportId);
+      await refreshRuns();
+    },
+    [refreshRuns],
+  );
+
+  const openReport = useCallback(
+    (reportId: string) => {
+      const match = findRun(runs, reportId);
+      fv.open({
+        filename: match?.subject ?? t("morning_briefing.viewer_metadata"),
+        kind: "report",
+        metadata: t("morning_briefing.viewer_metadata"),
+        source: { kind: "mb_report", reportId },
+        hideSaveToRepoButton: true,
+        onDelete: () => removeReport(reportId),
+      });
+    },
+    [fv, runs, removeReport, t],
+  );
 
   useEffect(() => {
-    if (!viewing) return;
-    let cancelled = false;
-    fetchReport(viewing.id)
-      .then((s) => {
-        if (!cancelled) setViewingSchema(s);
+    if (stream.status === "completed") {
+      void refreshRuns();
+    } else if (stream.status === "cancelled" || stream.status === "failed") {
+      setLiveReportId(null);
+      void refreshRuns();
+    }
+  }, [stream.status, refreshRuns]);
+
+  const filtered = useMemo(() => searchReports(runs, search), [runs, search]);
+  const groups = useMemo(() => groupReports(filtered), [filtered]);
+  const searching = search.trim().length > 0;
+
+  const todayReports = useMemo(
+    () =>
+      liveReportId
+        ? groups.today.filter((r) => r.report_id !== liveReportId)
+        : groups.today,
+    [groups.today, liveReportId],
+  );
+
+  const heroToday =
+    !liveReportId && todayReports.length > 0 ? todayReports[0] : null;
+  const restToday = heroToday ? todayReports.slice(1) : todayReports;
+
+  const liveCount = useMemo(() => {
+    const running = runs.filter(
+      (r) => r.status === "running" && r.report_id !== liveReportId,
+    ).length;
+    return running + (liveReportId ? 1 : 0);
+  }, [runs, liveReportId]);
+
+  const hasError = Boolean(runsError);
+  const initialLoading = runsLoading && runs.length === 0;
+  const allEmpty =
+    !initialLoading && !hasError && runs.length === 0 && !liveReportId;
+
+  function formatHeroStamp(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const date = d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const time = d
+      .toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
       })
-      .catch((err: unknown) => {
-        if (!cancelled)
-          setViewingError(
-            err instanceof Error ? err.message : t("morning_briefing.viewer_failed"),
-          );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [viewing, t]);
+      .replace(/^0/, "");
+    return `${date} · ${time} ET`;
+  }
 
-  const onReportSaved = useCallback(
-    (_reportId: string) => {
-      setErrorMsg(null);
-      void refresh();
-    },
-    [refresh],
-  );
+  const liveTitle =
+    stream.status === "completed"
+      ? t("morning_briefing.report_ready")
+      : t("morning_briefing.generating_report");
 
-  const openReportById = useCallback(
-    async (reportId: string) => {
-      const match = reports.find((r) => r.id === reportId);
-      if (match) {
-        onOpen(match);
-        return;
-      }
-      // Newly saved report — refresh the list, then try opening from the fresh list.
-      await refresh();
-      onOpen({
-        id: reportId,
-        title: t("nav.morning_briefing"),
-        report_type: "morning_briefing",
-        created_at: new Date().toISOString(),
-      });
-    },
-    [reports, refresh, onOpen, t],
-  );
+  const openEditor = useCallback((schedule: MbSchedule | null) => {
+    setEditorSchedule(schedule);
+    setEditorOpen(true);
+  }, []);
 
-  const askInSecretary = useCallback(() => {
-    if (!viewing) return;
-    navigate(`/secretary?attached_report=${encodeURIComponent(viewing.id)}`);
-  }, [navigate, viewing]);
-
-  const archiveCount = useMemo(() => reports.length, [reports.length]);
-
-  if (viewing) {
-    return (
-      <div
-        className="flex flex-col h-full animate-mb-report-enter"
-        data-testid="mb-viewer"
-      >
-        <header
-          className="h-[52px] flex items-center gap-2.5 px-6 flex-shrink-0 border-b sticky top-0 bg-[--color-bg-base] z-10 animate-mb-report-header-enter"
-          style={{ borderColor: "var(--color-border-subtle)" }}
-        >
-          <button
-            type="button"
-            onClick={closeViewer}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border bg-transparent text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]"
-            style={{ borderColor: "var(--color-border-secondary)" }}
-          >
-            <ChevronLeft size={14} />
-            {t("morning_briefing.close")}
-          </button>
-          <span
-            className="ml-3 font-mono text-[10px] tracking-[0.1em] uppercase truncate"
-            style={{ color: "var(--color-text-tertiary)" }}
-          >
-            {t("morning_briefing.report_label")} ·{" "}
-            <strong className="text-[--color-text-primary] font-medium">
-              {viewing.title}
-            </strong>{" "}
-            · {new Date(viewing.created_at).toLocaleString()}
-          </span>
-          <div className="flex-1" />
-          <span data-testid="mb-viewer-download">
-            <ReportDownloadButton reportId={viewing.id} variant="primary" />
-          </span>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border bg-transparent text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]"
-            style={{ borderColor: "var(--color-border-secondary)" }}
-          >
-            <Printer size={13} />
-            {t("morning_briefing.print")}
-          </button>
-          <button
-            type="button"
-            onClick={askInSecretary}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border bg-transparent text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]"
-            style={{ borderColor: "var(--color-border-secondary)" }}
-            data-testid="mb-ask-in-secretary"
-          >
-            {t("morning_briefing.ask_in_secretary")}
-          </button>
-        </header>
-        <div className="flex-1 overflow-y-auto animate-mb-report-body-enter">
-          {viewingError ? (
-            <div
-              key="err"
-              className="p-6 text-sm text-[--color-feedback-error] animate-mb-report-content-enter"
-            >
-              {viewingError}
-            </div>
-          ) : viewingSchema ? (
-            <div key="ok" className="animate-mb-report-content-enter">
-              <ReportRenderer schema={viewingSchema} />
-            </div>
-          ) : (
-            <div
-              key="load"
-              className="p-6 text-sm text-[--color-text-tertiary] animate-mb-report-content-enter"
-            >
-              {t("morning_briefing.loading_briefing")}
-            </div>
-          )}
-        </div>
-      </div>
-    );
+  async function handleSaveSchedule(
+    payload: Parameters<typeof createSchedule>[0],
+  ): Promise<void> {
+    if (editorSchedule) {
+      await updateSchedule(editorSchedule.id, payload);
+    } else {
+      await createSchedule(payload);
+    }
   }
 
   return (
     <div className="flex flex-col h-full">
-      <header
-        className="h-14 flex items-center gap-3.5 px-6 flex-shrink-0 border-b"
-        style={{ borderColor: "var(--color-border-subtle)" }}
-      >
+      <header className="h-[52px] flex items-center gap-3 px-6 flex-shrink-0 border-b border-[--color-border-subtle]">
         <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
           {t("morning_briefing.title")}
         </h1>
-        <span
-          className="ml-3.5 pl-3.5 font-mono text-[10px] tracking-[0.1em] uppercase border-l"
-          style={{
-            borderColor: "var(--color-border-subtle)",
-            color: "var(--color-text-tertiary)",
-          }}
-        >
-          {t("morning_briefing.department_label")} ·{" "}
-          <strong
-            className="font-medium"
-            style={{ color: "var(--color-feedback-success)" }}
-          >
-            {t("morning_briefing.status_active")}
-          </strong>
-        </span>
         <div className="flex-1" />
+        {liveCount > 0 ? (
+          <span
+            data-testid="mb-live-pill"
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[--color-accent-subtle] font-mono text-[10px] tracking-[0.08em] uppercase text-[--color-feedback-success]"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] animate-live-pulse" />
+            {t("morning_briefing.live_pill", { count: liveCount })}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setSchedulesOpen(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal] text-[12.5px]"
+        >
+          <CalendarClock size={13} /> {t("morning_briefing.schedules_button")}
+          <span className="font-mono text-[10px] text-[--color-text-tertiary]">
+            {schedules.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setCabinetOpen(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal] text-[12.5px]"
+        >
+          <Library size={13} /> {t("morning_briefing.library_button")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setRunNowOpen(true)}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] hover:bg-[--color-accent-hover] transition-colors duration-[--duration-normal] text-[12.5px] font-medium"
+        >
+          <FileText size={13} /> {t("morning_briefing.run_now")}
+        </button>
       </header>
 
-      <nav
-        className="h-11 flex items-stretch px-6 flex-shrink-0 border-b gap-1"
-        style={{ borderColor: "var(--color-border-subtle)" }}
-      >
-        <TabButton
-          active={tab === "archive"}
-          onClick={() => setTab("archive")}
-          icon={<Archive size={14} />}
-          label={t("morning_briefing.tab_archive")}
-          badge={archiveCount}
-        />
-        <TabButton
-          active={tab === "schedule"}
-          onClick={() => setTab("schedule")}
-          icon={<CalendarClock size={14} />}
-          label={t("morning_briefing.tab_schedule")}
-        />
-        <TabButton
-          active={tab === "settings"}
-          onClick={() => setTab("settings")}
-          icon={<SettingsIcon size={14} />}
-          label={t("morning_briefing.tab_settings")}
-        />
-        <div className="flex-1" aria-hidden="true" />
-        <TabButton
-          active={tab === "run"}
-          onClick={() => setTab("run")}
-          icon={<Zap size={14} />}
-          label={t("morning_briefing.run_now")}
-        />
-      </nav>
-
-      {errorMsg && (
-        <div
-          className="mx-6 mt-3 rounded-md border p-3 text-sm"
-          style={{
-            borderColor: "var(--color-feedback-error)",
-            color: "var(--color-feedback-error)",
-            background: "var(--color-bg-base)",
-          }}
-        >
-          {errorMsg}
-        </div>
-      )}
-
       <div className="flex-1 overflow-y-auto">
-        <div key={tab} className="animate-mb-tab-enter">
-          {tab === "archive" ? (
-            <MBArchiveView
-              reports={reports}
-              loading={reportsLoading}
-              schedules={schedules}
-              onOpen={onOpen}
-              onGoToSettings={() => setTab("settings")}
-            />
-          ) : tab === "run" ? (
-            configLoading || !config ? (
-              <div className="text-sm text-[--color-text-tertiary] p-8">
-                {t("morning_briefing.loading")}
-              </div>
-            ) : (
-              <MBRunNowView
-                baseConfig={config}
-                onError={setErrorMsg}
-                onReportSaved={onReportSaved}
-                onOpenReport={(id) => void openReportById(id)}
-              />
-            )
-          ) : tab === "schedule" ? (
-            <MBScheduleView
-              schedules={schedules}
-              loading={schedulesLoading}
-              onCreateSchedule={createSchedule}
-              onUpdateSchedule={updateSchedule}
-              onRemoveSchedule={removeSchedule}
-            />
-          ) : configLoading || !config ? (
-            <div className="text-sm text-[--color-text-tertiary] p-8">
-              {t("morning_briefing.loading_settings")}
+        <div className="max-w-[1200px] mx-auto px-8 pt-7 pb-16">
+          {hasError ? (
+            <div
+              role="alert"
+              className="mb-4 flex items-center justify-between gap-4 border border-[--color-feedback-error] rounded-[--radius-md] px-4 py-2 text-sm text-[--color-feedback-error]"
+            >
+              <span>{t("morning_briefing.load_failed")}</span>
+              <button
+                type="button"
+                onClick={() => void refreshRuns()}
+                className="text-sm font-medium underline"
+              >
+                {t("morning_briefing.retry")}
+              </button>
+            </div>
+          ) : null}
+
+          {initialLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-[140px]" />
+              <Skeleton className="h-12" />
+              <Skeleton className="h-20" />
+              <Skeleton className="h-20" />
+            </div>
+          ) : allEmpty ? (
+            <div
+              data-testid="mb-empty-page"
+              className="flex flex-col items-center justify-center text-center py-24"
+            >
+              <h2 className="text-[20px] font-semibold text-[--color-text-primary] mb-2">
+                {t("morning_briefing.empty_title")}
+              </h2>
+              <p className="text-[14px] text-[--color-text-secondary] max-w-[420px] mb-6 leading-[1.6]">
+                {t("morning_briefing.empty_sub")}
+              </p>
+              <button
+                type="button"
+                onClick={() => setCabinetOpen(true)}
+                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover]"
+              >
+                <Library size={14} /> {t("morning_briefing.open_library")}
+              </button>
             </div>
           ) : (
-            <MBSettingsView
-              config={config}
-              onSaveConfig={saveConfig}
-              onError={setErrorMsg}
-            />
+            <>
+              <div
+                className="flex items-center gap-2 flex-wrap mb-[22px]"
+                style={{ animationDelay: "80ms" }}
+              >
+                <div className="flex-1" />
+                <div className="inline-flex items-center gap-2 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-[--color-bg-elevated] min-w-[220px]">
+                  <Search size={13} className="text-[--color-text-tertiary]" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t("morning_briefing.feed.search_placeholder")}
+                    aria-label={t("morning_briefing.feed.search_aria")}
+                    className="border-0 bg-transparent outline-none text-[13px] text-[--color-text-primary] w-full placeholder:text-[--color-text-tertiary]"
+                  />
+                </div>
+              </div>
+
+              <div
+                className="animate-feed-fade-up"
+                style={{ animationDelay: "160ms" }}
+              >
+                <MbFeedSection
+                  label={t("morning_briefing.today")}
+                  count={todayReports.length + (liveReportId ? 1 : 0)}
+                >
+                  {liveReportId ? (
+                    <div className="mb-2">
+                      {stream.status === "completed" ? (
+                        <MbBigCard
+                          title={liveTitle}
+                          status="complete"
+                          reportId={liveReportId}
+                          highlights={
+                            findRun(runs, liveReportId)?.highlights ?? null
+                          }
+                          onOpen={openReport}
+                          onRemove={(id) => setPendingRemoval(id)}
+                        />
+                      ) : (
+                        <MbGeneratingCard stream={stream} />
+                      )}
+                    </div>
+                  ) : null}
+                  {heroToday ? (
+                    <div className="mb-2">
+                      <MbBigCard
+                        title={heroToday.subject}
+                        stamp={formatHeroStamp(heroToday.created_at)}
+                        status="complete"
+                        reportId={heroToday.report_id}
+                        highlights={heroToday.highlights ?? null}
+                        onOpen={openReport}
+                        onRemove={(id) => setPendingRemoval(id)}
+                      />
+                    </div>
+                  ) : null}
+                  {todayReports.length === 0 && !liveReportId ? (
+                    <MbSectionEmpty
+                      message={
+                        searching
+                          ? t("morning_briefing.no_matching_briefings_today")
+                          : t("morning_briefing.no_briefings_today")
+                      }
+                    />
+                  ) : null}
+                  {restToday.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      {restToday.map((r) => (
+                        <MbReportRow
+                          key={r.report_id}
+                          report={r}
+                          onOpen={openReport}
+                          onRemove={(id) => setPendingRemoval(id)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </MbFeedSection>
+              </div>
+
+              <div
+                className="animate-feed-fade-up"
+                style={{ animationDelay: "240ms" }}
+              >
+                <MbFeedSection
+                  label={t("morning_briefing.this_week")}
+                  count={groups.thisWeek.length}
+                >
+                  {groups.thisWeek.length === 0 ? (
+                    <MbSectionEmpty
+                      message={
+                        searching
+                          ? t("morning_briefing.no_matching_briefings")
+                          : t("morning_briefing.no_briefings_this_week")
+                      }
+                    />
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {groups.thisWeek.map((r) => (
+                        <MbReportRow
+                          key={r.report_id}
+                          report={r}
+                          onOpen={openReport}
+                          onRemove={(id) => setPendingRemoval(id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </MbFeedSection>
+              </div>
+
+              {groups.older.length > 0 ? (
+                <div
+                  className="animate-feed-fade-up"
+                  style={{ animationDelay: "320ms" }}
+                >
+                  <MbFeedSection
+                    label={t("morning_briefing.older")}
+                    count={groups.older.length}
+                  >
+                    <div className="flex flex-col gap-2">
+                      {groups.older.map((r) => (
+                        <MbReportRow
+                          key={r.report_id}
+                          report={r}
+                          onOpen={openReport}
+                          onRemove={(id) => setPendingRemoval(id)}
+                        />
+                      ))}
+                    </div>
+                  </MbFeedSection>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>
-    </div>
-  );
-}
 
-function TabButton({
-  active,
-  onClick,
-  icon,
-  label,
-  badge,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  badge?: number;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className="group relative inline-flex items-center gap-2 px-3.5 h-full bg-transparent border-0 text-[13.5px] cursor-pointer transition-all duration-[--duration-normal] hover:bg-[--color-surface-hover]"
-      style={{
-        color: active
-          ? "var(--color-text-primary)"
-          : "var(--color-text-secondary)",
-        fontWeight: active ? 500 : undefined,
-      }}
-    >
-      <span
-        aria-hidden="true"
-        className="inline-flex transition-transform duration-[--duration-normal] group-hover:-translate-y-px"
-      >
-        {icon}
-      </span>
-      <span>{label}</span>
-      {typeof badge === "number" ? (
-        <span
-          aria-hidden="true"
-          className="font-mono text-[10px] tracking-[0.04em] px-1.5 py-px rounded-full transition-colors duration-[--duration-normal]"
-          style={{
-            background: active
-              ? "var(--color-accent-primary)"
-              : "var(--color-surface-active)",
-            color: active
-              ? "var(--color-accent-on)"
-              : "var(--color-text-secondary)",
+      {schedulesOpen ? (
+        <MbSchedulesView
+          schedules={schedules}
+          onBack={() => setSchedulesOpen(false)}
+          onAdd={() => openEditor(null)}
+          onEdit={(s) => openEditor(s)}
+          onRemove={async (id) => {
+            await removeSchedule(id);
           }}
-        >
-          {badge}
-        </span>
-      ) : null}
-      {active ? (
-        <span
-          aria-hidden="true"
-          className="absolute left-0 right-0 -bottom-px h-0.5 origin-center animate-mb-tab-underline"
-          style={{ background: "var(--color-text-primary)" }}
         />
       ) : null}
-    </button>
+
+      {cabinetOpen ? (
+        <MbCabinetView
+          templates={templates}
+          instructions={instructions}
+          onBack={() => setCabinetOpen(false)}
+          onUploadTemplateMarkdown={async (name, markdown) => {
+            await createTemplate({ name, source_markdown: markdown });
+          }}
+          onUploadTemplateFile={async (name, file) => {
+            await uploadTemplate(name, file);
+          }}
+          onUploadInstructions={async (name, file) => {
+            await uploadInstructions(name, file);
+          }}
+          onRemoveTemplate={async (id) => {
+            await removeTemplate(id);
+          }}
+          onRemoveInstructions={async (id) => {
+            await removeInstructions(id);
+          }}
+        />
+      ) : null}
+
+      <MbRunNowModal
+        open={runNowOpen}
+        schedules={schedules}
+        onClose={() => setRunNowOpen(false)}
+        onStarted={(reportId) => setLiveReportId(reportId)}
+      />
+
+      {editorOpen ? (
+        <ScheduleEditorModal
+          schedule={editorSchedule}
+          onClose={() => setEditorOpen(false)}
+          onSave={handleSaveSchedule}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        title={t("morning_briefing.cabinet.remove_title")}
+        description={t("morning_briefing.cabinet.remove_description")}
+        confirmLabel={t("morning_briefing.cabinet.remove_confirm")}
+        destructive
+        onCancel={() => setPendingRemoval(null)}
+        onConfirm={() => {
+          const id = pendingRemoval;
+          setPendingRemoval(null);
+          if (!id) return;
+          if (id === liveReportId) setLiveReportId(null);
+          void removeReport(id);
+        }}
+      />
+    </div>
   );
 }
