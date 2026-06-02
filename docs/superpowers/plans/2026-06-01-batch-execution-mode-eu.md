@@ -410,6 +410,29 @@ class BatchOrchestrator:
 
 ---
 
+## Implementation divergences from this plan (recorded per CLAUDE.md #9)
+
+1. **Phase 3 — `EuRunState` is a parallel step-wise driver, NOT a rewrite of
+   the live `Runner`.** The plan called for rewriting `Runner._run_turn_loop`
+   to drive `EuRunState` (with a parity test). Instead `EuRunState` reuses the
+   runner's free functions (`_initial_user_turn`, `_connector_prompt_info`,
+   `_dispatch_one`, `_finish`) and the live `Runner` is left untouched. Lower
+   risk (the proven sync path can't regress); the small duplication is the
+   per-turn orchestration sequence only. The dispatcher context is applied
+   per-turn around tool dispatch inside `EuRunState.apply_response` (the live
+   runner wraps the whole loop — equivalent, since only tool execution needs
+   the connector credentials).
+2. **Restart resume deferred (Phase 3.2 snapshot/restore + Phase 5.3 resume
+   NOT built).** A batch job does not survive a server restart yet. Instead
+   `eu_v2_batch_service.mark_orphaned_batch_jobs_failed` runs at startup
+   (wired in `app.py` beside the existing run sweeps) and fails any in-flight
+   job + its active runs + their `running` reports. `state_json` was omitted
+   from `eu_v2_batch_run` (YAGNI — add it with resume). The batch engine works
+   within a single server lifetime; full resume is the next follow-up.
+3. **No new `REPORT_READY` notification** for batch completions — matches the
+   existing sync scheduled path, which also persists silently (the report
+   appears in the user's list on completion). Add if/when the sync path does.
+
 ## Self-Review notes
 
 - Spec coverage: provider transport (P2), orchestrator (P4), run-state extraction (P3), persistence+resume (P5), dispatch partition + notification (P6), settings toggle (P1), fallback-to-sync (Task 6.1), orphan-skip (Task 5.3). Cost-characteristics are documented in the spec; no task needed.
