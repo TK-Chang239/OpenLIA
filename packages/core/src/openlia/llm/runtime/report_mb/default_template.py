@@ -1,8 +1,9 @@
-"""Built-in default Earnings Update template.
+"""Built-in default Morning Briefing template.
 
-Codifies the section set the v1 ``earnings_update.yaml`` report produced
-as a ``TemplateSpec`` so EU v2 ships a working report shape out of the
-box. The migration seeds a ``report_eu_templates`` row from this.
+Codifies a general market-briefing section set as a ``TemplateSpec`` so
+MB v2 ships a working report shape out of the box. The migration seeds a
+``report_mb_templates`` row from this. MB runs are never ticker-anchored,
+so ``ticker_anchored`` is ``False``.
 """
 
 from __future__ import annotations
@@ -11,58 +12,49 @@ from openlia.llm.runtime.report_v2_3.templates.spec import SectionSpec, Template
 
 _SECTIONS = [
     (
-        "quick_take",
-        "Quick Take",
-        "One-paragraph verdict: beat/miss vs expectations and what it means.",
+        "market_wrap",
+        "Market Wrap",
+        "Overnight and pre-open moves across major indices, futures, rates, "
+        "FX, and commodities, with what drove them.",
     ),
     (
-        "market_reaction",
-        "Market Reaction",
-        "Price move on the print and why.",
+        "macro_economic_calendar",
+        "Macro & Economic Calendar",
+        "Today's scheduled data releases, central-bank events, and auctions, "
+        "with the consensus and why each matters.",
     ),
     (
-        "key_financials",
-        "Key Financials",
-        "Revenue, EPS, margins vs consensus and prior year.",
+        "headlines",
+        "Headlines",
+        "The most market-relevant news since the prior session, grouped by "
+        "theme with a one-line read on each.",
     ),
     (
-        "operational_highlights",
-        "Operational Highlights",
-        "Segment and KPI movements that drove the quarter.",
+        "themes_to_watch",
+        "Themes to Watch",
+        "Cross-asset narratives and sector rotations building underneath the "
+        "tape that traders are positioning around.",
     ),
     (
-        "forward_guidance",
-        "Forward Guidance",
-        "Management guidance vs prior guidance and consensus.",
-    ),
-    (
-        "earnings_call",
-        "Earnings Call",
-        "Notable management commentary and analyst Q&A signal.",
-    ),
-    (
-        "risk_assessment",
-        "Risk Assessment",
-        "New or changed risks surfaced by the quarter.",
-    ),
-    (
-        "thesis_check",
-        "Thesis Check",
-        "Does the quarter confirm or challenge the investment thesis.",
+        "outlook",
+        "Outlook",
+        "What to watch into the session and the key levels or catalysts that "
+        "would shift the day's direction.",
     ),
 ]
 
 
 def build_default_template() -> TemplateSpec:
-    """Build the eight-section built-in Earnings Update template."""
+    """Build the five-section built-in Morning Briefing template."""
     return TemplateSpec(
-        template_id="eu_default",
-        name="Earnings Update (Default)",
+        template_id="mb_default",
+        name="Morning Briefing (Default)",
         shape_description=(
-            "Post-earnings scorecard assessing the quarter against "
-            "expectations and the prior thesis."
+            "Daily pre-market briefing covering overnight moves, the day's "
+            "macro calendar, market-moving headlines, and the themes and "
+            "catalysts to watch into the session."
         ),
-        ticker_anchored=True,
+        ticker_anchored=False,
         default_length="normal",
         sections=[
             SectionSpec(id=sid, title=title, intent=intent) for sid, title, intent in _SECTIONS

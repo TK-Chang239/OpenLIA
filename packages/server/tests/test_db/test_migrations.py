@@ -61,8 +61,6 @@ EXPECTED_TABLES = {
     # --- Plan 15 Earnings Update ---
     "eu_watchlist",
     "eu_user_configs",
-    # --- Plan 16 Morning Briefing ---
-    "mb_user_configs",
     # --- Plan 18 Panic Thermometer transition log ---
     "pt_trigger_events",
     # --- Connector redesign (replaces data_providers + data_provider_requirement_mapping) ---
@@ -136,6 +134,14 @@ EXPECTED_TABLES = {
     "eu_v2_settings",
     "eu_v2_batch_job",
     "eu_v2_batch_run",
+    # --- Morning Briefing v2 engine (PR 2026-06-02) ---
+    "report_mb",
+    "report_mb_sections",
+    "report_mb_charts",
+    "report_mb_citations",
+    "report_mb_tool_call_log",
+    "report_mb_templates",
+    "report_mb_instructions",
 }
 
 
