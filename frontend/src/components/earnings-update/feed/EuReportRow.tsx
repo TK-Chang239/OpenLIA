@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import type { RunSummary } from "../../../api/earnings-update";
 
 import { tickerOf } from "./feedHelpers";
+import { MetricChip, RatingPill } from "./highlightBits";
 
 interface Props {
   report: RunSummary;
@@ -48,7 +49,7 @@ export function EuReportRow({ report, onOpen }: Props) {
       type="button"
       onClick={() => onOpen(report.report_id)}
       data-testid="eu-report-row"
-      className="group text-left grid grid-cols-[64px_1fr_30px] gap-4 items-center px-4 py-3.5 bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[10px] hover:border-[--color-feedback-success] hover:-translate-y-0.5 transition-all duration-[--duration-normal] w-full"
+      className="group text-left grid grid-cols-[64px_1fr_auto_30px] gap-4 items-center px-4 py-3.5 bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[10px] hover:border-[--color-feedback-success] hover:-translate-y-0.5 transition-all duration-[--duration-normal] w-full"
     >
       <div className="font-mono text-[13px] font-semibold text-[--color-text-primary] tracking-wide">
         {ticker}
@@ -60,7 +61,25 @@ export function EuReportRow({ report, onOpen }: Props) {
         <p className="text-[14.5px] font-medium text-[--color-text-primary] m-0 leading-tight line-clamp-2">
           {report.subject}
         </p>
+        {report.highlights?.subtitle ? (
+          <p
+            data-testid="eu-row-subtitle"
+            className="text-[12.5px] text-[--color-text-secondary] m-0 mt-0.5 leading-snug line-clamp-1"
+          >
+            {report.highlights.subtitle}
+          </p>
+        ) : null}
       </div>
+      {report.highlights && (report.highlights.metrics.length > 0 || report.highlights.rating) ? (
+        <div className="hidden sm:flex items-center gap-2 justify-end">
+          {report.highlights.metrics.slice(0, 2).map((metric, i) => (
+            <MetricChip key={`${metric.label}-${i}`} metric={metric} />
+          ))}
+          {report.highlights.rating ? <RatingPill rating={report.highlights.rating} /> : null}
+        </div>
+      ) : (
+        <div />
+      )}
       <ChevronRight
         size={16}
         className="text-[--color-text-tertiary] group-hover:text-[--color-feedback-success] group-hover:translate-x-[3px] transition-all duration-[--duration-normal]"
