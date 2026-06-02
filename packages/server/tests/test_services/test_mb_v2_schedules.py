@@ -124,6 +124,142 @@ async def test_create_persists_full_binding_and_registers(
 
 
 @pytest.mark.asyncio
+async def test_create_disabled_persists_without_registering(
+    create_tables, db_session: Session
+) -> None:
+    _mk_user(db_session)
+    _seed_mb_default(db_session)
+    sched = FakeScheduler()
+    dto = await svc.create_schedule(
+        db_session,
+        user_id="u_1",
+        time="07:00",
+        timezone="America/New_York",
+        days_of_week=["mon"],
+        label="Paused",
+        scheduler=sched,
+        is_enabled=False,
+        **_full_binding(),
+    )
+    assert dto.is_enabled is False
+    # Disabled schedule is persisted but never registered with the scheduler.
+    assert sched.added == []
+    assert sched.modified == []
+
+
+@pytest.mark.asyncio
+async def test_update_enabled_to_disabled_unregisters(create_tables, db_session: Session) -> None:
+    _mk_user(db_session)
+    _seed_mb_default(db_session)
+    sched = FakeScheduler()
+    created = await svc.create_schedule(
+        db_session,
+        user_id="u_1",
+        time="07:00",
+        timezone="America/New_York",
+        days_of_week=["mon"],
+        label="Pre-Market",
+        scheduler=sched,
+        **_full_binding(),
+    )
+    assert len(sched.added) == 1
+
+    updated = await svc.update_schedule(
+        db_session,
+        user_id="u_1",
+        schedule_id=created.id,
+        time="07:00",
+        timezone="America/New_York",
+        days_of_week=["mon"],
+        label="Pre-Market",
+        scheduler=sched,
+        is_enabled=False,
+        **_full_binding(),
+    )
+    assert updated is not None
+    assert updated.is_enabled is False
+    # on->off unregisters; modify is NOT called.
+    assert sched.removed == [("mb_briefing", "u_1", created.id)]
+    assert len(sched.modified) == 0
+
+
+@pytest.mark.asyncio
+async def test_update_disabled_to_enabled_registers(create_tables, db_session: Session) -> None:
+    _mk_user(db_session)
+    _seed_mb_default(db_session)
+    sched = FakeScheduler()
+    created = await svc.create_schedule(
+        db_session,
+        user_id="u_1",
+        time="07:00",
+        timezone="America/New_York",
+        days_of_week=["mon"],
+        label="Paused",
+        scheduler=sched,
+        is_enabled=False,
+        **_full_binding(),
+    )
+    assert sched.added == []
+
+    updated = await svc.update_schedule(
+        db_session,
+        user_id="u_1",
+        schedule_id=created.id,
+        time="07:00",
+        timezone="America/New_York",
+        days_of_week=["mon"],
+        label="Live",
+        scheduler=sched,
+        is_enabled=True,
+        **_full_binding(),
+    )
+    assert updated is not None
+    assert updated.is_enabled is True
+    # off->on registers; remove is NOT called (no stale job to remove).
+    assert len(sched.added) == 1
+    assert sched.removed == []
+
+
+@pytest.mark.asyncio
+async def test_update_disabled_to_disabled_is_scheduler_noop(
+    create_tables, db_session: Session
+) -> None:
+    _mk_user(db_session)
+    _seed_mb_default(db_session)
+    sched = FakeScheduler()
+    created = await svc.create_schedule(
+        db_session,
+        user_id="u_1",
+        time="07:00",
+        timezone="America/New_York",
+        days_of_week=["mon"],
+        label="Paused",
+        scheduler=sched,
+        is_enabled=False,
+        **_full_binding(),
+    )
+
+    updated = await svc.update_schedule(
+        db_session,
+        user_id="u_1",
+        schedule_id=created.id,
+        time="08:00",
+        timezone="America/New_York",
+        days_of_week=["tue"],
+        label="Still paused",
+        scheduler=sched,
+        is_enabled=False,
+        **_full_binding(),
+    )
+    assert updated is not None
+    # off->off: never touches the scheduler (would otherwise remove a job
+    # that was never registered).
+    assert sched.added == []
+    assert sched.modified == []
+    assert sched.removed == []
+
+
+@pytest.mark.asyncio
 async def test_create_allows_freeform_template_id(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()

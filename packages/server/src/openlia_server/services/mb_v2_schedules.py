@@ -176,6 +176,7 @@ async def create_schedule(
     length: str = "normal",
     reasoning_effort: str | None = None,
     web_search: bool = False,
+    is_enabled: bool = True,
 ) -> MbScheduleDTO:
     connectors = enabled_connectors or {}
     _validate_cron(time, timezone, days_of_week)
@@ -193,7 +194,7 @@ async def create_schedule(
         timezone=timezone,
         days_of_week=json.dumps(list(days_of_week)),
         label=label,
-        is_enabled=True,
+        is_enabled=is_enabled,
         template_id=template_id,
         instructions_id=instructions_id,
         enabled_connectors=connectors,
@@ -208,7 +209,10 @@ async def create_schedule(
     db.commit()
     db.refresh(row)
 
-    await scheduler.add_schedule(row)
+    # Only register the APScheduler job when enabled; a disabled schedule
+    # is persisted but never fires until it is enabled via update.
+    if is_enabled:
+        await scheduler.add_schedule(row)
     return _to_dto(row)
 
 
@@ -231,6 +235,7 @@ async def update_schedule(
     length: str = "normal",
     reasoning_effort: str | None = None,
     web_search: bool = False,
+    is_enabled: bool = True,
 ) -> MbScheduleDTO | None:
     connectors = enabled_connectors or {}
     _validate_cron(time, timezone, days_of_week)
@@ -244,6 +249,7 @@ async def update_schedule(
         instructions_id=instructions_id,
         enabled_connectors=connectors,
     )
+    was_enabled = bool(row.is_enabled)
     row.time = time
     row.timezone = timezone
     row.days_of_week = json.dumps(list(days_of_week))
@@ -257,10 +263,22 @@ async def update_schedule(
     row.length = length
     row.reasoning_effort = reasoning_effort
     row.web_search = web_search
+    row.is_enabled = is_enabled
     db.commit()
     db.refresh(row)
 
-    await scheduler.modify_schedule(row)
+    # Drive the APScheduler job off the enabled-state transition so we never
+    # remove a job that was never registered (off->off) nor leave a disabled
+    # schedule firing: on->on re-registers, on->off unregisters, off->on
+    # registers, off->off is a no-op.
+    if was_enabled and is_enabled:
+        await scheduler.modify_schedule(row)
+    elif was_enabled and not is_enabled:
+        await scheduler.remove_schedule(
+            job_type=JobType.MB_BRIEFING, user_id=user_id, schedule_id=schedule_id
+        )
+    elif not was_enabled and is_enabled:
+        await scheduler.add_schedule(row)
     return _to_dto(row)
 
 
