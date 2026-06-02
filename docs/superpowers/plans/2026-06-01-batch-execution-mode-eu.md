@@ -436,9 +436,13 @@ class BatchOrchestrator:
    so it doesn't race recovery. `mark_orphaned_batch_jobs_failed` is retained
    as a fallback. Tested: snapshot/restore round-trip, orchestrator resume,
    `recover_inflight_batches` end-to-end, the cleanup orphan-skip.
-3. **No new `REPORT_READY` notification** for batch completions — matches the
-   existing sync scheduled path, which also persists silently (the report
-   appears in the user's list on completion). Add if/when the sync path does.
+3. **`REPORT_READY` notification — IMPLEMENTED (2026-06-02).** Each completed
+   batch report inserts a polling `UserNotification` (type `report_ready`,
+   department `earnings_update`) in `_persist_run_outcome`, since scheduled
+   batch runs have no live SSE client. Failed runs don't notify. (The legacy
+   sync path emits via `JobOutcome.notifications`, which only works for
+   synchronous executors; batch reports complete async after the executor
+   returns, so they notify directly at completion.)
 
 ## Self-Review notes
 
