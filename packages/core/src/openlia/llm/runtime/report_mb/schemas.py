@@ -1,21 +1,22 @@
-"""Lean schemas for the Earnings Update v2 engine.
+"""Lean schemas for the Morning Briefing engine.
 
-Forked from report_v3. EU v2 keeps the schema surface small: a chart
-spec, a citation log entry, the run request, and the run result.
-Citations live in a server-side ledger keyed by ``source_id`` and the
-model cites them inline with standard Markdown footnote syntax
+Forked from the Earnings Update v2 engine. The schema surface stays
+small: a chart spec, a citation log entry, the run request, and the run
+result. Citations live in a server-side ledger keyed by ``source_id``
+and the model cites them inline with standard Markdown footnote syntax
 (``[^web_3]``).
 
-EU v2 deltas vs. v3:
-  - ``RunRequest`` drops ``attachments`` (out of scope) and gains
-    ``enabled_connectors`` (which tool groups to build) and
-    ``trigger_context`` (the earnings event covered). ``instructions``
+Morning Briefing deltas vs. EU v2:
+  - The earnings anchor is replaced by a briefing anchor.
+    ``RunRequest`` carries ``enabled_connectors`` (which tool groups to
+    build) and ``briefing_context`` (which briefing this run writes:
+    its run date, schedule label, and time/timezone). ``instructions``
     (free-form analyst methodology injected into the system prompt) is
-    supported, same as v3.
-  - No revision schemas — EU v2 has no revise flow.
+    supported, same as EU.
+  - No revision schemas — the engine has no revise flow.
 
 The ``TemplateSpec`` itself is reused verbatim from v2.3 — same Pydantic
-model, same built-ins. EU v2 only changes how the engine consumes the
+model, same built-ins. The engine only changes how it consumes the
 template, not what a template is.
 """
 
@@ -31,6 +32,7 @@ from ..report_v2_3.schemas import Language, ReportLength
 from ..report_v2_3.templates.spec import SectionSpec, TemplateSpec
 
 __all__ = [
+    "BriefingContext",
     "ChartDataPoint",
     "ChartSpec",
     "ChartType",
@@ -45,7 +47,6 @@ __all__ = [
     "RunStatus",
     "SectionSpec",
     "TemplateSpec",
-    "TriggerContext",
 ]
 
 
@@ -134,43 +135,40 @@ class EnabledConnectors(BaseModel):
         return "eodhd" in self.provider_ids
 
 
-class TriggerContext(BaseModel):
-    """Earnings event metadata handed to a run.
+class BriefingContext(BaseModel):
+    """Briefing metadata handed to a run.
 
-    For scheduled runs this is populated from the matched
-    ``eu_v2_earnings_schedule`` row; for on-demand runs the route fills
-    in what it can (ticker always; estimates when the calendar
-    connector is enabled). Injected into the system prompt so the model
-    knows which release it is covering before it calls any tool.
+    Identifies which recurring market briefing this run writes: its
+    ``run_date`` (always), an optional human ``schedule_label`` (e.g.
+    "Pre-market briefing"), and optional ``time_label`` / ``timezone``
+    for when the briefing fires. Injected into the system prompt so the
+    model knows which briefing it is writing before it calls any tool.
     """
 
-    ticker: str = Field(..., min_length=1)
-    company_name: str | None = None
-    fiscal_period: str | None = None
-    report_date: str | None = None
-    release_timing: str | None = None
-    eps_estimate: str | None = None
-    revenue_estimate: str | None = None
+    run_date: str = Field(..., min_length=1)
+    schedule_label: str | None = None
+    time_label: str | None = None
+    timezone: str | None = None
 
 
 class RunRequest(BaseModel):
-    """Input to an Earnings Update v2 run.
+    """Input to a Morning Briefing run.
 
-    Forked from report_v3's RunRequest. Differences: no ``attachments``
-    (out of scope for EU v2), and two added fields —
+    Forked from the Earnings Update v2 ``RunRequest``. Differences: the
+    earnings anchor is replaced by a briefing anchor. Two anchor fields —
     ``enabled_connectors`` (which tool groups to build) and
-    ``trigger_context`` (the earnings event being covered). Free-form
+    ``briefing_context`` (which briefing this run writes). Free-form
     ``instructions`` are supported and injected into the system prompt.
 
-    ``subject`` is either a ticker (``MSFT.US``) or a free-form earnings
-    topic; the template's ``ticker_anchored`` flag decides how to
-    interpret it. ``provider_kind`` and ``model`` resolve through the
-    existing capability map at runner construction.
+    ``subject`` is the briefing label (e.g.
+    ``"Morning Briefing - 2026-06-02"``), not a ticker. ``provider_kind``
+    and ``model`` resolve through the existing capability map at runner
+    construction.
 
     ``reasoning_effort`` is the user-selected extended-thinking knob.
     ``None`` (the default) maps to "off" — no reasoning param is sent
-    to the adapter. EU v2 applies the chosen effort on every model turn
-    since the engine is a single free-running loop with no stage notion.
+    to the adapter. The engine applies the chosen effort on every model
+    turn since it is a single free-running loop with no stage notion.
     Adapters whose model does not support thinking silently ignore it.
     """
 
@@ -184,7 +182,7 @@ class RunRequest(BaseModel):
     model: str = Field(..., min_length=1)
     reasoning_effort: ReasoningEffort | None = None
     enabled_connectors: EnabledConnectors = Field(default_factory=EnabledConnectors)
-    trigger_context: TriggerContext | None = None
+    briefing_context: BriefingContext | None = None
     # Free-form analyst methodology/guidance injected into the system prompt.
     instructions: str | None = None
 
