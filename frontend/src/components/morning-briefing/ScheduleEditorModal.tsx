@@ -335,6 +335,7 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
         language: draft.language,
         length: draft.length,
         reasoning_effort: draft.reasoning_effort,
+        is_enabled: draft.is_enabled,
       };
       await onSave(payload);
       onClose();

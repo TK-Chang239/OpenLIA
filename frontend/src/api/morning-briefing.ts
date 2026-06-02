@@ -56,6 +56,7 @@ export interface MbScheduleIn {
   language?: string;
   length?: string;
   reasoning_effort?: string | null;
+  is_enabled?: boolean;
 }
 
 /** Matches TemplateOut from the route. */

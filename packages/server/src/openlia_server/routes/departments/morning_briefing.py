@@ -116,6 +116,7 @@ class ScheduleIn(BaseModel):
     language: str = "en"
     length: str = "normal"
     reasoning_effort: str | None = None
+    is_enabled: bool = True
 
 
 class ScheduleOut(BaseModel):
@@ -511,6 +512,7 @@ def build_morning_briefing_router(
                 length=payload.length,
                 reasoning_effort=payload.reasoning_effort,
                 web_search=payload.enabled_connectors.web_search,
+                is_enabled=payload.is_enabled,
             )
         except ValueError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
@@ -543,6 +545,7 @@ def build_morning_briefing_router(
                 length=payload.length,
                 reasoning_effort=payload.reasoning_effort,
                 web_search=payload.enabled_connectors.web_search,
+                is_enabled=payload.is_enabled,
             )
         except ValueError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
