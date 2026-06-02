@@ -37,6 +37,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.report_eu import EuV2BatchJob, EuV2BatchRun, ReportEu
+from openlia_server.scheduler.registry import NotificationType
+from openlia_server.scheduler.services import notifications as notif_svc
 from openlia_server.services import eu_v2_settings
 from openlia_server.services.eu_v2_dispatch import mark_reported, select_due_rows
 from openlia_server.services.eu_v2_run_service import (
@@ -48,6 +50,9 @@ from openlia_server.services.eu_v2_run_service import (
 from openlia_server.services.eu_v2_wiring import build_eu_v2_transports, resolve_eodhd_api_key
 
 log = logging.getLogger(__name__)
+
+# Notification department key the frontend's Earnings Update badge reads.
+_DEPARTMENT = "earnings_update"
 
 SessionFactory = Callable[[], DBSession]
 SpawnFn = Callable[[Any], Any]
@@ -436,6 +441,17 @@ def _persist_run_outcome(session_factory: SessionFactory, *, report_id: str, res
         row.error_message = result.message or None
         row.completed_at = datetime.now(UTC)
         _mark_batch_run(db, report_id=report_id, status="completed")
+        # Scheduled batch runs have no live SSE client, so a polling
+        # notification is how the user learns the report landed.
+        if result.status == "completed":
+            notif_svc.insert(
+                db,
+                user_id=row.user_id,
+                type=NotificationType.REPORT_READY,
+                department=_DEPARTMENT,
+                message=f"New earnings update: {row.ticker}.",
+                job_run_id=None,
+            )
         db.commit()
 
 
