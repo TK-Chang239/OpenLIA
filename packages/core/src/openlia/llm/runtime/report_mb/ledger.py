@@ -28,9 +28,11 @@ from .schemas import CitationLogEntry
 # that would otherwise render as raw, unresolved ``[^...]`` markers.
 _TOOL_PREFIX_MAP: dict[str, str] = {
     "web_search": "web",
-    "get_fundamentals": "eodhd",
+    "get_quotes": "eodhd",
     "get_historical_prices": "eodhd",
-    "get_company_news": "eodhd",
+    "get_news": "eodhd",
+    "get_economic_calendar": "eodhd",
+    "get_macro_indicators": "eodhd",
     "run_dcf": "dcf",
     "run_comps": "comps",
     "run_sensitivity": "sens",
