@@ -19,6 +19,7 @@ import { OnDemandReportModal } from "../../components/earnings-update/OnDemandRe
 import { ReportSettingsModal } from "../../components/earnings-update/ReportSettingsModal";
 import { EuCalendar } from "../../components/earnings-update/calendar/EuCalendar";
 import { EuBigCard } from "../../components/earnings-update/feed/EuBigCard";
+import { EuGeneratingCard } from "../../components/earnings-update/feed/EuGeneratingCard";
 import { EuEmptyPage } from "../../components/earnings-update/feed/EuEmptyPage";
 import {
   EuFeedSection,
@@ -350,13 +351,17 @@ export default function EarningsUpdate() {
                     >
                       {live ? (
                         <div className="mb-2">
-                          <EuBigCard
-                            ticker={live.ticker}
-                            title={liveTitle}
-                            status={stream.status === "completed" ? "complete" : "streaming"}
-                            reportId={stream.status === "completed" ? live.reportId : null}
-                            onOpen={openReport}
-                          />
+                          {stream.status === "completed" ? (
+                            <EuBigCard
+                              ticker={live.ticker}
+                              title={liveTitle}
+                              status="complete"
+                              reportId={live.reportId}
+                              onOpen={openReport}
+                            />
+                          ) : (
+                            <EuGeneratingCard ticker={live.ticker} stream={stream} />
+                          )}
                         </div>
                       ) : null}
                       {heroToday ? (
