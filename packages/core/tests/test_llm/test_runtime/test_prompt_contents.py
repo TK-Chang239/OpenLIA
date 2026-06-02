@@ -23,10 +23,7 @@ EXPECTED: dict[str, list[str]] = {
         "report.system",
         "report.earnings_update.user",
     ],
-    "morning_briefing": [
-        "report.system",
-        "report.morning_briefing.user",
-    ],
+    "morning_briefing": ["chat.system"],
     "macro_research": [
         "batch.t4_assessment.system",
         "batch.t4_assessment.user",

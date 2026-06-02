@@ -31,7 +31,6 @@ from openlia_server.scheduler.payloads import (
     EUScanPlanner,
     EuV2CalendarSyncer,
     EuV2Dispatcher,
-    MBRequestBuilder,
     MRAssessmentBuilder,
     MRCacheStore,
     ReportStore,
@@ -49,7 +48,6 @@ def build_scheduler_service(
     scheduler: Any,
     report_runner: Any,
     batch_runner: Any,
-    mb_builder: MBRequestBuilder,
     eu_planner: EUScanPlanner,
     mr_builder: MRAssessmentBuilder,
     report_store: ReportStore,
@@ -63,11 +61,9 @@ def build_scheduler_service(
         raise TypeError("batch_runner is required (got None)")
 
     executors: dict[JobType, Any] = {
-        # MB rework Phase 3: the executor runs the report_mb engine inline
-        # via mb_v2_run_service (its module-default collaborator). The legacy
-        # `mb_builder` param is now dead (no executor consumes it) and is
-        # removed in Phase 6 along with mb_request_builder.py. `report_runner`
-        # / `report_store` stay — the EU scan executor below still uses them.
+        # The MB executor runs the report_mb engine inline via mb_v2_run_service
+        # (its module-default collaborator). `report_runner` / `report_store`
+        # stay — the EU scan executor below still uses them.
         JobType.MB_BRIEFING: MBBriefingExecutor(
             session_factory=session_factory,
         ),

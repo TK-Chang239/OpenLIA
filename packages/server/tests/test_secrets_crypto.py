@@ -1,11 +1,9 @@
 """Tests for connector secret key resolution + Fernet encrypt/decrypt."""
-from __future__ import annotations
 
-import os
+from __future__ import annotations
 
 import pytest
 from cryptography.fernet import Fernet
-
 from openlia_server.db import secrets_crypto as sc
 
 

@@ -1,8 +1,8 @@
 """Bootstrap fails loudly in company mode when no encryption key is configured."""
+
 from __future__ import annotations
 
 import pytest
-
 from openlia_server.db import secrets_crypto as sc
 
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 from _scheduler_fakes import (
     FakeEUPlanner,
-    FakeMBBuilder,
     FakeMRBuilder,
     FakeMRCacheStore,
     FakeReportRunner,
@@ -24,12 +23,6 @@ async def test_fake_sleep_records_durations_without_waiting() -> None:
     await fs(30)
     await fs(120)
     assert fs.calls == [30, 120]
-
-
-def test_fake_mb_builder_returns_scripted_request() -> None:
-    fb = FakeMBBuilder(request=ReportRequest(mode="mb", user_input="morning"))
-    out = fb.build(session=None, user_id="u_1", schedule_id="s_1")
-    assert out.mode == "mb"
 
 
 def test_fake_eu_planner_returns_configured_targets() -> None:

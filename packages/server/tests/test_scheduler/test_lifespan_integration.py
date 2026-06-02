@@ -8,7 +8,6 @@ import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
-    FakeMBBuilder,
     FakeMRBuilder,
     FakeMRCacheStore,
     FakeReportRunner,
@@ -142,7 +141,6 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
         scheduler=fake_scheduler,
         report_runner=FakeReportRunner(events=[]),
         batch_runner=FakeBatchRunner(results=[]),
-        mb_builder=FakeMBBuilder(request=ReportRequest(mode="morning_briefing", user_input="go")),
         eu_planner=StubEUScanPlanner(),
         mr_builder=FakeMRBuilder(
             items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")

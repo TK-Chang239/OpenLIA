@@ -73,9 +73,8 @@ def test_scheduler_wires_real_builders() -> None:
             eu_exec = scheduler_svc.executors[JobType.EU_SCAN]
             mr_exec = scheduler_svc.executors[JobType.MR_ASSESSMENT]
 
-            # MB rework Phase 3: the MB executor runs the report_mb engine
-            # inline via mb_v2_run_service rather than the legacy mb_builder
-            # pipeline.
+            # The MB executor runs the report_mb engine inline via
+            # mb_v2_run_service.
             from openlia_server.services import mb_v2_run_service
 
             assert mb_exec._run_service is mb_v2_run_service

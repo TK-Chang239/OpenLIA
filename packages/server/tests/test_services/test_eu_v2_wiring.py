@@ -130,9 +130,7 @@ def _install_calendar_eodhd(monkeypatch, event: dict, calls: dict) -> None:
         def __init__(self, api_key: str) -> None:
             self.api_key = api_key
 
-        def get_upcoming_earnings_data(
-            self, from_date=None, to_date=None, symbols=None
-        ) -> dict:
+        def get_upcoming_earnings_data(self, from_date=None, to_date=None, symbols=None) -> dict:
             calls["from_date"] = from_date
             calls["to_date"] = to_date
             calls["symbols"] = symbols
