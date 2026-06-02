@@ -210,6 +210,7 @@ class RunSummaryOut(BaseModel):
     created_at: datetime
     completed_at: datetime | None
     reasoning_effort: str | None = None
+    highlights: CardHighlightsOut | None = None
 
 
 class SectionOut(BaseModel):
@@ -250,6 +251,12 @@ class CoverOut(BaseModel):
     key_metrics: list[CoverMetricOut] = Field(default_factory=list)
     rating: str | None = None
     upside_pct: float | None = None
+
+
+class CardHighlightsOut(BaseModel):
+    subtitle: str | None = None
+    rating: str | None = None
+    metrics: list[CoverMetricOut] = Field(default_factory=list)
 
 
 class RunDetailOut(BaseModel):
@@ -296,6 +303,7 @@ def _summary(row: ReportEu) -> RunSummaryOut:
         created_at=row.created_at,
         completed_at=row.completed_at,
         reasoning_effort=row.reasoning_effort,
+        highlights=_card_highlights(row.cover_json),
     )
 
 
@@ -339,6 +347,20 @@ def _cover_out(raw: str | None) -> CoverOut | None:
     if not isinstance(data, dict):
         return None
     return CoverOut.model_validate(data)
+
+
+def _card_highlights(raw: str | None) -> CardHighlightsOut | None:
+    cover = _cover_out(raw)
+    if cover is None:
+        return None
+    metrics = cover.key_metrics[:4]
+    if not (cover.subtitle or cover.rating or metrics):
+        return None
+    return CardHighlightsOut(
+        subtitle=cover.subtitle,
+        rating=cover.rating,
+        metrics=metrics,
+    )
 
 
 # ---------------------------------------------------------------------------
