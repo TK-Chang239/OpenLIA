@@ -422,13 +422,20 @@ class BatchOrchestrator:
    per-turn around tool dispatch inside `EuRunState.apply_response` (the live
    runner wraps the whole loop — equivalent, since only tool execution needs
    the connector credentials).
-2. **Restart resume deferred (Phase 3.2 snapshot/restore + Phase 5.3 resume
-   NOT built).** A batch job does not survive a server restart yet. Instead
-   `eu_v2_batch_service.mark_orphaned_batch_jobs_failed` runs at startup
-   (wired in `app.py` beside the existing run sweeps) and fails any in-flight
-   job + its active runs + their `running` reports. `state_json` was omitted
-   from `eu_v2_batch_run` (YAGNI — add it with resume). The batch engine works
-   within a single server lifetime; full resume is the next follow-up.
+2. **Restart resume — IMPLEMENTED (2026-06-02).** `EuRunState.snapshot()`/
+   `restore()` serialize/rebuild a run; `eu_v2_batch_run.state_json` stores the
+   per-turn checkpoint. The orchestrator persists ONE checkpoint per cycle
+   right after submit (pre-apply state + `provider_batch_id`) and gained a
+   `run(resume_batch_id=...)` entry that re-attaches to that batch, applies it,
+   and continues — idempotent because the checkpoint is always pre-apply
+   (sections overwrite, ledger rebuilt). `recover_inflight_batches` runs at
+   startup (in `app.py`, replacing the orphan sweep): it restores run states
+   and resumes each non-terminal job; un-resumable jobs (no batch id / no
+   snapshot / no transport / no EODHD) are failed via `_fail_job_in_session`.
+   `cleanup_orphaned_running_rows` now skips reports tied to a resumable batch
+   so it doesn't race recovery. `mark_orphaned_batch_jobs_failed` is retained
+   as a fallback. Tested: snapshot/restore round-trip, orchestrator resume,
+   `recover_inflight_batches` end-to-end, the cleanup orphan-skip.
 3. **No new `REPORT_READY` notification** for batch completions — matches the
    existing sync scheduled path, which also persists silently (the report
    appears in the user's list on completion). Add if/when the sync path does.
