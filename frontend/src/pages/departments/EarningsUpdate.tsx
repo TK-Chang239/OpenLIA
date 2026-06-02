@@ -127,6 +127,12 @@ export default function EarningsUpdate() {
   useEffect(() => {
     if (stream.status === "completed") {
       void refreshRuns();
+    } else if (stream.status === "cancelled" || stream.status === "failed") {
+      // Cancelled/failed runs have no completed card to show — dismiss the
+      // live card so it doesn't linger as a frozen generating card, and
+      // refresh so any partial report surfaces in the feed.
+      setLive(null);
+      void refreshRuns();
     }
   }, [stream.status, refreshRuns]);
 

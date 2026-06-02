@@ -71,4 +71,23 @@ describe("deriveEuPhase", () => {
     ]);
     expect(p.phaseKey).toBe("finalize");
   });
+
+  it("handles a dict args_summary without throwing (real backend shape)", () => {
+    const p = deriveEuPhase([
+      ev("tool.called", {
+        tool_name: "get_earnings_calendar",
+        args_summary: { symbol: "AAPL", period: "Q2" },
+      }),
+    ]);
+    expect(p.phaseKey).toBe("research");
+    expect(p.monoCode).toContain("AAPL");
+  });
+
+  it("falls back to the tool name when args_summary is an empty dict", () => {
+    const p = deriveEuPhase([
+      ev("tool.called", { tool_name: "fetch_news", args_summary: {} }),
+    ]);
+    expect(p.phaseKey).toBe("research");
+    expect(p.monoCode).toBe("fetch_news");
+  });
 });

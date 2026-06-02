@@ -20,6 +20,25 @@ const LABEL_KEYS: Record<EuPhaseKey, string> = {
 };
 
 /**
+ * Coerce a tool's `args_summary` into a short display string. The backend
+ * sends it as a dict (e.g. `{ symbol: "AAPL", period: "Q2" }`), not a
+ * string, so we join its scalar values; a plain string is used verbatim.
+ * Anything else (or an empty dict) yields "" so the caller falls back to
+ * the tool name.
+ */
+function argsSummaryText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return Object.values(value as Record<string, unknown>)
+      .filter((v) => typeof v === "string" || typeof v === "number")
+      .map(String)
+      .join(" · ")
+      .trim();
+  }
+  return "";
+}
+
+/**
  * Derive the current generating phase from the rolling SSE event list.
  *
  * Phase index is monotonic (max reached), but `monoCode` reflects the
@@ -44,7 +63,7 @@ export function deriveEuPhase(events: EuEvent[]): EuPhase {
         monoCode = "EMIT_CHART";
       } else {
         phaseIdx = Math.max(phaseIdx, 1);
-        const summary = (event.payload.args_summary as string | undefined)?.trim();
+        const summary = argsSummaryText(event.payload.args_summary);
         monoCode = summary || tool || monoCode;
       }
     } else if (event.type === "section.written") {
