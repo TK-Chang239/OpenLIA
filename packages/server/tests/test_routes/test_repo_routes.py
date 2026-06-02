@@ -208,3 +208,68 @@ def test_eu_save_unknown_returns_404(client, user_factory, login_as):
     resp = client.post("/repo/eu-runs", json={"eu_v2_report_id": "missing"})
     assert resp.status_code == 404
     assert resp.json()["detail"]["code"] == "eu_report_not_found"
+
+
+# ---------------------------------------------------------------------------
+# Morning Briefing v2 polymorphic-target routes (MB rework Phase 3)
+# ---------------------------------------------------------------------------
+
+
+def _mb_report_factory(db_session):
+    import uuid
+    from datetime import UTC, datetime
+
+    from openlia_server.db.models.report_mb import ReportMb
+
+    def _make(user_id: str, **kwargs):
+        r = ReportMb(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            subject=kwargs.get("subject", "Pre-market briefing - 2026-06-02"),
+            trigger_kind="scheduled",
+            schedule_id=None,
+            template_id="mb_default",
+            instructions_id=None,
+            language="en",
+            length="normal",
+            provider_kind="anthropic",
+            model="m",
+            status="completed",
+            error_message=None,
+            created_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+            cover_json=None,
+            reasoning_effort=None,
+        )
+        db_session.add(r)
+        db_session.commit()
+        return r
+
+    return _make
+
+
+def test_mb_save_then_list(client, user_factory, login_as, db_session):
+    u = user_factory()
+    login_as(u)
+    r = _mb_report_factory(db_session)(user_id=u.id)
+    resp = client.post("/repo/mb-runs", json={"mb_v2_report_id": r.id})
+    assert resp.status_code == 201
+    assert resp.json()["mb_v2_report_id"] == r.id
+    listed = client.get("/repo/mb-runs").json()
+    assert listed["saved_report_ids"] == [r.id]
+
+
+def test_mb_delete_removes_entry(client, user_factory, login_as, db_session):
+    u = user_factory()
+    login_as(u)
+    r = _mb_report_factory(db_session)(user_id=u.id)
+    client.post("/repo/mb-runs", json={"mb_v2_report_id": r.id})
+    assert client.delete(f"/repo/mb-runs?mb_v2_report_id={r.id}").status_code == 204
+    assert client.get("/repo/mb-runs").json()["saved_report_ids"] == []
+
+
+def test_mb_save_unknown_returns_404(client, user_factory, login_as):
+    login_as(user_factory())
+    resp = client.post("/repo/mb-runs", json={"mb_v2_report_id": "missing"})
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "mb_report_not_found"
