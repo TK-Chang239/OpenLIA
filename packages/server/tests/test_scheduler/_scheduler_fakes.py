@@ -38,11 +38,6 @@ from sqlalchemy.orm import Session
 # ------------------------------------------------------------------
 
 
-class StubMBRequestBuilder:
-    def build(self, *, session: Session | None, user_id: str, schedule_id: str) -> ReportRequest:
-        raise DepartmentPayloadBuilderNotWired("MBRequestBuilder not provided")
-
-
 class StubEUScanPlanner:
     def plan(
         self,
@@ -93,14 +88,6 @@ class FakeSleep:
 # ------------------------------------------------------------------
 # Payload builder fakes
 # ------------------------------------------------------------------
-
-
-@dataclass
-class FakeMBBuilder:
-    request: ReportRequest
-
-    def build(self, *, session: Session | None, user_id: str, schedule_id: str) -> ReportRequest:
-        return self.request
 
 
 @dataclass

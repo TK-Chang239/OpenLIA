@@ -73,7 +73,11 @@ def test_scheduler_wires_real_builders() -> None:
             eu_exec = scheduler_svc.executors[JobType.EU_SCAN]
             mr_exec = scheduler_svc.executors[JobType.MR_ASSESSMENT]
 
-            assert type(mb_exec._mb_builder).__name__ == "MbRequestBuilderImpl"
+            # The MB executor runs the report_mb engine inline via
+            # mb_v2_run_service.
+            from openlia_server.services import mb_v2_run_service
+
+            assert mb_exec._run_service is mb_v2_run_service
             assert type(eu_exec._eu_planner).__name__ == "EuScanPlannerImpl"
             assert type(mr_exec._mr_builder).__name__ == "MRAssessmentBuilderImpl"
             assert type(mr_exec._mr_cache_store).__name__ == "MRCacheStoreImpl"

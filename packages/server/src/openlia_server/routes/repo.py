@@ -31,12 +31,17 @@ class RepoSaveEuIn(BaseModel):
     eu_v2_report_id: str
 
 
+class RepoSaveMbIn(BaseModel):
+    mb_v2_report_id: str
+
+
 class RepoItemOut(BaseModel):
     id: str
     report_id: str | None = None
     pipeline_run_id: str | None = None
     v3_report_id: str | None = None
     eu_v2_report_id: str | None = None
+    mb_v2_report_id: str | None = None
     created_at: datetime
 
 
@@ -62,6 +67,15 @@ class RepoEuSavedListOut(BaseModel):
     """EU v2 mirror of RepoV2SavedListOut — the eu_v2_report ids the user
     has bookmarked, used for the EU report card's `initialSaved` prop
     on page load.
+    """
+
+    saved_report_ids: list[str]
+
+
+class RepoMbSavedListOut(BaseModel):
+    """Morning Briefing v2 mirror of RepoV2SavedListOut — the mb_v2_report
+    ids the user has bookmarked, used for the MB report card's `initialSaved`
+    prop on page load.
     """
 
     saved_report_ids: list[str]
@@ -344,5 +358,45 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
         rows = svc.list_items(db, user_id=user.id)
         ids = [r.eu_v2_report_id for r in rows if r.eu_v2_report_id is not None]
         return RepoEuSavedListOut(saved_report_ids=ids)
+
+    # ----- Morning Briefing v2 repo endpoints -----
+
+    @router.post(
+        "/mb-runs",
+        response_model=RepoItemOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def save_mb_ep(
+        body: RepoSaveMbIn,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoItemOut:
+        try:
+            item = svc.save_mb_report_to_repo(
+                db, user_id=user.id, mb_report_id=body.mb_v2_report_id
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "mb_report_not_found", "message": str(exc)},
+            ) from exc
+        return RepoItemOut.model_validate(item, from_attributes=True)
+
+    @router.delete("/mb-runs", status_code=status.HTTP_204_NO_CONTENT)
+    def unsave_mb_ep(
+        mb_v2_report_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> None:
+        svc.unsave_mb_report_from_repo(db, user_id=user.id, mb_report_id=mb_v2_report_id)
+
+    @router.get("/mb-runs", response_model=RepoMbSavedListOut)
+    def list_mb_saved_ep(
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoMbSavedListOut:
+        rows = svc.list_items(db, user_id=user.id)
+        ids = [r.mb_v2_report_id for r in rows if r.mb_v2_report_id is not None]
+        return RepoMbSavedListOut(saved_report_ids=ids)
 
     return router

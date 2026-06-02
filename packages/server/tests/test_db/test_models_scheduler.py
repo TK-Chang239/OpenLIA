@@ -48,6 +48,16 @@ def test_mb_schedules_columns(create_tables) -> None:
         "is_enabled",
         "created_at",
         "last_run_at",
+        # Per-schedule config binding (Morning Briefing rework, Phase 2).
+        "template_id",
+        "instructions_id",
+        "enabled_connectors",
+        "provider_kind",
+        "model",
+        "language",
+        "length",
+        "reasoning_effort",
+        "web_search",
     }
     assert set(cols.keys()) == expected
     assert cols["is_enabled"].default.arg is True

@@ -1,130 +1,160 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as api from "../../api/morning-briefing";
+import * as settingsApi from "../../api/settings";
+import * as viewer from "../../components/viewer/FileViewerContext";
 import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
 import MorningBriefing from "./MorningBriefing";
 
-vi.mock("../../hooks/useMbConfig", () => ({
-  useMbConfig: () => ({
-    config: {
-      report_length: "normal",
-      enabled_section_ids: [],
-      section_topics: {},
-      custom_sections: [],
-      reference_portfolio: false,
-    },
-    save: vi.fn().mockResolvedValue(undefined),
-    loading: false,
-  }),
-}));
+function makeRun(over: Partial<api.MbRunSummary>): api.MbRunSummary {
+  return {
+    report_id: "r1",
+    subject: "Markets open higher on rate-cut hopes",
+    trigger_kind: "on_demand",
+    schedule_id: null,
+    template_id: "freeform",
+    instructions_id: null,
+    language: "en",
+    length: "normal",
+    status: "completed",
+    created_at: new Date().toISOString(),
+    completed_at: null,
+    reasoning_effort: null,
+    highlights: null,
+    ...over,
+  };
+}
 
-vi.mock("../../hooks/useMbSchedules", () => ({
-  useMbSchedules: () => ({
-    schedules: [],
-    loading: false,
-    create: vi.fn().mockResolvedValue(undefined),
-    update: vi.fn().mockResolvedValue(undefined),
-    remove: vi.fn().mockResolvedValue(undefined),
-    refresh: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock("../../hooks/useMbReports", () => ({
-  useMbReports: () => ({
-    reports: [
-      {
-        id: "r-1",
-        title: "Morning Briefing 2026-04-24",
-        report_type: "morning_briefing",
-        created_at: "2026-04-24T13:00:00Z",
-      },
-    ],
-    loading: false,
-    refresh: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock("../../components/morning-briefing/ModelPicker", () => ({
-  ModelPicker: () => <select data-testid="mb-model-picker" />,
-}));
-
-vi.mock("../../components/report/ReportRenderer", () => ({
-  ReportRenderer: (props: { schema: { cover: { title: string } } }) => (
-    <div data-testid="report-renderer">{props.schema.cover.title}</div>
-  ),
-}));
-
-vi.mock("../../api/reports", () => ({
-  fetchReport: vi.fn().mockResolvedValue({
-    schema_version: "2.0",
-    department: "morning_briefing",
-    generated_at: "2026-04-24T13:00:00Z",
-    cover: { title: "Morning Briefing", subtitle: "", tagline: "" },
-    sections: [{ id: "macro", title: "Macro", blocks: [] }],
-  }),
-  reportPdfUrl: (id: string) => `/api/reports/${id}/export/pdf`,
-}));
+function makeSchedule(over: Partial<api.MbSchedule>): api.MbSchedule {
+  return {
+    id: "s1",
+    time: "07:00",
+    timezone: "America/New_York",
+    days_of_week: ["mon", "tue", "wed", "thu", "fri"],
+    label: "Pre-Market",
+    is_enabled: true,
+    template_id: "freeform",
+    instructions_id: null,
+    enabled_connectors: { provider_ids: [], web_search: false },
+    provider_kind: null,
+    model: null,
+    language: "en",
+    length: "normal",
+    reasoning_effort: null,
+    web_search: false,
+    ...over,
+  };
+}
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <FileViewerProvider>
-        <MorningBriefing />
-      </FileViewerProvider>
-    </MemoryRouter>,
+    <FileViewerProvider>
+      <MorningBriefing />
+    </FileViewerProvider>,
   );
 }
 
 describe("MorningBriefing page", () => {
-  it("renders Archive | Run Now | Schedule | Settings tabs (no Chat); ModelPicker lives on Run Now / Settings", () => {
-    renderPage();
-    expect(screen.getByText(/Morning Briefings/i)).toBeInTheDocument();
-    expect(screen.getByText(/Morning Briefing 2026-04-24/)).toBeInTheDocument();
-    // Tabs
-    expect(screen.getByRole("button", { name: /^Archive$/ })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Run Now$/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Schedule$/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Settings$/ }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^Chat$/ }),
-    ).not.toBeInTheDocument();
-    // ModelPicker not shown on Archive
-    expect(screen.queryByTestId("mb-model-picker")).not.toBeInTheDocument();
-    // Switch to Settings — ModelPicker should appear
-    fireEvent.click(screen.getByRole("button", { name: /^Settings$/ }));
-    expect(screen.getByTestId("mb-model-picker")).toBeInTheDocument();
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(api, "listMbRuns").mockResolvedValue([]);
+    vi.spyOn(api, "listMbSchedules").mockResolvedValue([]);
+    vi.spyOn(api, "listMbTemplates").mockResolvedValue({ templates: [] });
+    vi.spyOn(api, "listMbInstructions").mockResolvedValue([]);
+    vi.spyOn(api, "getMbDataSources").mockResolvedValue({ sources: [] });
+    vi.spyOn(settingsApi, "getEnabledModels").mockResolvedValue([]);
   });
 
-  it("opening a briefing shows the viewer with ReportRenderer (no inline chat)", async () => {
+  it("renders the topbar with Schedules, Library, and Run now", async () => {
     renderPage();
-    fireEvent.click(screen.getByTestId("mb-hero-open"));
-    await waitFor(() =>
-      expect(screen.getByTestId("mb-viewer")).toBeInTheDocument(),
-    );
-    expect(screen.queryByText(/Follow-up chat/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId("report-renderer")).toBeInTheDocument();
     expect(
-      screen.getByTestId("mb-ask-in-secretary"),
+      await screen.findByRole("button", { name: /schedules/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^library$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /run now/i }),
     ).toBeInTheDocument();
   });
 
-  it("Close button returns to the archive", async () => {
+  it("shows the empty state when there are no briefings", async () => {
     renderPage();
-    fireEvent.click(screen.getByTestId("mb-hero-open"));
-    await waitFor(() =>
-      expect(screen.getByTestId("mb-viewer")).toBeInTheDocument(),
+    expect(await screen.findByTestId("mb-empty-page")).toBeInTheDocument();
+  });
+
+  it("renders the feed when runs exist", async () => {
+    vi.spyOn(api, "listMbRuns").mockResolvedValue([
+      makeRun({ subject: "Markets open higher on rate-cut hopes" }),
+    ]);
+    renderPage();
+    expect(
+      await screen.findByText(/Markets open higher on rate-cut hopes/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("This week")).toBeInTheDocument();
+  });
+
+  it("opens a briefing via fileViewer with the mb_report source", async () => {
+    const openSpy = vi.fn();
+    vi.spyOn(viewer, "useFileViewer").mockReturnValue({
+      current: null,
+      lastTrigger: null,
+      open: openSpy,
+      close: vi.fn(),
+    } as unknown as ReturnType<typeof viewer.useFileViewer>);
+    vi.spyOn(api, "listMbRuns").mockResolvedValue([
+      makeRun({ report_id: "rX", subject: "Briefing X" }),
+    ]);
+    renderPage();
+    const open = await screen.findByText(/open briefing/i);
+    fireEvent.click(open);
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "report",
+        source: { kind: "mb_report", reportId: "rX" },
+      }),
     );
-    fireEvent.click(screen.getByRole("button", { name: /^Close$/ }));
-    await waitFor(() =>
-      expect(screen.queryByTestId("mb-viewer")).not.toBeInTheDocument(),
+  });
+
+  it("opens the Run now modal", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /run now/i }));
+    expect(await screen.findByTestId("mb-run-now-start")).toBeInTheDocument();
+  });
+
+  it("opens the schedules view and the schedule editor", async () => {
+    vi.spyOn(api, "listMbSchedules").mockResolvedValue([
+      makeSchedule({ label: "Pre-Market" }),
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /schedules/i }));
+    expect(await screen.findByTestId("mb-schedules")).toBeInTheDocument();
+    // Open the editor for the existing row.
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    expect(await screen.findByTestId("mb-schedule-save")).toBeInTheDocument();
+    // The timing controls are present (binding + scheduling fields).
+    expect(screen.getByTestId("mb-schedule-time")).toBeInTheDocument();
+    expect(screen.getByTestId("mb-template-select")).toBeInTheDocument();
+  });
+
+  it("opens the Library (cabinet) view", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /^library$/i }));
+    expect(await screen.findByTestId("mb-cabinet")).toBeInTheDocument();
+  });
+
+  it("deletes a feed briefing after confirming", async () => {
+    vi.spyOn(api, "listMbRuns").mockResolvedValue([
+      makeRun({ report_id: "rDel", subject: "Delete me" }),
+    ]);
+    const del = vi.spyOn(api, "deleteMbRun").mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: /remove briefing/i }),
     );
-    expect(screen.getByText(/Morning Briefing 2026-04-24/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+    await waitFor(() => expect(del).toHaveBeenCalledWith("rDel"));
   });
 });

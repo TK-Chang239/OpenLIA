@@ -4,7 +4,6 @@ import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
-    FakeMBBuilder,
     FakeMRBuilder,
     FakeMRCacheStore,
     FakeReportRunner,
@@ -20,7 +19,6 @@ from openlia_server.scheduler.wiring import build_scheduler_service
 def _builders():
     """Return a fresh kwargs dict of real-shaped fakes for wiring tests."""
     return dict(
-        mb_builder=FakeMBBuilder(request=ReportRequest(mode="stock_update", user_input="x")),
         eu_planner=StubEUScanPlanner(),
         mr_builder=FakeMRBuilder(
             items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
@@ -62,7 +60,6 @@ def test_build_requires_real_builders(session_factory) -> None:
     )
     base = _builders()
     for missing in (
-        "mb_builder",
         "eu_planner",
         "mr_builder",
         "report_store",

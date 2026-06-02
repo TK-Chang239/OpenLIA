@@ -4,6 +4,7 @@ Revision ID: 1c6b0cda0ed9
 Revises: 984fc020381a
 Create Date: 2026-06-01 04:16:22.990630+00:00
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -22,7 +23,10 @@ def upgrade() -> None:
     with op.batch_alter_table("repo_items", schema=None) as batch_op:
         batch_op.add_column(sa.Column("eu_v2_report_id", sa.String(length=36), nullable=True))
         batch_op.create_foreign_key(
-            "fk_repo_items_eu_v2_report_id", "report_eu", ["eu_v2_report_id"], ["id"],
+            "fk_repo_items_eu_v2_report_id",
+            "report_eu",
+            ["eu_v2_report_id"],
+            ["id"],
             ondelete="CASCADE",
         )
         batch_op.create_unique_constraint(
