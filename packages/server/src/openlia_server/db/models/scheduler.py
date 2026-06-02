@@ -25,6 +25,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     ForeignKey,
     Index,
@@ -40,7 +41,14 @@ from openlia_server.db.base import Base, UTCDateTime
 
 
 class MbSchedule(Base):
-    """Per-user Morning Briefing cron schedule."""
+    """Per-user Morning Briefing cron schedule with per-schedule config binding.
+
+    Each schedule binds its own template/instructions/connectors/model so a
+    user can run, e.g., a US-markets briefing at 07:00 and an Asia briefing
+    at 18:00 with different shapes. ``enabled_connectors`` holds
+    ``{"provider_ids": [...], "web_search": bool}``; ``web_search`` is a
+    denormalized convenience mirror of that flag.
+    """
 
     __tablename__ = "mb_schedules"
 
@@ -56,6 +64,24 @@ class MbSchedule(Base):
     label: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("1")
+    )
+    # Per-schedule config binding.
+    template_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    instructions_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    enabled_connectors: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    provider_kind: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    language: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="en", server_default="en"
+    )
+    length: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="normal", server_default="normal"
+    )
+    reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    web_search: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
     )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
