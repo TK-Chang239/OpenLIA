@@ -127,6 +127,45 @@ async def test_tool_dispatch_runs_inside_dispatcher_context():
 
 
 @pytest.mark.asyncio
+async def test_snapshot_restore_round_trip():
+    state = _state()
+    state.pending_request()
+    await state.apply_response(
+        script_tool_calls(("write_section", {"section_id": "quick_take", "markdown": "Body text."}))
+    )
+    # Simulate a ledger entry (data tools would append these in a real run).
+    state.ledger.append(tool_name="get_fundamentals", result_summary="fundamentals")
+
+    snap = state.snapshot()
+    restored = EuRunState.restore(snap, transports=_transports())
+
+    # Message history, turn, workspace section, and ledger all round-trip.
+    assert [m.role for m in restored.messages] == [m.role for m in state.messages]
+    assert restored.messages[-1].content == state.messages[-1].content
+    assert restored.turn == state.turn
+    assert "quick_take" in restored.workspace.sections
+    assert restored.workspace.sections["quick_take"].markdown == "Body text."
+    assert len(restored.ledger) == len(state.ledger) == 1
+
+    # The restored run is live: finalize completes it with the section intact.
+    assert restored.pending_request() is not None
+    await restored.apply_response(script_tool_calls(("finalize", {})))
+    result = restored.result()
+    assert result is not None
+    assert result.status == "completed"
+    assert any(s["section_id"] == "quick_take" for s in result.sections)
+
+
+def test_snapshot_is_json_serializable():
+    import json
+
+    state = _state()
+    snap = state.snapshot()
+    # Round-trips through JSON without error (DB stores it as a JSON string).
+    assert json.loads(json.dumps(snap))["custom_id"] == "r1"
+
+
+@pytest.mark.asyncio
 async def test_request_grows_message_history_across_turns():
     state = _state()
     req1 = state.pending_request()
