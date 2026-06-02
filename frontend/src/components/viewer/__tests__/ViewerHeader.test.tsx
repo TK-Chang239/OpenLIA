@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { ViewerHeader } from "../ViewerHeader";
 
@@ -83,5 +83,19 @@ describe("ViewerHeader download affordance", () => {
       />,
     );
     expect(queryByLabelText("chat.viewer_delete_aria")).toBeNull();
+  });
+
+  test("mb_report with reportId + saveEngine=mb renders the Save-to-Repo button", () => {
+    render(
+      <ViewerHeader
+        filename="briefing.pdf"
+        metadata="m"
+        source={{ kind: "mb_report", reportId: "r1" }}
+        reportId="r1"
+        saveEngine="mb"
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("save")).toBeInTheDocument();
   });
 });

@@ -166,18 +166,23 @@ export function FileViewer(): JSX.Element | null {
                   ? current.source.reportId
                   : current.source.kind === "eu_v2_report"
                     ? current.source.reportId
-                    : undefined
+                    : current.source.kind === "mb_report"
+                      ? current.source.reportId
+                      : undefined
             }
             saveEngine={
               current.source.kind === "v3_report"
                 ? "v3"
                 : current.source.kind === "eu_v2_report"
                   ? "eu"
-                  : "v1"
+                  : current.source.kind === "mb_report"
+                    ? "mb"
+                    : "v1"
             }
             initialSaved={current.initialSaved}
             // SaveToRepoButton supports v1 (POST /api/repo/items),
-            // v3 (POST /api/repo/v3-runs), and eu (POST /api/repo/eu-runs).
+            // v3 (POST /api/repo/v3-runs), eu (POST /api/repo/eu-runs),
+            // and mb (POST /api/repo/mb-runs).
             hideSaveToRepoButton={current.hideSaveToRepoButton ?? false}
             onRequestDelete={
               current.onDelete ? () => setConfirmDelete(true) : undefined
