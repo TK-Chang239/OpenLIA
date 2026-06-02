@@ -175,4 +175,19 @@ describe("EarningsUpdatePage (v2)", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /beats/i })).not.toBeInTheDocument();
   });
+
+  it("deletes a feed report after confirming", async () => {
+    vi.spyOn(api, "fetchRuns").mockResolvedValue([
+      makeRun({ report_id: "rDel", subject: "Apple delete me" }),
+    ]);
+    const del = vi.spyOn(api, "deleteRun").mockResolvedValue(undefined);
+    renderPage();
+    // The single recent run renders as the hero EuBigCard; click its trash.
+    fireEvent.click(
+      await screen.findByRole("button", { name: /remove report/i }),
+    );
+    // Confirm dialog: the confirm button label is exactly "Remove".
+    fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+    await waitFor(() => expect(del).toHaveBeenCalledWith("rDel"));
+  });
 });
