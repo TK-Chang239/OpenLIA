@@ -585,13 +585,29 @@ def cleanup_orphaned_running_rows(
     db: DBSession,
     reason: str = "server restart - run did not complete",
 ) -> int:
-    """Flip any report_eu rows stuck in 'running' (from a crash) to 'failed'. Call at startup."""
+    """Flip any report_eu rows stuck in 'running' (from a crash) to 'failed'. Call at startup.
+
+    Skips reports tied to a non-terminal batch job + active run: those are
+    resumed by ``recover_inflight_batches``, so failing them here would race
+    the resume. Recovery fails the un-resumable ones itself.
+    """
+    from sqlalchemy import select as _select
     from sqlalchemy import update
 
+    from openlia_server.db.models.report_eu import EuV2BatchJob, EuV2BatchRun
+
     now = datetime.now(UTC)
+    resumable_report_ids = (
+        _select(EuV2BatchRun.report_id)
+        .join(EuV2BatchJob, EuV2BatchJob.id == EuV2BatchRun.batch_job_id)
+        .where(
+            EuV2BatchJob.status.in_(("submitted", "polling")),
+            EuV2BatchRun.status == "active",
+        )
+    )
     stmt = (
         update(ReportEu)
-        .where(ReportEu.status == "running")
+        .where(ReportEu.status == "running", ReportEu.id.notin_(resumable_report_ids))
         .values(status="failed", error_message=reason, completed_at=now)
     )
     result = db.execute(stmt)

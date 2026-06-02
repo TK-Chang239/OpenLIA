@@ -339,6 +339,15 @@ def _restore_template(data: dict) -> TemplateSpec:
         return TemplateSpec.model_construct(**data)
 
 
+def request_from_snapshot(snapshot: dict) -> RunRequest:
+    """Return the ``RunRequest`` embedded in a snapshot.
+
+    Recovery uses this to build the connector dispatcher (from the request's
+    enabled connectors) before calling ``restore``.
+    """
+    return _deserialize_request(snapshot["request"])
+
+
 def _deserialize_request(data: dict) -> RunRequest:
     """Rebuild a RunRequest from its JSON dump.
 
@@ -362,4 +371,4 @@ def _deserialize_request(data: dict) -> RunRequest:
     )
 
 
-__all__ = ["EuRunState"]
+__all__ = ["EuRunState", "request_from_snapshot"]

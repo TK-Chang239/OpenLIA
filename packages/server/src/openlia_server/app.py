@@ -374,18 +374,17 @@ def _make_lifespan(
         if _eu_v2_swept:
             log.info("startup sweep: marked %d orphaned eu_v2 run(s) as failed", _eu_v2_swept)
 
-        # In-flight batch jobs can't be resumed across a restart yet, so mark
-        # any non-terminal job (+ its active runs) failed alongside the run sweep.
+        # Resume in-flight batch jobs from before the restart (the EU run sweep
+        # above skips their reports). Un-resumable jobs are failed by recovery.
         from openlia_server.services.eu_v2_batch_service import (
-            mark_orphaned_batch_jobs_failed as _eu_v2_batch_cleanup,
+            recover_inflight_batches as _eu_v2_batch_recover,
         )
 
-        with _v3_sweep_sf() as _eu_v2_batch_db:
-            _eu_v2_batch_swept = _eu_v2_batch_cleanup(db=_eu_v2_batch_db)
-        if _eu_v2_batch_swept:
+        _eu_v2_batch_resumed = _eu_v2_batch_recover(session_factory=_v3_sweep_sf)
+        if _eu_v2_batch_resumed:
             log.info(
-                "startup sweep: marked %d orphaned eu_v2 batch job(s) as failed",
-                _eu_v2_batch_swept,
+                "startup: resumed %d in-flight eu_v2 batch job(s)",
+                _eu_v2_batch_resumed,
             )
 
         from openlia_server.routes.reports import _resolve_frontend_dist
