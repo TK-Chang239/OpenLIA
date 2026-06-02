@@ -18,8 +18,8 @@ export type SaveToRepoVariant = "chip" | "viewer-header";
 
 /** Which engine produced the artifact. Selects the right repo
  *  endpoint (``/items`` for v1, ``/v2-runs`` for v2.2, ``/v3-runs``
- *  for v3, ``/eu-runs`` for Earnings Update v2) and the right
- *  SavedReportsContext bucket. */
+ *  for v3, ``/eu-runs`` for Earnings Update v2, ``/mb-runs`` for
+ *  Morning Briefing) and the right SavedReportsContext bucket. */
 export type SaveToRepoEngine = "v1" | "v2" | "v3" | "eu" | "mb";
 
 export interface SaveToRepoButtonProps {
