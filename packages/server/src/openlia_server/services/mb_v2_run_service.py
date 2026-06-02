@@ -24,9 +24,10 @@ MB v2 deltas vs. EU v2:
     row has no ``ticker`` / ``fiscal_date`` columns; it carries
     ``trigger_kind`` (scheduled | on_demand), a nullable ``schedule_id``,
     and a nullable ``instructions_id``.
-  - ``insert_report_row`` also creates the ``repo_items`` pointer
-    (``mb_v2_report_id``) so a briefing lands in the repository at
-    dispatch time.
+  - ``insert_report_row`` does NOT create a ``repo_items`` pointer. The
+    MB feed lists ``report_mb`` rows directly (mirroring EU); a pointer is
+    created only on explicit save (``repo.save_mb_report_to_repo``), so
+    scheduled briefings do not auto-clutter the cross-department repo.
 """
 
 from __future__ import annotations
