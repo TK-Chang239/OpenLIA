@@ -99,33 +99,45 @@ class BatchOrchestrator:
         self._sleep = sleep
         self._now = now
 
-    async def run(self) -> None:
+    async def run(self, *, resume_batch_id: str | None = None) -> None:
+        """Drive the group to completion.
+
+        ``resume_batch_id`` re-attaches to an already-submitted batch from a
+        prior process: the first cycle skips submit and instead polls + applies
+        that batch, then continues normally. The persisted checkpoint
+        (``on_turn_persisted``, fired once right after each submit) is always
+        the PRE-apply state for the batch id, so re-applying a resumed batch is
+        idempotent — sections overwrite, the ledger rebuilds from pre-apply.
+        """
         deadline = self._now() + self._max_wait_s
         active: dict[str, RunStepper] = {r.custom_id: r for r in self._runs}
+        pending_batch_id = resume_batch_id
 
         while active:
-            # Build this cycle's batch; drop runs that became terminal at the
-            # boundary (e.g. pending_request tripping the turn cap).
-            items: list[BatchRequestItem] = []
-            for cid, run in list(active.items()):
-                req = run.pending_request()
-                if req is None:
-                    self._finalize(cid, run)
-                    del active[cid]
-                    continue
-                items.append(BatchRequestItem(custom_id=cid, request=req))
-            if not active:
-                break
+            if pending_batch_id is None:
+                # Build this cycle's batch; drop runs that became terminal at
+                # the boundary (e.g. pending_request tripping the turn cap).
+                items: list[BatchRequestItem] = []
+                for cid, run in list(active.items()):
+                    req = run.pending_request()
+                    if req is None:
+                        self._finalize(cid, run)
+                        del active[cid]
+                        continue
+                    items.append(BatchRequestItem(custom_id=cid, request=req))
+                if not active:
+                    break
+                pending_batch_id = await self._transport.submit_batch(items)
+                # Checkpoint: batch submitted; state is pre-apply for this id.
+                self._on_turn_persisted(pending_batch_id, active)
 
-            batch_id = await self._transport.submit_batch(items)
-            self._on_turn_persisted(batch_id, active)
-
-            status = await self._await_batch(batch_id, deadline)
+            status = await self._await_batch(pending_batch_id, deadline)
             if status is not BatchStatus.COMPLETED:
-                self._fail_all(active, f"batch {batch_id} ended with status {status.value}")
+                self._fail_all(active, f"batch {pending_batch_id} ended with status {status.value}")
                 return
 
-            results = await self._transport.fetch_results(batch_id)
+            results = await self._transport.fetch_results(pending_batch_id)
+            pending_batch_id = None
             for cid, run in list(active.items()):
                 res = results.get(cid)
                 if res is None or res.error or res.response is None:
@@ -142,8 +154,6 @@ class BatchOrchestrator:
                 if run.terminal:
                     self._finalize(cid, run)
                     del active[cid]
-
-            self._on_turn_persisted(batch_id, active)
 
     async def _await_batch(self, batch_id: str, deadline: float) -> BatchStatus:
         """Poll until the batch leaves IN_PROGRESS, the deadline passes, or it fails."""

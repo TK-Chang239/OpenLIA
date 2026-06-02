@@ -183,6 +183,36 @@ async def test_batch_level_failure_fails_all_active():
 
 
 @pytest.mark.asyncio
+async def test_resume_from_existing_batch_then_continues():
+    # A was mid-run (quick_take written) when the process crashed; the
+    # finalize-turn batch "batch-resumed" was already in flight.
+    a = _state("A")
+    a.pending_request()
+    await a.apply_response(_write())
+
+    transport = FakeBatchTransport(scripts={"A": [_write(), _finalize()]})
+    # Pre-seed the in-flight batch as if submitted before the crash.
+    transport._pending["batch-resumed"] = ["A"]
+    completed: list[str] = []
+
+    orch = BatchOrchestrator(
+        transport=transport,
+        runs=[a],
+        poll_interval_s=0,
+        max_wait_s=10_000,
+        on_run_complete=lambda cid, result: completed.append(cid),
+        sleep=_noop_sleep,
+        now=_counter(),
+    )
+    await orch.run(resume_batch_id="batch-resumed")
+
+    assert completed == ["A"]
+    # The resumed batch was consumed without a new submit; exactly one fresh
+    # batch was submitted afterward to carry the finalize turn.
+    assert len(transport.submitted) == 1
+
+
+@pytest.mark.asyncio
 async def test_deadline_expiry_fails_all_active():
     a = _state("A")
     transport = FakeBatchTransport(scripts={"A": [_write()]})
