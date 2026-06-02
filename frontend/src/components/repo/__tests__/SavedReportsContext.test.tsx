@@ -20,6 +20,7 @@ describe("SavedReportsContext MB bucket", () => {
     (repoApi.listSavedV2Runs as ReturnType<typeof vi.fn>).mockResolvedValue({ saved_run_ids: [] });
     (repoApi.listSavedV3Runs as ReturnType<typeof vi.fn>).mockResolvedValue({ saved_report_ids: [] });
     (repoApi.listSavedEuRuns as ReturnType<typeof vi.fn>).mockResolvedValue({ saved_report_ids: [] });
+    (repoApi.listSavedMbRuns as ReturnType<typeof vi.fn>).mockResolvedValue({ saved_report_ids: [] });
   });
 
   it("hydrates isMbSaved from listSavedMbRuns", async () => {
