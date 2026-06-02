@@ -439,6 +439,10 @@
     "viewer_next_page": "下一頁",
     "viewer_tab_preview": "預覽",
     "viewer_tab_raw": "原始檔",
+    "viewer_delete_title": "刪除報告？",
+    "viewer_delete_description": "此操作將永久刪除報告，且無法復原。",
+    "viewer_delete_confirm": "刪除",
+    "viewer_delete_aria": "刪除報告",
     "pdf_page_of": "第 {{page}} 頁 / 共 {{total}} 頁",
     "thinking": "思考中…",
     "load_failed": "無法載入對話訊息",
@@ -834,6 +838,7 @@
       "today": "今日",
       "open_update": "開啟更新",
       "generating": "生成中...",
+      "remove_aria": "移除報告",
       "gen": {
         "badge": "正在生成更新",
         "title_fallback": "{{ticker}} — 財報更新",
