@@ -1,15 +1,21 @@
-"""Morning Briefing executor. Wires MBRequestBuilder → ReportRunner →
-ReportStore pipeline and produces one report_ready notification."""
+"""Morning Briefing executor (MB rework Phase 3).
+
+Fires a scheduled ``report_mb`` run. The executor is itself the background
+job, so it owns the session and runs the engine to completion inline via
+``mb_v2_run_service.run_to_completion`` (NOT the detached ``start_run_async``
+path the on-demand HTTP route uses). It loads the firing ``mb_schedules`` row
+and its bound config, builds a ``RunRequest`` from that config plus a
+``BriefingContext`` (schedule label / time / timezone + the run date), runs the
+engine, persists into ``report_mb``, stamps ``mb_schedules.last_run_at``, and
+emits one ``REPORT_READY`` notification.
+"""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import ClassVar
 
-from openlia.llm import exceptions as llm_exceptions
-from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.runtime.cancellation import CancellationToken
-from openlia.llm.runtime.events import ReportComplete, ReportError
 
 from openlia_server.db.models.scheduler import MbSchedule
 from openlia_server.scheduler.executors.base import (
@@ -19,17 +25,10 @@ from openlia_server.scheduler.executors.base import (
     NotificationSpec,
     SessionFactory,
 )
-from openlia_server.scheduler.payloads import MBRequestBuilder, ReportStore
 from openlia_server.scheduler.registry import JobType, NotificationType
+from openlia_server.services import mb_v2_run_service
 
 DEPARTMENT = "morning_briefing"
-
-
-def _raise_from_report_error(event: ReportError) -> None:
-    exc_cls = getattr(llm_exceptions, event.error_class, None)
-    if exc_cls is not None and issubclass(exc_cls, LLMProviderError):
-        raise exc_cls(event.message)
-    raise RuntimeError(f"{event.error_class}: {event.message}")
 
 
 class MBBriefingExecutor(BaseExecutor):
@@ -39,15 +38,11 @@ class MBBriefingExecutor(BaseExecutor):
         self,
         *,
         session_factory: SessionFactory,
-        mb_builder: MBRequestBuilder,
-        report_runner,
-        report_store: ReportStore,
+        run_service=mb_v2_run_service,
         sleep: AsyncSleep | None = None,
     ) -> None:
         super().__init__(session_factory=session_factory, sleep=sleep)
-        self._mb_builder = mb_builder
-        self._report_runner = report_runner
-        self._report_store = report_store
+        self._run_service = run_service
 
     async def _do_work(
         self,
@@ -60,45 +55,44 @@ class MBBriefingExecutor(BaseExecutor):
         assert user_id is not None
         assert schedule_id is not None
 
-        session = self._session_factory()
-        try:
-            request = self._mb_builder.build(
-                session=session, user_id=user_id, schedule_id=schedule_id
-            )
-        finally:
-            session.close()
-
-        report_payload: dict | None = None
-        async for event in self._report_runner.run(
-            department_id=DEPARTMENT,
-            user_id=user_id,
-            request=request,
-            cancel_token=cancel_token,
-        ):
-            if isinstance(event, ReportError):
-                _raise_from_report_error(event)
-            if isinstance(event, ReportComplete):
-                report_payload = event.schema
-
-        if report_payload is None:
-            raise RuntimeError("ReportRunner returned without a ReportComplete event")
-
-        session = self._session_factory()
-        try:
-            report_id = self._report_store.save(
-                session=session,
-                user_id=user_id,
-                department=DEPARTMENT,
-                payload=report_payload,
-            )
+        with self._session_factory() as session:
             schedule = session.get(MbSchedule, schedule_id)
-            label = schedule.label if schedule is not None else None
-            time_label = schedule.time if schedule is not None else "scheduled"
-            if schedule is not None:
-                schedule.last_run_at = datetime.now(UTC)
+            if schedule is None:
+                raise RuntimeError(f"mb schedule {schedule_id!r} not found at fire time")
+            label = schedule.label or ""
+            time_label = schedule.time
+            timezone = schedule.timezone
+            connectors = dict(schedule.enabled_connectors or {})
+
+            request = self._run_service.build_run_request(
+                session,
+                user_id=user_id,
+                trigger_kind="scheduled",
+                template_id=schedule.template_id or "mb_default",
+                instructions_id=schedule.instructions_id,
+                enabled_connectors=connectors,
+                provider_kind=schedule.provider_kind or "anthropic",
+                model=schedule.model or "claude-sonnet-4-6",
+                language=schedule.language,
+                length=schedule.length,
+                reasoning_effort=schedule.reasoning_effort,
+                run_date=date.today().isoformat(),
+                schedule_label=label or None,
+                time_label=time_label,
+                timezone=timezone,
+            )
+
+            report_id, _result = await self._run_service.run_to_completion(
+                session,
+                user_id=user_id,
+                request=request,
+                trigger_kind="scheduled",
+                schedule_id=schedule_id,
+                instructions_id=schedule.instructions_id,
+            )
+
+            schedule.last_run_at = datetime.now(UTC)
             session.commit()
-        finally:
-            session.close()
 
         display = label if label else time_label
         return JobOutcome(

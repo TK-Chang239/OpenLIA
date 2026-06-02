@@ -63,11 +63,13 @@ def build_scheduler_service(
         raise TypeError("batch_runner is required (got None)")
 
     executors: dict[JobType, Any] = {
+        # MB rework Phase 3: the executor runs the report_mb engine inline
+        # via mb_v2_run_service (its module-default collaborator) and no
+        # longer needs the legacy mb_builder/report_runner/report_store
+        # pipeline. Those params stay on build_scheduler_service for the EU
+        # executor + app wiring, but MB ignores them.
         JobType.MB_BRIEFING: MBBriefingExecutor(
             session_factory=session_factory,
-            mb_builder=mb_builder,
-            report_runner=report_runner,
-            report_store=report_store,
         ),
         JobType.EU_SCAN: EUScanExecutor(
             session_factory=session_factory,

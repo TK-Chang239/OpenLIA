@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -14,9 +15,11 @@ from _scheduler_fakes import (
     FakeReportStore,
     StubEUScanPlanner,
 )
-from openlia.llm.runtime.events import ReportComplete, ReportStart
 from openlia.llm.runtime.messages import ReportRequest
+from openlia.llm.runtime.report_mb import RunResult
+from openlia.llm.runtime.report_mb.default_template import build_default_template
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.report_mb import ReportMb, ReportMbTemplate
 from openlia_server.db.models.scheduler import (
     JobRun,
     MbSchedule,
@@ -29,13 +32,16 @@ from openlia_server.scheduler.registry import (
 )
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
+from openlia_server.services import mb_v2_run_service
 
 
 @pytest.mark.asyncio
 async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
     session_factory,
+    monkeypatch,
 ) -> None:
-    # --- seed ---
+    # --- seed: user, mb_default template, a fully-bound schedule ---
+    spec = build_default_template()
     with session_factory() as s:
         s.add(
             User(
@@ -47,6 +53,22 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
                 is_disabled=False,
             )
         )
+        now = datetime.now(UTC)
+        s.add(
+            ReportMbTemplate(
+                id=spec.template_id,
+                user_id=None,
+                name=spec.name,
+                is_builtin=True,
+                template_spec_json=json.loads(spec.model_dump_json()),
+                source_markdown=None,
+                source_doc_blob=None,
+                source_doc_mime=None,
+                created_at=now,
+                updated_at=now,
+                deleted_at=None,
+            )
+        )
         s.add(
             MbSchedule(
                 id="sch_mb",
@@ -56,11 +78,61 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
                 days_of_week='["mon","tue","wed","thu","fri"]',
                 label="Pre-Market",
                 is_enabled=True,
-                created_at=datetime.now(UTC),
+                template_id="mb_default",
+                instructions_id=None,
+                enabled_connectors={"provider_ids": [], "web_search": False},
+                provider_kind="anthropic",
+                model="claude-sonnet-4-6",
+                language="en",
+                length="normal",
+                reasoning_effort=None,
+                web_search=False,
+                created_at=now,
                 last_run_at=None,
             )
         )
         s.commit()
+
+    # The MB executor runs the report_mb engine inline via mb_v2_run_service.
+    # Stub run_to_completion so the engine call is faked but the executor's
+    # request-build + persistence + last_run_at + notification path stays real.
+    async def _fake_run_to_completion(db, *, user_id, request, **kwargs):
+        report_id = str(uuid.uuid4())
+        db.add(
+            ReportMb(
+                id=report_id,
+                user_id=user_id,
+                subject=request.subject,
+                trigger_kind=kwargs.get("trigger_kind", "scheduled"),
+                schedule_id=kwargs.get("schedule_id"),
+                template_id=request.template.template_id,
+                instructions_id=kwargs.get("instructions_id"),
+                language=request.language.value,
+                length=request.length.value,
+                provider_kind=request.provider_kind,
+                model=request.model,
+                status="completed",
+                error_message=None,
+                created_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
+                cover_json=None,
+                reasoning_effort=None,
+            )
+        )
+        db.flush()
+        result = RunResult(
+            status="completed",
+            subject=request.subject,
+            template_id=request.template.template_id,
+            message="",
+            sections=[],
+            charts=[],
+            citations=[],
+            cover=None,
+        )
+        return report_id, result
+
+    monkeypatch.setattr(mb_v2_run_service, "run_to_completion", _fake_run_to_completion)
 
     # --- real executor graph, fake APScheduler + fake runners/builders ---
     fake_scheduler = FakeAPScheduler()
@@ -68,20 +140,7 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
         session_factory=session_factory,
         settings=SchedulerSettings(enabled=True),
         scheduler=fake_scheduler,
-        report_runner=FakeReportRunner(
-            events=[
-                ReportStart(
-                    report_id="r_1",
-                    department="morning_briefing",
-                    mode="mb",
-                    section_titles=["Overnight"],
-                ),
-                ReportComplete(
-                    report_id="r_1",
-                    schema={"title": "Briefing", "sections": []},
-                ),
-            ]
-        ),
+        report_runner=FakeReportRunner(events=[]),
         batch_runner=FakeBatchRunner(results=[]),
         mb_builder=FakeMBBuilder(request=ReportRequest(mode="morning_briefing", user_input="go")),
         eu_planner=StubEUScanPlanner(),
@@ -108,7 +167,13 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
         assert run.status == JobStatus.COMPLETED.value
         assert run.user_id == "u_1"
         assert run.job_type == JobType.MB_BRIEFING.value
-        assert json.loads(run.result_summary) == {"report_id": "rep_final"}
+        report_id = json.loads(run.result_summary)["report_id"]
+
+        # A real report_mb row was produced, anchored to the schedule.
+        report = s.get(ReportMb, report_id)
+        assert report is not None
+        assert report.status == "completed"
+        assert report.schedule_id == "sch_mb"
 
         notifs = s.query(UserNotification).all()
         assert len(notifs) == 1
