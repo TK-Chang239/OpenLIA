@@ -154,4 +154,19 @@ describe("FileViewer", () => {
       screen.queryByRole("button", { name: /delete report/i }),
     ).toBeNull();
   });
+
+  it("canceling the delete confirm keeps the viewer open and does not call onDelete", () => {
+    const onDelete = vi.fn();
+    render(
+      <FileViewerProvider>
+        <DeletableTrigger onDelete={onDelete} />
+        <FileViewer />
+      </FileViewerProvider>,
+    );
+    fireEvent.click(screen.getByText("open-del"));
+    fireEvent.click(screen.getByRole("button", { name: /delete report/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("complementary")).toBeInTheDocument();
+  });
 });
