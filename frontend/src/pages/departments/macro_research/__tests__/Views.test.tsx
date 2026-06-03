@@ -290,6 +290,7 @@ describe("AllWeatherView", () => {
     expect(screen.getByTestId("t3-risk-bars-benchmark")).toBeInTheDocument();
     expect(screen.getByTestId("t3-risk-bars-reference")).toBeInTheDocument();
     expect(screen.getByTestId("t3-gold-check")).toBeInTheDocument();
+    expect(screen.getByTestId("t3-stress-test")).toBeInTheDocument();
     expect(screen.getByTestId("t3-caveats")).toBeInTheDocument();
     expect(screen.getByTestId("t3-verdict")).toBeInTheDocument();
   });

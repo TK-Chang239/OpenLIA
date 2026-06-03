@@ -102,6 +102,56 @@ export const ALL_WEATHER_FALLBACK: AllWeatherData = {
       body: "In the 60/40, equities at 60% capital weight × ~17% vol contributes ~10.2 vol-weighted units of risk. Bonds at 40% × ~11% vol contributes ~4.4 units. Equities' share: 10.2 ÷ (10.2 + 4.4) ≈ 70% — but in practice it's worse because equities and bonds can correlate positively in inflationary regimes (2022), making the equity risk share closer to 85–90% of realised portfolio volatility. All-Weather corrects this by halving the equity weight and increasing the bond weight, while adding gold and commodities whose high individual vol but low equity correlation brings their risk contribution in line with equities.",
     },
   },
+  stressTest: {
+    label: "Section E — Monte-Carlo stress test",
+    intro:
+      "10,000-path 1-year Monte-Carlo simulation under baked reference parameters (long-run expected returns, volatilities, and cross-asset correlations). Stress regimes are parameter overlays, not a fat-tail model.",
+    distribution: {
+      title: "Base-case 1-year return distribution — 60/40 vs All-Weather reference",
+      bars: [
+        { label: "5th pct (VaR-95)", userPct: -0.18, refPct: -0.09 },
+        { label: "25th pct", userPct: -0.04, refPct: -0.01 },
+        { label: "Median", userPct: 0.06, refPct: 0.05 },
+        { label: "75th pct", userPct: 0.17, refPct: 0.12 },
+        { label: "95th pct", userPct: 0.31, refPct: 0.2 },
+      ],
+    },
+    scenarios: [
+      {
+        name: "Base case",
+        userMedianPct: 0.06,
+        userP5Pct: -0.18,
+        refMedianPct: 0.05,
+        refP5Pct: -0.09,
+        tone: "amber",
+      },
+      {
+        name: "Stagflation",
+        userMedianPct: -0.05,
+        userP5Pct: -0.27,
+        refMedianPct: -0.01,
+        refP5Pct: -0.14,
+        tone: "red",
+      },
+      {
+        name: "Rate shock",
+        userMedianPct: -0.03,
+        userP5Pct: -0.24,
+        refMedianPct: -0.04,
+        refP5Pct: -0.17,
+        tone: "red",
+      },
+      {
+        name: "Equity crash / deleveraging",
+        userMedianPct: -0.22,
+        userP5Pct: -0.41,
+        refMedianPct: -0.08,
+        refP5Pct: -0.19,
+        tone: "red",
+      },
+    ],
+    note: "Reference assumptions; not investment advice. Gaussian draws — tails are conservative relative to historical crashes.",
+  },
   gold: {
     label: "Section C — gold allocation check",
     title: "60/40 gold weight vs Dalio guidance ranges",
