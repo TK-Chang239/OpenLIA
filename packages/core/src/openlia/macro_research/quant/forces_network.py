@@ -10,6 +10,10 @@ invents the force-network numbers.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from openlia.macro_research.quant.forces import ForceScores
+
 # Canonical force order for the matrix.
 FORCE_ORDER: tuple[str, ...] = (
     "debt_money",
@@ -50,3 +54,96 @@ INFLUENCE: dict[str, dict[str, float]] = {
 def coupling(driver: str, driven: str) -> float:
     """Directed coupling strength from `driver` to `driven` (0.0 if unspecified)."""
     return INFLUENCE.get(driver, {}).get(driven, 0.0)
+
+
+@dataclass(frozen=True)
+class NetworkEdge:
+    from_label: str
+    to_label: str
+    strength: float  # decimal 0-1
+
+
+@dataclass(frozen=True)
+class ForceProjection:
+    force: str  # display label
+    current: float  # 0-10
+    projected: float  # 0-10
+    delta: float
+
+
+@dataclass(frozen=True)
+class ForceNetwork:
+    edges: tuple[NetworkEdge, ...]
+    projections: tuple[ForceProjection, ...]
+    amplifier: str  # display label
+    absorber: str  # display label
+    contagion: float  # 0-1
+    contagion_label: str
+
+
+def _contagion_label(value: float) -> str:
+    if value < 0.25:
+        return "Contained"
+    if value < 0.5:
+        return "Spreading"
+    return "Self-reinforcing"
+
+
+def analyze_force_network(scores: ForceScores) -> ForceNetwork:
+    """VAR(1)-style one-step influence read from the five current force scores.
+
+    Deterministic: pure arithmetic over the baked INFLUENCE matrix. See the
+    module docstring on why this is NOT a fitted VAR.
+    """
+    x = {f: float(getattr(scores, f)) for f in FORCE_ORDER}
+
+    # Projected next-period intensity per driven force: persistence blended with
+    # the coupling-weighted average of its drivers' current intensities.
+    projections: list[ForceProjection] = []
+    for j in FORCE_ORDER:
+        in_weight = sum(coupling(i, j) for i in FORCE_ORDER)
+        if in_weight > 0.0:
+            cross = sum(coupling(i, j) * x[i] for i in FORCE_ORDER) / in_weight
+        else:
+            cross = x[j]
+        nxt = PERSISTENCE * x[j] + (1.0 - PERSISTENCE) * cross
+        nxt = max(0.0, min(10.0, nxt))
+        projections.append(
+            ForceProjection(force=FORCE_LABELS[j], current=x[j], projected=nxt, delta=nxt - x[j])
+        )
+
+    # Active directed edges: an intense driver (>= ACTIVE_THRESHOLD) transmitting
+    # along a non-zero coupling. Strength is coupling scaled by driver intensity.
+    edges: list[NetworkEdge] = []
+    for i in FORCE_ORDER:
+        if x[i] < ACTIVE_THRESHOLD:
+            continue
+        for j in FORCE_ORDER:
+            a = coupling(i, j)
+            if a > 0.0:
+                edges.append(
+                    NetworkEdge(
+                        from_label=FORCE_LABELS[i],
+                        to_label=FORCE_LABELS[j],
+                        strength=a * (x[i] / 10.0),
+                    )
+                )
+    edges.sort(key=lambda e: e.strength, reverse=True)  # stable: ties keep FORCE_ORDER
+
+    # Roles: amplifier drives the most; absorber receives the most.
+    out_strength = {i: sum(coupling(i, j) * x[i] / 10.0 for j in FORCE_ORDER) for i in FORCE_ORDER}
+    in_strength = {j: sum(coupling(i, j) * x[i] / 10.0 for i in FORCE_ORDER) for j in FORCE_ORDER}
+    amplifier = FORCE_LABELS[max(FORCE_ORDER, key=lambda f: out_strength[f])]
+    absorber = FORCE_LABELS[max(FORCE_ORDER, key=lambda f: in_strength[f])]
+
+    contagion = sum(e.strength for e in edges) / len(edges) if edges else 0.0
+    contagion = max(0.0, min(1.0, contagion))
+
+    return ForceNetwork(
+        edges=tuple(edges),
+        projections=tuple(projections),
+        amplifier=amplifier,
+        absorber=absorber,
+        contagion=contagion,
+        contagion_label=_contagion_label(contagion),
+    )
