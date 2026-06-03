@@ -977,6 +977,15 @@
     "empty_sub": "建立排程或立即執行，LIA 將依您的範本與指示撰寫晨間簡報。",
     "open_library": "開啟資料庫",
     "viewer_metadata": "晨間簡報",
+    "hero": {
+      "eyebrow": "晨間簡報",
+      "dept": "已排程",
+      "headline": "您的晨間簡報",
+      "lede": "依您的範本與指示自動撰寫的排程簡報——在您一天開始前就緒。",
+      "stat_briefings_wk": "本週簡報",
+      "stat_active_schedules": "啟用排程",
+      "stat_next_run": "下次執行"
+    },
     "feed": {
       "briefing": "簡報",
       "today": "今天",

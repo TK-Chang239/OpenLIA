@@ -977,6 +977,15 @@
     "empty_sub": "Create a schedule or run one now, and LIA will write your morning briefing from your template and instructions.",
     "open_library": "Open Library",
     "viewer_metadata": "Morning Briefing",
+    "hero": {
+      "eyebrow": "Morning Briefing",
+      "dept": "Scheduled",
+      "headline": "Your morning briefing",
+      "lede": "Scheduled briefings written from your templates and instructions — ready before your day starts.",
+      "stat_briefings_wk": "Briefings this week",
+      "stat_active_schedules": "Active schedules",
+      "stat_next_run": "Next run"
+    },
     "feed": {
       "briefing": "Briefing",
       "today": "Today",
