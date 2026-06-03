@@ -885,7 +885,6 @@ def create_app(
         build_macro_research_router(
             db_session_factory=factory,
             mode=mode,
-            mr_runner=mr_runner,
             dashboard_service=mr_dashboard_svc,
         )
     )
