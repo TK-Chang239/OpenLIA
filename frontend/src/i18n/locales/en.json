@@ -1080,9 +1080,8 @@
     },
     "run_now_modal": {
       "title": "Run a briefing now",
-      "description": "Generate a morning briefing immediately.",
-      "schedule_label": "Use a schedule's settings",
-      "schedule_adhoc": "Ad-hoc (Library defaults)",
+      "description": "Configure the settings below, then generate a briefing immediately. Your choices are remembered for next time.",
+      "empty_error": "Pick a template or instructions before generating.",
       "failed": "Failed to start briefing",
       "cancel": "Cancel",
       "starting": "Starting…",
