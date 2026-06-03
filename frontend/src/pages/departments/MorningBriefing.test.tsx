@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../api/morning-briefing";
@@ -68,14 +74,17 @@ describe("MorningBriefing page", () => {
 
   it("renders the topbar with Schedules, Library, and Run now", async () => {
     renderPage();
+    // Scope to the page header — the empty state also renders a "Run now"
+    // CTA, so an unscoped /run now/i query is intentionally ambiguous.
+    const header = await screen.findByRole("banner");
     expect(
-      await screen.findByRole("button", { name: /schedules/i }),
+      within(header).getByRole("button", { name: /schedules/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^library$/i }),
+      within(header).getByRole("button", { name: /^library$/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /run now/i }),
+      within(header).getByRole("button", { name: /run now/i }),
     ).toBeInTheDocument();
   });
 
@@ -122,7 +131,8 @@ describe("MorningBriefing page", () => {
 
   it("opens the Run now modal", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: /run now/i }));
+    const header = await screen.findByRole("banner");
+    fireEvent.click(within(header).getByRole("button", { name: /run now/i }));
     expect(await screen.findByTestId("mb-run-now-start")).toBeInTheDocument();
   });
 
