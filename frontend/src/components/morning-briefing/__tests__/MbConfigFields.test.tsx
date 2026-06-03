@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../../api/morning-briefing";
@@ -50,5 +50,14 @@ describe("MbConfigFields", () => {
     expect(isBriefEmpty(draft({ template_id: "freeform", instructions_id: null }))).toBe(true);
     expect(isBriefEmpty(draft({ template_id: "freeform", instructions_id: "i1" }))).toBe(false);
     expect(isBriefEmpty(draft({ template_id: "mb_default", instructions_id: null }))).toBe(false);
+  });
+
+  it("routes a language change through onChange", async () => {
+    const onChange = vi.fn();
+    render(<MbConfigFields draft={draft()} onChange={onChange} />);
+    fireEvent.change(await screen.findByTestId("mb-language-select"), {
+      target: { value: "zh-Hant" },
+    });
+    expect(onChange).toHaveBeenCalledWith({ language: "zh-Hant" });
   });
 });

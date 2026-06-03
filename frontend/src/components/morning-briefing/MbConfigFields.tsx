@@ -51,7 +51,7 @@ export function isBriefEmpty(draft: MbConfigDraft): boolean {
   return draft.template_id === "freeform" && !draft.instructions_id;
 }
 
-export function sectionTitle(text: string) {
+export function mbSectionTitle(text: string) {
   return (
     <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
       {text}
@@ -59,7 +59,7 @@ export function sectionTitle(text: string) {
   );
 }
 
-export function Toggle({
+export function MbToggle({
   on,
   onClick,
   testId,
@@ -269,7 +269,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
     );
     return (
       <div key={s.key}>
-        <Toggle
+        <MbToggle
           on={sourceEnabled(s) && s.available}
           onClick={() => toggleSource(s)}
           testId={`mb-connector-${s.key}`}
@@ -290,7 +290,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
     <>
       {/* Model */}
       <section className="mb-7">
-        {sectionTitle(t("morning_briefing.schedule_editor.model_title"))}
+        {mbSectionTitle(t("morning_briefing.schedule_editor.model_title"))}
         <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
           {t("morning_briefing.schedule_editor.model_hint")}
         </p>
@@ -307,7 +307,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
 
       {/* Template */}
       <section className="mb-7">
-        {sectionTitle(t("morning_briefing.schedule_editor.template_title"))}
+        {mbSectionTitle(t("morning_briefing.schedule_editor.template_title"))}
         <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
           {t("morning_briefing.schedule_editor.template_hint")}
         </p>
@@ -366,7 +366,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
 
       {/* Instructions */}
       <section className="mb-7">
-        {sectionTitle(t("morning_briefing.schedule_editor.instructions_title"))}
+        {mbSectionTitle(t("morning_briefing.schedule_editor.instructions_title"))}
         <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
           {t("morning_briefing.schedule_editor.instructions_hint")}
         </p>
@@ -421,7 +421,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
 
       {/* Connectors */}
       <section className="mb-7">
-        {sectionTitle(t("morning_briefing.schedule_editor.connectors_title"))}
+        {mbSectionTitle(t("morning_briefing.schedule_editor.connectors_title"))}
         <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
           {t("morning_briefing.schedule_editor.connectors_hint")}
         </p>
@@ -443,7 +443,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
 
       {/* Length */}
       <section className="mb-7">
-        {sectionTitle(t("morning_briefing.schedule_editor.length_title"))}
+        {mbSectionTitle(t("morning_briefing.schedule_editor.length_title"))}
         <div
           role="radiogroup"
           aria-label={t("morning_briefing.schedule_editor.length_aria")}
@@ -477,7 +477,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
 
       {/* Language */}
       <section className={draft.provider_kind === "anthropic" ? "mb-7" : "mb-2"}>
-        {sectionTitle(t("morning_briefing.schedule_editor.language_title"))}
+        {mbSectionTitle(t("morning_briefing.schedule_editor.language_title"))}
         <select
           value={draft.language}
           onChange={(e) => onChange({ language: e.target.value })}
@@ -494,7 +494,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
         <>
           <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
           <section className="mb-2">
-            {sectionTitle(t("morning_briefing.schedule_editor.reasoning_title"))}
+            {mbSectionTitle(t("morning_briefing.schedule_editor.reasoning_title"))}
             <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-2">
               {t("morning_briefing.schedule_editor.reasoning_hint")}
             </p>
