@@ -62,3 +62,51 @@ def test_resolve_quadrant_each_marker_corner() -> None:
     assert resolve_quadrant(_stub(80, 80)) == "Summer"  # growth rising, inflation rising
     assert resolve_quadrant(_stub(20, 80)) == "Autumn"  # growth falling, inflation rising
     assert resolve_quadrant(_stub(20, 20)) == "Winter"  # growth falling, inflation falling
+
+
+from openlia.macro_research.quant.markov import markov_outlook  # noqa: E402
+
+
+def test_outlook_distribution_is_the_matrix_row() -> None:
+    out = markov_outlook("Summer")
+    assert out.current_season == "Summer"
+    assert out.distribution == {
+        "Spring": 0.08,
+        "Summer": 0.60,
+        "Autumn": 0.27,
+        "Winter": 0.05,
+    }
+    assert abs(sum(out.distribution.values()) - 1.0) < 1e-9
+
+
+def test_outlook_persistence_is_diagonal() -> None:
+    out = markov_outlook("Autumn")
+    assert out.persistence == 0.57
+
+
+def test_outlook_most_likely_next_and_adverse() -> None:
+    out = markov_outlook("Summer")
+    assert out.most_likely_next == "Summer"  # persistence dominates
+    assert out.adverse_season == "Autumn"
+    assert out.adverse_prob == 0.27
+
+
+def test_outlook_expected_dwell() -> None:
+    out = markov_outlook("Spring")  # persistence 0.60
+    assert abs(out.expected_dwell_quarters - 2.5) < 1e-9
+
+
+def test_outlook_horizon_is_matrix_power_and_stochastic() -> None:
+    out = markov_outlook("Spring", steps=4)
+    assert out.horizon_quarters == 4
+    assert abs(sum(out.horizon_distribution.values()) - 1.0) < 1e-9
+    # 1-step distribution is more concentrated on the current season than the
+    # 4-step distribution (the chain mixes toward its stationary spread).
+    assert out.horizon_distribution["Spring"] < out.distribution["Spring"]
+
+
+def test_outlook_unknown_season_raises() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="unknown season"):
+        markov_outlook("Monsoon")

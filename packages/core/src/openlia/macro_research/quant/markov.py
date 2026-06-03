@@ -9,6 +9,8 @@ Deterministic (matrix arithmetic, no RNG).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from openlia.macro_research.quant.seasons import SeasonsClassification
@@ -60,3 +62,47 @@ def resolve_quadrant(classification: SeasonsClassification) -> str:
     if not growth_rising and inflation_rising:
         return "Autumn"
     return "Winter"
+
+
+@dataclass(frozen=True)
+class MarkovOutlook:
+    current_season: str
+    distribution: dict[str, float]  # next-quarter, keyed by season
+    persistence: float
+    most_likely_next: str
+    adverse_season: str
+    adverse_prob: float
+    expected_dwell_quarters: float
+    horizon_quarters: int
+    horizon_distribution: dict[str, float]
+
+
+def markov_outlook(current_season: str, *, steps: int = 4) -> MarkovOutlook:
+    """Transition outlook from `current_season` over the baked quarterly matrix.
+
+    Deterministic. Raises ValueError if `current_season` is not one of
+    SEASON_ORDER.
+    """
+    if current_season not in _SEASON_SET:
+        raise ValueError(f"unknown season {current_season!r}; expected one of {SEASON_ORDER}")
+    matrix = _matrix_array()
+    idx = SEASON_ORDER.index(current_season)
+    row = matrix[idx]
+    distribution = {s: float(row[j]) for j, s in enumerate(SEASON_ORDER)}
+    persistence = distribution[current_season]
+    most_likely_next = max(SEASON_ORDER, key=lambda s: distribution[s])
+    adverse_prob = distribution[ADVERSE_SEASON]
+    expected_dwell = 1.0 / (1.0 - persistence) if persistence < 1.0 else float("inf")
+    horizon_row = np.linalg.matrix_power(matrix, steps)[idx]
+    horizon_distribution = {s: float(horizon_row[j]) for j, s in enumerate(SEASON_ORDER)}
+    return MarkovOutlook(
+        current_season=current_season,
+        distribution=distribution,
+        persistence=persistence,
+        most_likely_next=most_likely_next,
+        adverse_season=ADVERSE_SEASON,
+        adverse_prob=adverse_prob,
+        expected_dwell_quarters=expected_dwell,
+        horizon_quarters=steps,
+        horizon_distribution=horizon_distribution,
+    )
