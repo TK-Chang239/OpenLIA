@@ -383,6 +383,51 @@ accent/olive/neutral/amber/rust; `pct`/`leftPct` are integers 0-100):
   - `generated_at`: an ISO-8601 timestamp for the run."""
 
 
+_FIVE_FORCES_WORKFLOW = """\
+Work in this order:
+  1. Read the seeded force scores in the "# Provided inputs for this run"
+     block. F1 (debt/money) is seeded from the cached Debt Cycle state and
+     F3 (geopolitical) from the cached World Order state — treat both as
+     authoritative ground truth; do not invent or override them.
+  2. Research and score the remaining three forces on a 0-10 intensity
+     scale, each with citations: F2 (internal order / political), F4
+     (technology), and F5 (acts of nature). Prefer the enabled connector
+     tools first; fall back to `web_search` of official and reputable
+     sources.
+  3. Call `classify_five_forces` with all five scores. Use the returned
+     `active_force_count`, `bucket`, and `severity` verbatim — do not invent
+     or override them.
+  4. Write the force scorecard rows, the interlocking-loop blocks plus the
+     active-count block, the signal cards, the gold-allocation block, the
+     bull/bear scenarios, and the synthesis verdict from the cited data you
+     gathered.
+  5. Call `emit_dashboard` exactly once with the full FiveForcesData object
+     in `payload`. This finalizes the run."""
+
+
+_FIVE_FORCES_PAYLOAD_SHAPE = """\
+# FiveForcesData payload shape
+
+`emit_dashboard`'s `payload` is one JSON object with these keys (all tones are
+red/amber/green/blue; `scorePct` is an integer 0-100):
+  - `header`: {title, subtitle, badges: [{tone, label}]}.
+  - `cardSummary`: one-paragraph string summarizing the read.
+  - `scorecard`: {label, rows: [{forceLabel, forceSub, pillTone, pillLabel,
+    scorePct, scoreTone, scoreValue, body}]} — one row per force.
+  - `loops`: {label, blocks: [{title, arrows: [{fromLabel, toLabel}], body}],
+    active: {countText, countTone, title, body}} — anchor `active.countText`
+    on the classifier's active_force_count (e.g. "3 / 5") and `active.title`
+    on its bucket.
+  - `signals`: {label, cards: [{label, value, unit, note}]}.
+  - `goldAllocation`: {label, block: {title, ticks: [string], stats: [{label,
+    value, note, highlight}], body}}.
+  - `scenarios`: {label, cards: [{variant, title, body}]} — `variant` is one
+    of bull/bear.
+  - `verdict`: {title, body} — the synthesis.
+  - `sources`: a short string naming the sources you used.
+  - `generated_at`: an ISO-8601 timestamp for the run."""
+
+
 # Per-dashboard prompt content. ``build_system_prompt`` looks the slug up
 # here and fails loud when a dashboard has no spec. New dashboards register
 # their workflow, payload-shape block, and indicator-sourcing hint here.
@@ -415,5 +460,13 @@ DASHBOARD_PROMPT_SPECS: dict[str, DashboardPromptSpec] = {
         workflow=_ALL_WEATHER_WORKFLOW,
         payload_shape=_ALL_WEATHER_PAYLOAD_SHAPE,
         indicator_hint="current cross-asset volatilities and benchmark allocation context.",
+    ),
+    "five_forces": DashboardPromptSpec(
+        workflow=_FIVE_FORCES_WORKFLOW,
+        payload_shape=_FIVE_FORCES_PAYLOAD_SHAPE,
+        indicator_hint=(
+            "current readings bearing on internal political/social order, technological "
+            "disruption, and acts of nature."
+        ),
     ),
 }

@@ -97,23 +97,98 @@ def _portfolio_weights(db: DBSession, user_id: str) -> dict[str, float]:
     return {asset: value / total for asset, value in by_class.items()}
 
 
+# Map a cached dashboard's RAG tone to a 0-10 Five-Forces intensity score.
+# Five Forces seeds F1 (debt/money) from the cached Debt Cycle and F3
+# (geopolitical) from the cached World Order, reading each source's headline
+# tone. Tones outside this map (e.g. "blue") fall back to the amber score.
+_TONE_TO_FORCE_SCORE: dict[str, int] = {"red": 8, "amber": 5, "green": 3}
+_FORCE_SCORE_DEFAULT = 5
+
+
+def _cached_payload(db: DBSession, user_id: str, slug: str) -> dict | None:
+    """Return a cached dashboard payload as a dict, or ``None`` when not yet
+    generated for this user."""
+    row = db.query(MrDashboardCache).filter_by(user_id=user_id, dashboard=slug).one_or_none()
+    if row is None:
+        return None
+    return json.loads(row.payload_json)
+
+
+def _seeded_force_line(
+    *,
+    force_id: str,
+    name: str,
+    payload: dict | None,
+    tone_key: str,
+    research_hint: str,
+) -> str:
+    """One seeded-or-fallback Five-Forces input line.
+
+    When the source dashboard is cached, read its headline tone block
+    (``tone_key`` -> e.g. "phaseBox"), map the tone to a 0-10 score, and cite
+    its title. When the source is missing, honestly say so and tell the model
+    to research the force itself.
+    """
+    if payload is None:
+        return f"- {force_id}: {name} not yet generated; {research_hint}"
+    block = payload.get(tone_key, {})
+    tone = block.get("tone", "")
+    title = block.get("title", "")
+    score = _TONE_TO_FORCE_SCORE.get(tone, _FORCE_SCORE_DEFAULT)
+    return f"- {force_id}: {score} (0-10), seeded from the cached {name} state ({title})."
+
+
+def _five_forces_data_context(db: DBSession, user_id: str) -> str:
+    """Seed F1 (debt/money) and F3 (geopolitical) from cached dashboards.
+
+    F1 reads the cached Debt Cycle ``phaseBox`` tone/title; F3 reads the cached
+    World Order ``verdict`` tone/title. The model researches F2/F4/F5 itself.
+    """
+    debt = _cached_payload(db, user_id, "debt_cycle")
+    world = _cached_payload(db, user_id, "world_order")
+    f1 = _seeded_force_line(
+        force_id="F1 (debt/money)",
+        name="Debt Cycle",
+        payload=debt,
+        tone_key="phaseBox",
+        research_hint="research the debt/money force (F1) from official sources.",
+    )
+    f3 = _seeded_force_line(
+        force_id="F3 (geopolitical)",
+        name="World Order",
+        payload=world,
+        tone_key="verdict",
+        research_hint="research the geopolitical force (F3) from official sources.",
+    )
+    return (
+        "Two of the five forces are seeded for you from other dashboards' cached "
+        "classifications; research and score the remaining three (F2 political, "
+        "F4 technology, F5 nature) yourself on a 0-10 scale.\n"
+        f"{f1}\n{f3}"
+    )
+
+
 def _build_data_context(db: DBSession, *, user_id: str, dashboard_slug: str) -> str | None:
     """Server-injected authoritative inputs for this run.
 
     For ``all_weather`` returns a formatted summary of the user's portfolio
-    asset-class weights (or a proxy instruction when no holdings exist). Other
-    dashboards have no server-side inputs yet, so this returns ``None``.
+    asset-class weights (or a proxy instruction when no holdings exist). For
+    ``five_forces`` seeds F1/F3 from the cached Debt Cycle / World Order
+    dashboards. Other dashboards have no server-side inputs yet, so this
+    returns ``None``.
     """
-    if dashboard_slug != "all_weather":
-        return None
-    weights = _portfolio_weights(db, user_id)
-    if not weights:
-        return (
-            "No portfolio holdings on file; audit the Dalio reference allocation "
-            "as a proxy and say so."
-        )
-    parts = ", ".join(f"{asset} {weight:.2f}" for asset, weight in sorted(weights.items()))
-    return f"Portfolio weights: {parts}"
+    if dashboard_slug == "all_weather":
+        weights = _portfolio_weights(db, user_id)
+        if not weights:
+            return (
+                "No portfolio holdings on file; audit the Dalio reference allocation "
+                "as a proxy and say so."
+            )
+        parts = ", ".join(f"{asset} {weight:.2f}" for asset, weight in sorted(weights.items()))
+        return f"Portfolio weights: {parts}"
+    if dashboard_slug == "five_forces":
+        return _five_forces_data_context(db, user_id)
+    return None
 
 
 def _resolve_enabled_connectors(

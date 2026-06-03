@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 
 import pytest
-from openlia.macro_research.payloads import DebtCycleData, FourSeasonsData
+from openlia.macro_research.payloads import DebtCycleData, FiveForcesData, FourSeasonsData
 from openlia.macro_research.snapshot import (
+    active_force_count_from_payload,
     debt_cycle_phase_from_payload,
     economic_season_from_payload,
 )
@@ -107,3 +108,43 @@ def test_economic_season_raises_when_no_markers():
     payload = _four_seasons([])
     with pytest.raises(ValueError):
         economic_season_from_payload(payload)
+
+
+def _five_forces(count_text: str) -> FiveForcesData:
+    return FiveForcesData(
+        header={"title": "T5", "subtitle": "s", "badges": []},
+        cardSummary="x",
+        scorecard={"label": "A", "rows": []},
+        loops={
+            "label": "B",
+            "blocks": [],
+            "active": {
+                "countText": count_text,
+                "countTone": "red",
+                "title": "t",
+                "body": "b",
+            },
+        },
+        signals={"label": "C", "cards": []},
+        goldAllocation={
+            "label": "D",
+            "block": {"title": "g", "ticks": [], "stats": [], "body": "b"},
+        },
+        scenarios={"label": "E", "cards": []},
+        verdict={"title": "v", "body": "b"},
+        sources="s",
+        generated_at=datetime.now(UTC),
+    )
+
+
+def test_active_force_count_parses_leading_int_with_slash():
+    assert active_force_count_from_payload(_five_forces("3 / 5")) == 3
+
+
+def test_active_force_count_parses_leading_int_with_word():
+    assert active_force_count_from_payload(_five_forces("3 active")) == 3
+
+
+def test_active_force_count_raises_on_malformed_count_text():
+    with pytest.raises(ValueError):
+        active_force_count_from_payload(_five_forces("all active"))
