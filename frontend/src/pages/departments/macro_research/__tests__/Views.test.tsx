@@ -6,6 +6,7 @@ import { ALL_WEATHER_FALLBACK } from "../../../../lib/macro_research/dalio_copy/
 import { DEBT_CYCLE_FALLBACK } from "../../../../lib/macro_research/dalio_copy/debt_cycle";
 import { FIVE_FORCES_FALLBACK } from "../../../../lib/macro_research/dalio_copy/five_forces";
 import { FOUR_SEASONS_FALLBACK } from "../../../../lib/macro_research/dalio_copy/four_seasons";
+import { SUMMARY_FALLBACK } from "../../../../lib/macro_research/dalio_copy/summary";
 import { WORLD_ORDER_FALLBACK } from "../../../../lib/macro_research/dalio_copy/world_order";
 
 const apiMocks = vi.hoisted(() => ({
@@ -548,9 +549,15 @@ describe("FiveForcesView", () => {
 });
 
 describe("SummaryView", () => {
-  it("renders the hero with LIA take, regime bar, framework grid, dep map, cascade and consolidated watchlist", () => {
+  it("renders live cache content: hero with LIA take, regime bar, framework grid, dep map, cascade and consolidated watchlist", async () => {
+    apiMocks.getDashboard.mockResolvedValue({
+      payload: SUMMARY_FALLBACK,
+      generated_at: "2026-06-01T00:00:00Z",
+      is_stale: false,
+      provenance: "live",
+    });
     render(inRouter(<SummaryView />));
-    expect(screen.getByText(/Three forces critical/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Three forces critical/i)).toBeInTheDocument();
     expect(screen.getByTestId("summary-lia-take")).toBeInTheDocument();
     expect(screen.getByTestId("summary-regime-bar")).toBeInTheDocument();
     const grid = screen.getByTestId("summary-framework-grid");
@@ -563,5 +570,72 @@ describe("SummaryView", () => {
     expect(screen.getByTestId("summary-watchlist")).toBeInTheDocument();
     expect(screen.getByText(/Cross-framework dependency map/i)).toBeInTheDocument();
     expect(screen.getByText(/Gold thesis · cross-framework cascade/i)).toBeInTheDocument();
+  });
+
+  it("renders the empty state when payload is null", async () => {
+    apiMocks.getDashboard.mockResolvedValueOnce({
+      payload: null,
+      generated_at: null,
+      is_stale: false,
+      provenance: null,
+    });
+    render(inRouter(<SummaryView />));
+    expect(
+      await screen.findByText(/hasn.t been generated yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("mr-dash-empty-generate")).toBeInTheDocument();
+    expect(screen.queryByTestId("summary-regime-bar")).not.toBeInTheDocument();
+  });
+
+  it("polls until the payload lands and shows live content (poll-to-live)", async () => {
+    vi.useFakeTimers();
+    const POLL_INTERVAL_MS = 6000;
+    try {
+      apiMocks.getDashboard
+        .mockResolvedValueOnce({
+          payload: null,
+          generated_at: null,
+          is_stale: false,
+          provenance: null,
+        })
+        .mockResolvedValue({
+          payload: SUMMARY_FALLBACK,
+          generated_at: "2026-06-01T00:00:00Z",
+          is_stale: false,
+          provenance: "live",
+        });
+      apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
+
+      render(inRouter(<SummaryView />));
+
+      // Flush the initial getDashboard microtask so the component settles to empty state.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      const btn = screen.getByTestId("mr-dash-empty-generate");
+
+      act(() => {
+        btn.click();
+      });
+
+      // Flush the runAssessment promise.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Still generating — live content must NOT be shown yet.
+      expect(screen.getByTestId("mr-dash-empty-generate")).toBeDisabled();
+      expect(screen.queryByTestId("summary-regime-bar")).not.toBeInTheDocument();
+
+      // Advance one poll interval — getDashboard resolves with live payload.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      });
+
+      expect(screen.getByTestId("summary-regime-bar")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
