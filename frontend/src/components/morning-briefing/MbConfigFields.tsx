@@ -98,7 +98,6 @@ export function MbSegmented<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            aria-label={opt.value}
             data-testid={testId ? `${testId}-option-${opt.value}` : undefined}
             onClick={() => onChange(opt.value)}
             className={[
@@ -423,7 +422,7 @@ export function MbConfigFields({ draft, onChange }: Props) {
   }
 
   return (
-    <div className="[&>section]:border-b [&>section]:border-[--color-border-subtle] [&>section]:py-5 [&>section:first-child]:pt-0 [&>section:last-child]:border-b-0 [&>section:last-child]:pb-0">
+    <div className="[&>section]:border-b [&>section]:border-[--color-border-subtle] [&>section]:py-5 [&>section:first-child]:pt-0 [&>section:last-of-type]:border-b-0 [&>section:last-of-type]:pb-0">
       {/* Model */}
       <section>
         <MbSectionHeader
