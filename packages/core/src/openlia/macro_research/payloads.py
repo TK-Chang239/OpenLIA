@@ -366,11 +366,29 @@ class T2KeyIndicator(BaseModel):
     body: str
 
 
+class T2TransitionProb(BaseModel):
+    season: str
+    prob: float
+
+
+class T2TransitionProbabilities(BaseModel):
+    currentSeason: str
+    nextQuarter: list[T2TransitionProb]
+    persistence: float
+    mostLikelyNext: str
+    adverseSeason: str
+    adverseProb: float
+    expectedDwellQuarters: float
+    horizonQuarters: int
+    horizon: list[T2TransitionProb]
+
+
 class T2TransitionRisk(BaseModel):
     intro: str
     bull: T2ProseCard
     bear: T2ProseCard
     keyIndicator: T2KeyIndicator
+    probabilities: T2TransitionProbabilities
 
 
 class T2AssetPlaybook(BaseModel):
