@@ -104,3 +104,158 @@ class DebtCycleData(BaseModel):
     # Redesign additions (not in types.ts): provenance + freshness.
     provenance: Provenance = Provenance.LIVE
     generated_at: datetime
+
+
+# ---------- T4 — World Order. Mirrors types.ts:343-482 verbatim. ----------
+
+
+class T4Pill(BaseModel):
+    tone: Tone
+    label: str
+
+
+class T4ScorecardRow(BaseModel):
+    name: str
+    sub: str
+    current: str
+    currentTone: Tone
+    currentMeta: str
+    fillPct: int
+    fillTone: Tone
+    trend: str
+    signalLabel: str
+    signalTone: Tone
+
+
+class T4ReserveSeries(BaseModel):
+    label: str
+    values: list[float]
+    isPrimary: bool = False
+
+
+class T4ReserveChart(BaseModel):
+    title: str
+    years: list[int]
+    series: list[T4ReserveSeries]
+
+
+class T4StageCell(BaseModel):
+    num: str
+    name: str
+    range: str
+    state: Literal["past", "active", "future"]
+    weight: int | None = None
+
+
+class T4DalioQuote(BaseModel):
+    title: str
+    body: str
+    attribution: str
+    tone: Tone
+
+
+class T4MarkerRow(BaseModel):
+    tone: Tone
+    pillLabel: str
+    leadPhrase: str
+    body: str
+
+
+class T4AnalogCell(BaseModel):
+    era: str
+    tone: Tone
+    body: str
+
+
+class T4ShiftAssessment(BaseModel):
+    title: str
+    body: str
+
+
+class T4GoldRangeStat(BaseModel):
+    label: str
+    value: str
+    highlight: bool
+
+
+class T4CurrencyRow(BaseModel):
+    name: str
+    badgeLabel: str
+    badgeTone: Tone
+    body: str
+
+
+class T4ProseCard(BaseModel):
+    title: str
+    body: str
+
+
+class T4Scorecard(BaseModel):
+    label: str
+    rows: list[T4ScorecardRow]
+
+
+class T4EmpireCycle(BaseModel):
+    label: str
+    stripTitle: str
+    stages: list[T4StageCell]
+    quote: T4DalioQuote
+    markersTitle: str
+    markers: list[T4MarkerRow]
+
+
+class T4Analogs(BaseModel):
+    label: str
+    cells: list[T4AnalogCell]
+
+
+class T4WealthShift(BaseModel):
+    label: str
+    intro: str
+    rows: list[T4MarkerRow]
+    assessment: T4ShiftAssessment
+
+
+class T4GoldRange(BaseModel):
+    title: str
+    stats: list[T4GoldRangeStat]
+    body: str
+
+
+class T4Currency(BaseModel):
+    title: str
+    rows: list[T4CurrencyRow]
+
+
+class T4SovereignBondPair(BaseModel):
+    left: T4ProseCard
+    right: T4ProseCard
+
+
+class T4SovereignBond(BaseModel):
+    title: str
+    intro: str
+    pair: T4SovereignBondPair
+
+
+class T4Investment(BaseModel):
+    label: str
+    goldRange: T4GoldRange
+    currency: T4Currency
+    sovereignBond: T4SovereignBond
+
+
+class WorldOrderData(BaseModel):
+    header: DashHeader
+    cardSummary: str
+    scorecard: T4Scorecard
+    reserveChart: T4ReserveChart
+    empireCycle: T4EmpireCycle
+    analogs: T4Analogs
+    wealthShift: T4WealthShift
+    investment: T4Investment
+    verdict: TonedProse
+    sources: str
+    # Redesign additions (not in types.ts): provenance + freshness.
+    provenance: Provenance = Provenance.LIVE
+    generated_at: datetime
