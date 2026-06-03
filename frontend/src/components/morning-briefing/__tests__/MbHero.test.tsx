@@ -21,5 +21,8 @@ describe("MbHero", () => {
   it("falls back to an em dash when there is no next run", () => {
     render(<MbHero briefingsThisWeek={0} activeSchedules={0} nextRun={null} />);
     expect(screen.getByText("—")).toBeInTheDocument();
+    // Zero is a real state (no briefings yet) — guard against a future
+    // `value || DASH` regression by asserting both counts render as "0".
+    expect(screen.getAllByText("0")).toHaveLength(2);
   });
 });
