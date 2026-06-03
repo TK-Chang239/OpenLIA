@@ -16,8 +16,8 @@ from openlia.llm.runtime.report_dash_mr.tools.dashboard_tools import (
 )
 
 
-def test_implemented_dashboard_slugs_is_debt_cycle_only() -> None:
-    assert implemented_dashboard_slugs() == frozenset({"debt_cycle"})
+def test_implemented_dashboard_slugs() -> None:
+    assert implemented_dashboard_slugs() == frozenset({"debt_cycle", "world_order"})
 
 
 def test_every_classifier_has_a_payload_model() -> None:

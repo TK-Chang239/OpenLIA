@@ -223,6 +223,58 @@ _DEBT_CYCLE_PAYLOAD_SHAPE = """\
   - `generated_at`: an ISO-8601 timestamp for the run."""
 
 
+_WORLD_ORDER_WORKFLOW = """\
+Work in this order:
+  1. Gather the four world-order indicators, each with a value and an
+     as-of date:
+       - USD share of global FX reserves (IMF COFER), percent
+       - Net central-bank gold purchases (World Gold Council), tonnes
+       - Foreign holdings of US Treasuries trend (US Treasury TIC),
+         percent year-over-year
+       - US dollar index (DXY) level
+     Prefer the enabled connector tools first; fall back to `web_search`
+     of the official sources (IMF, World Gold Council, US Treasury TIC).
+  2. Call `classify_world_order` with those four values. Use the returned
+     `stage`, `severity`, and `indicator_statuses` verbatim — do not
+     invent or override the computed stage.
+  3. Write the reserve-share history (`reserveChart`), the empire-cycle
+     stage strip (anchor the `active` stage on the returned stage), the
+     historical analogs, the wealth-shift rows, and the investment theses
+     from the cited data you gathered.
+  4. Call `emit_dashboard` exactly once with the full WorldOrderData
+     object in `payload`. This finalizes the run."""
+
+
+_WORLD_ORDER_PAYLOAD_SHAPE = """\
+# WorldOrderData payload shape
+
+`emit_dashboard`'s `payload` is one JSON object with these keys (tones are
+red/amber/green/blue; `fillPct` is an integer 0-100):
+  - `header`: {title, subtitle, pills: [{tone, label}]}.
+  - `cardSummary`: one-paragraph string summarizing the read.
+  - `scorecard`: {label, rows: [{name, sub, current, currentTone,
+    currentMeta, fillPct, fillTone, trend, signalLabel, signalTone}]} —
+    one row per indicator.
+  - `reserveChart`: {title, years: [int], series: [{label, values:
+    [number], isPrimary}]} — `values` aligns with `years`; set one series
+    `isPrimary` true.
+  - `empireCycle`: {label, stripTitle, stages: [{num, name, range, state,
+    weight}], quote: {title, body, attribution, tone}, markersTitle,
+    markers: [{tone, pillLabel, leadPhrase, body}]} — `state` is one of
+    past/active/future; mark the active stage from the classifier's stage;
+    `weight` is an optional integer.
+  - `analogs`: {label, cells: [{era, tone, body}]}.
+  - `wealthShift`: {label, intro, rows: [{tone, pillLabel, leadPhrase,
+    body}], assessment: {title, body}}.
+  - `investment`: {label, goldRange: {title, stats: [{label, value,
+    highlight}], body}, currency: {title, rows: [{name, badgeLabel,
+    badgeTone, body}]}, sovereignBond: {title, intro, pair: {left: {title,
+    body}, right: {title, body}}}}.
+  - `verdict`: {title, body, tone} — the synthesis.
+  - `sources`: a short string naming the sources you used.
+  - `generated_at`: an ISO-8601 timestamp for the run."""
+
+
 # Per-dashboard prompt content. ``build_system_prompt`` looks the slug up
 # here and fails loud when a dashboard has no spec. New dashboards register
 # their workflow, payload-shape block, and indicator-sourcing hint here.
@@ -232,6 +284,15 @@ DASHBOARD_PROMPT_SPECS: dict[str, DashboardPromptSpec] = {
         payload_shape=_DEBT_CYCLE_PAYLOAD_SHAPE,
         indicator_hint=(
             "the US dollar index and TIPS real yields, and any macro series the indicators rely on."
+        ),
+    ),
+    "world_order": DashboardPromptSpec(
+        workflow=_WORLD_ORDER_WORKFLOW,
+        payload_shape=_WORLD_ORDER_PAYLOAD_SHAPE,
+        indicator_hint=(
+            "USD share of global FX reserves (IMF COFER), net central-bank gold purchases "
+            "(World Gold Council), foreign holdings of US Treasuries (US Treasury TIC), and "
+            "the US dollar index (DXY)."
         ),
     ),
 }
