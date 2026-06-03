@@ -11,6 +11,8 @@ import type {
   T3GoldStat,
   T3RiskBar,
   T3SliceTone,
+  T3StressBar,
+  T3StressScenarioRow,
   T3Tone,
 } from "../../../lib/macro_research/dalio_copy/types";
 import {
@@ -42,6 +44,10 @@ function fillForRiskBar(pct: number): Status {
   if (pct > 60) return "bad";
   if (pct > 40) return "warn";
   return "ok";
+}
+
+function fmtPct(d: number): string {
+  return `${d >= 0 ? "+" : ""}${(d * 100).toFixed(1)}%`;
 }
 
 export default function AllWeatherView(): JSX.Element {
@@ -163,6 +169,52 @@ export default function AllWeatherView(): JSX.Element {
           <div className="mr-card-title">{data.riskParity.mechanism.title}</div>
           <div className="mr-card-body-text">{data.riskParity.mechanism.body}</div>
         </div>
+      </div>
+
+      <SectionLabel>{data.stressTest.label}</SectionLabel>
+      <div
+        className="mr-card"
+        data-testid="t3-stress-test"
+        style={{ padding: "16px 18px", marginBottom: 14 }}
+      >
+        <p className="mr-card-body-text">{data.stressTest.intro}</p>
+        <div className="mr-bar-section" style={{ marginTop: 8 }}>
+          <div className="mr-bar-section-title">{data.stressTest.distribution.title}</div>
+          {data.stressTest.distribution.bars.map((b: T3StressBar) => (
+            <div key={b.label} className="mr-bar-row">
+              <div className="mr-bar-label">{b.label}</div>
+              <div className="mr-bar-val" style={{ minWidth: 120 }}>
+                {fmtPct(b.userPct)} <span style={{ color: "var(--color-text-tertiary)" }}>vs</span>{" "}
+                {fmtPct(b.refPct)}
+              </div>
+            </div>
+          ))}
+        </div>
+        <table className="mr-stress-table" style={{ width: "100%", marginTop: 14 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>Scenario</th>
+              <th>Your median</th>
+              <th>Your VaR-95</th>
+              <th>Ref median</th>
+              <th>Ref VaR-95</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.stressTest.scenarios.map((s: T3StressScenarioRow) => (
+              <tr key={s.name} className={toneToStatus(s.tone)}>
+                <td style={{ textAlign: "left" }}>{s.name}</td>
+                <td>{fmtPct(s.userMedianPct)}</td>
+                <td>{fmtPct(s.userP5Pct)}</td>
+                <td>{fmtPct(s.refMedianPct)}</td>
+                <td>{fmtPct(s.refP5Pct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mr-card-body-text" style={{ marginTop: 10 }}>
+          {data.stressTest.note}
+        </p>
       </div>
 
       <SectionLabel>{data.gold.label}</SectionLabel>
