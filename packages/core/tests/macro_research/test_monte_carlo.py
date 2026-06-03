@@ -61,7 +61,7 @@ def test_weights_renormalize() -> None:
 
 
 def test_unknown_asset_raises() -> None:
-    with pytest.raises(ValueError, match="unknown asset"):
+    with pytest.raises(ValueError, match="unknown asset classes"):
         simulate_all_weather_stress({"crypto": 1.0})
 
 
