@@ -29,10 +29,12 @@ describe("MbRunNowModal", () => {
       .spyOn(api, "startMbRun")
       .mockResolvedValue({ report_id: "rNew" });
     const onStarted = vi.fn();
-    render(<MbRunNowModal open onClose={vi.fn()} onStarted={onStarted} />);
+    const onClose = vi.fn();
+    render(<MbRunNowModal open onClose={onClose} onStarted={onStarted} />);
     fireEvent.click(await screen.findByTestId("mb-run-now-start"));
 
     await waitFor(() => expect(onStarted).toHaveBeenCalledWith("rNew"));
+    expect(onClose).toHaveBeenCalledTimes(1);
     const payload = startSpy.mock.calls[0][0];
     expect(payload.schedule_id).toBeUndefined();
     expect(payload.template_id).toBe("mb_default");

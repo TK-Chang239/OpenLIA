@@ -112,7 +112,7 @@ export function MbRunNowModal({ open, onClose, onStarted }: Props) {
             {empty ? (
               <p
                 data-testid="mb-run-now-empty-error"
-                className="mr-auto text-[12px] text-[--color-feedback-danger] leading-[1.4]"
+                className="mr-auto text-[12px] text-[--color-feedback-error] leading-[1.4]"
               >
                 {t("morning_briefing.run_now_modal.empty_error")}
               </p>
