@@ -348,12 +348,16 @@ Work in this order:
      `risk_contributions`, `reference_risk_contributions`, `season_coverage`,
      `gold_gap`, and `severity` verbatim — do not invent or override the
      computed numbers.
-  3. Gather current cross-asset volatilities and historical stress-episode
+  3. Call `simulate_all_weather_stress` with the same weights. Use the
+     returned Base-case `distribution` percentiles and per-scenario
+     `user_median`/`user_p5`/`reference_median`/`reference_p5`/`tone` verbatim
+     to fill the `stressTest` section — do not invent or override the
+     simulated numbers. You author only the prose `intro` and `note`.
+  4. Gather current cross-asset volatilities and historical stress-episode
      context, then write the comparison donuts, the season-coverage cells,
      the risk-parity bars, the gold needle/stats, the caveats, and the
-     verdict. Describe stress scenarios qualitatively as reasoning, NOT as a
-     simulated distribution.
-  4. Call `emit_dashboard` exactly once with the full AllWeatherData object
+     verdict.
+  5. Call `emit_dashboard` exactly once with the full AllWeatherData object
      in `payload`. This finalizes the run."""
 
 
@@ -377,6 +381,12 @@ accent/olive/neutral/amber/rust; `pct`/`leftPct` are integers 0-100):
   - `gold`: {label, title, needles: [{label, leftPct, tone}], stats:
     [{label, value, valueTone, note}], rationale: {title, body}} — anchored
     on the classifier's gold_gap.
+  - `stressTest`: {label, intro, distribution: {title, bars: [{label, userPct,
+    refPct}]}, scenarios: [{name, userMedianPct, userP5Pct, refMedianPct,
+    refP5Pct, tone}], note} — `userPct`/`*Pct` are decimal returns (e.g. -0.12
+    for -12%); fill every number from `simulate_all_weather_stress`'s output
+    (the distribution `bars` from its `distribution`, the `scenarios` rows from
+    its `scenarios`). You write only `label`, `intro`, and `note`.
   - `caveats`: {label, cards: [{title, body}]}.
   - `verdict`: {title, body} — the synthesis.
   - `sources`: a short string naming the sources you used.

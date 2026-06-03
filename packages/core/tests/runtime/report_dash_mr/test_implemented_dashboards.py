@@ -37,3 +37,13 @@ def test_build_system_prompt_rejects_unknown_slug() -> None:
     )
     with pytest.raises(ValueError, match="no prompt spec for dashboard 'nonexistent'"):
         build_system_prompt(request)
+
+
+def test_all_weather_exposes_both_classify_and_stress_tools() -> None:
+    from openlia.llm.runtime.report_dash_mr.tools.dashboard_tools import (
+        CLASSIFY_TOOL_BY_SLUG,
+    )
+
+    builders = CLASSIFY_TOOL_BY_SLUG["all_weather"]
+    names = {b().descriptor.name for b in builders}
+    assert names == {"classify_all_weather", "simulate_all_weather_stress"}

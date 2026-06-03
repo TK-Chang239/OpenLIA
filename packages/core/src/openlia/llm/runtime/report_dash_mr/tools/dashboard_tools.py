@@ -24,6 +24,7 @@ from openlia.macro_research.quant.classification import (
     classify_debt_cycle,
 )
 from openlia.macro_research.quant.forces import ForceScores, classify_five_forces
+from openlia.macro_research.quant.monte_carlo import simulate_all_weather_stress
 from openlia.macro_research.quant.seasons import (
     SeasonsInputs,
     classify_four_seasons,
@@ -345,6 +346,72 @@ def build_classify_all_weather_tool() -> ResearchTool:
     )
 
 
+def build_simulate_all_weather_stress_tool() -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            raw = args["weights"]
+            weights = {str(k): float(v) for k, v in raw.items()}
+            out = simulate_all_weather_stress(weights)
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise ToolExecutionError(
+                "simulate_all_weather_stress requires a `weights` object mapping "
+                f"asset-class names to numeric portfolio weights. {exc}"
+            ) from exc
+        return ToolResult(
+            payload={
+                "distribution": {
+                    "user": out.distribution.percentiles,
+                    "reference": out.distribution.reference_percentiles,
+                },
+                "scenarios": [
+                    {
+                        "name": s.name,
+                        "user_median": s.user.median,
+                        "user_p5": s.user.p5,
+                        "reference_median": s.reference.median,
+                        "reference_p5": s.reference.p5,
+                        "tone": s.tone,
+                    }
+                    for s in out.scenarios
+                ],
+            },
+            provenance=ComputedSource(
+                method="simulate_all_weather_stress", derived_from=["(weights)"]
+            ),
+            summary=f"{len(out.scenarios)} scenarios simulated",
+        )
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="simulate_all_weather_stress",
+            description=(
+                "Deterministic Monte-Carlo stress simulation of the portfolio vs the "
+                "Dalio reference allocation, from the portfolio's asset-class weights. "
+                "Returns the Base-case 1-year return distribution (user/reference "
+                "percentiles, as decimals) and per-scenario user/reference median and "
+                "5th-percentile (VaR-95) returns plus a tone. Use the returned numbers "
+                "verbatim to fill the stressTest section; do not invent them."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "weights": {
+                        "type": "object",
+                        "description": (
+                            "Asset-class name to portfolio weight (e.g. "
+                            '{"equities": 0.6, "long_bonds": 0.4}).'
+                        ),
+                        "additionalProperties": {"type": "number"},
+                    },
+                },
+                "required": ["weights"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
 def build_classify_five_forces_tool() -> ResearchTool:
     def _execute(args: dict[str, Any]) -> ToolResult:
         try:
@@ -401,13 +468,13 @@ def build_classify_five_forces_tool() -> ResearchTool:
     )
 
 
-# Per-slug deterministic classify-tool builders. A slug present here gets its
-# classifier tool added to the catalog alongside emit_dashboard. New dashboards
-# register their builder here.
-CLASSIFY_TOOL_BY_SLUG: dict[str, Callable[[], ResearchTool]] = {
-    "debt_cycle": build_classify_debt_cycle_tool,
-    "world_order": build_classify_world_order_tool,
-    "four_seasons": build_classify_four_seasons_tool,
-    "all_weather": build_classify_all_weather_tool,
-    "five_forces": build_classify_five_forces_tool,
+# Per-slug deterministic tool builders. A slug present here gets each of its
+# tools added to the catalog alongside emit_dashboard. New dashboards register
+# their builder(s) here.
+CLASSIFY_TOOL_BY_SLUG: dict[str, list[Callable[[], ResearchTool]]] = {
+    "debt_cycle": [build_classify_debt_cycle_tool],
+    "world_order": [build_classify_world_order_tool],
+    "four_seasons": [build_classify_four_seasons_tool],
+    "all_weather": [build_classify_all_weather_tool, build_simulate_all_weather_stress_tool],
+    "five_forces": [build_classify_five_forces_tool],
 }
