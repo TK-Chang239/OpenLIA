@@ -66,12 +66,23 @@ export function putThresholdOverrides(
   }) as Promise<DashboardConfig>;
 }
 
-export function runAssessment(
-  slug: string,
-): Promise<{ job_run_id: string; status: string }> {
-  return _fetch(`${base}/dashboards/${slug}/refresh`, {
-    method: "POST",
-  }) as Promise<{ job_run_id: string; status: string }>;
+export interface RunAssessmentResult {
+  job_run_id: string | null;
+  status: string;
+}
+
+export async function runAssessment(slug: string): Promise<RunAssessmentResult> {
+  const url = `${base}/dashboards/${slug}/refresh`;
+  const r = await fetch(url, { method: "POST", credentials: "include" });
+  // 409 means a run for this dashboard is already in flight — not an error.
+  // The caller should keep polling for the in-progress result.
+  if (r.status === 409) {
+    return { job_run_id: null, status: "already_running" };
+  }
+  if (!r.ok) {
+    throw new Error(`POST ${url} failed: ${r.status}`);
+  }
+  return r.json() as Promise<RunAssessmentResult>;
 }
 
 export function getSchedule(): Promise<ScheduleState> {

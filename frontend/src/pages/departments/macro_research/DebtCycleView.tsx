@@ -94,6 +94,10 @@ export default function DebtCycleView(): JSX.Element {
       .then((r) => {
         if (r.status === "queued") {
           startPolling();
+        } else if (r.status === "already_running") {
+          // A run is already in flight (e.g. another tab) — watch for it.
+          setNote("A reading is already being generated — watching for the result.");
+          startPolling();
         } else {
           setGenerating(false);
           setNote("Generation could not start (background scheduler unavailable).");

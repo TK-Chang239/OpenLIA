@@ -81,6 +81,37 @@ def list_orphans(session: Session) -> list[str]:
     return [row[0] for row in session.execute(stmt)]
 
 
+def active_run_for_schedule(
+    session: Session,
+    *,
+    user_id: str | None,
+    job_type: JobType,
+    schedule_id: str,
+    not_before: datetime,
+) -> JobRun | None:
+    """Most recent still-RUNNING run for (user_id, job_type, schedule_id) that
+    started at or after `not_before`.
+
+    Ad-hoc "run now" routes use this to reject a concurrent re-trigger while a
+    run is genuinely in flight. Rows that started before `not_before` are
+    treated as dead orphans (e.g. a process killed mid-run before startup
+    recovery could cancel them) and ignored, so a stuck row never permanently
+    blocks a re-trigger."""
+    stmt = (
+        select(JobRun)
+        .where(
+            JobRun.user_id == user_id,
+            JobRun.job_type == job_type.value,
+            JobRun.schedule_id == schedule_id,
+            JobRun.status == JobStatus.RUNNING.value,
+            JobRun.started_at >= not_before,
+        )
+        .order_by(JobRun.started_at.desc())
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
 def most_recent_for_schedule(session: Session, schedule_id: str) -> JobRun | None:
     stmt = (
         select(JobRun)

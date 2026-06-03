@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import openlia_server.db.models.register_all  # noqa: F401 — register all tables
@@ -178,6 +178,60 @@ def test_refresh_without_scheduler_marks_cancelled(
         row = s.get(JobRun, body["job_run_id"])
         assert row.status == JobStatus.CANCELLED.value
         assert row.job_type == JobType.MR_DASH.value
+
+
+def test_refresh_409_when_run_in_progress(
+    client: TestClient, session_factory, fake_scheduler
+) -> None:
+    # A fresh RUNNING mr_dash run for (u-1, debt_cycle) is already in flight.
+    with session_factory() as s:
+        s.add(
+            JobRun(
+                id="existing-run",
+                user_id="u-1",
+                job_type=JobType.MR_DASH.value,
+                schedule_id="debt_cycle",
+                status=JobStatus.RUNNING.value,
+                started_at=datetime.now(UTC),
+            )
+        )
+        s.commit()
+
+    r = client.post("/departments/macro_research/dashboards/debt_cycle/refresh")
+    assert r.status_code == 409
+    assert "in progress" in r.json()["detail"]
+    # No second row was pre-allocated and the scheduler was not dispatched.
+    with session_factory() as s:
+        rows = s.query(JobRun).filter_by(schedule_id="debt_cycle").all()
+        assert len(rows) == 1
+    fake_scheduler.run_now.assert_not_awaited()
+
+
+def test_refresh_allows_after_stale_running(
+    client: TestClient, session_factory, fake_scheduler
+) -> None:
+    # A RUNNING row older than the staleness window is a dead orphan (e.g. a
+    # process killed mid-run) and must not permanently block a re-trigger.
+    with session_factory() as s:
+        s.add(
+            JobRun(
+                id="stale-run",
+                user_id="u-1",
+                job_type=JobType.MR_DASH.value,
+                schedule_id="debt_cycle",
+                status=JobStatus.RUNNING.value,
+                started_at=datetime.now(UTC) - timedelta(hours=2),
+            )
+        )
+        s.commit()
+
+    r = client.post("/departments/macro_research/dashboards/debt_cycle/refresh")
+    assert r.status_code == 202
+    assert r.json()["status"] == "queued"
+    with session_factory() as s:
+        rows = s.query(JobRun).filter_by(schedule_id="debt_cycle").all()
+        assert len(rows) == 2  # the stale orphan + the freshly enqueued run
+    fake_scheduler.run_now.assert_awaited_once()
 
 
 def test_refresh_404_for_unknown(client: TestClient) -> None:
