@@ -70,8 +70,12 @@ export default function MacroResearch(): JSX.Element {
     listDashboards()
       .then((r) => {
         if (r.dashboards.length === 0) return;
+        // Summary is the dedicated overview tab (rendered separately), not a
+        // framework tab — keep it out of the T1-T5 framework list.
         setDashboards(
-          r.dashboards.map((d) => ({ ...d, tcode: TCODE_BY_SLUG[d.slug] ?? "★" })),
+          r.dashboards
+            .filter((d) => d.slug !== "summary")
+            .map((d) => ({ ...d, tcode: TCODE_BY_SLUG[d.slug] ?? "★" })),
         );
       })
       .catch(() => undefined);

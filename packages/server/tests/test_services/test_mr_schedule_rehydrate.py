@@ -86,7 +86,9 @@ def test_rehydrate_registers_persisted_mr_schedule_at_lifespan() -> None:
             MrDashboardState(
                 id=str(uuid.uuid4()),
                 user_id=user_id,
-                dashboard="world_order",
+                # Canonical MR schedule row is debt_cycle (the implemented
+                # dashboard); rehydrate_all only matches the canonical slug.
+                dashboard="debt_cycle",
                 view_config={},
                 threshold_overrides={},
                 assessment_schedule="0 0 * * 0",
@@ -120,7 +122,7 @@ def test_rehydrate_registers_persisted_mr_schedule_at_lifespan() -> None:
             with TestClient(app) as client:
                 assert client.get("/health").status_code == 200
                 # Rehydration writes the MR job key to the recording scheduler.
-                expected = job_key(JobType.MR_ASSESSMENT, user_id)
+                expected = job_key(JobType.MR_DASH, user_id)
                 assert expected in recorder.added_schedule_ids
 
     if db_path.exists():

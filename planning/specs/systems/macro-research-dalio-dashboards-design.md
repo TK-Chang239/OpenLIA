@@ -1,5 +1,11 @@
 # Macro Research Department -- Dalio Framework Dashboards
 
+> **SUPERSEDED (data architecture), 2026-06-03:** The page layout and Dalio framework
+> descriptions below still hold. How the data behind them is produced is replaced by
+> `macro-research-llm-dashboard-redesign.md` (LLM tool-use agent + scheduled cache +
+> deterministic quant + curated reference data; the tiered `DashboardAssembler` and the
+> need-id data layer are removed for MR). Read the redesign spec first.
+
 Redesign of the Macro Research department from a chat-based report generator into five framework-driven dashboards based on Ray Dalio's macro methodology. Each dashboard maps 1:1 to a Dalio framework. Dashboards update periodically with live data and LLM assessments.
 
 Source article: "Ray Dalio's Methodology: An Investing Framework Distilled From 500 Years of History" (TradingKey, Apr 2026). Reference mockups in `MacroResearcherHTML/`.

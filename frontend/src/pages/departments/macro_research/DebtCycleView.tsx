@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { getDashboard } from "../../../api/macro_research";
-import { DEBT_CYCLE_FALLBACK } from "../../../lib/macro_research/dalio_copy/debt_cycle";
+import { getDashboard, runAssessment } from "../../../api/macro_research";
 import type {
   DebtCycleData,
   Status,
   T1Tone,
 } from "../../../lib/macro_research/dalio_copy/types";
 import {
+  DashEmpty,
   DashHero,
+  DashLoading,
   IndCard,
   ProseCard,
   ScoreTable,
@@ -17,6 +18,9 @@ import {
   SrcFoot,
   Verdict,
 } from "../../../components/macro_research/_shared/widgets";
+
+const POLL_INTERVAL_MS = 6000;
+const POLL_MAX_ATTEMPTS = 70; // ~7 min; a real macro run takes a few minutes
 
 function toneToStatus(tone: T1Tone): Status {
   switch (tone) {
@@ -28,14 +32,89 @@ function toneToStatus(tone: T1Tone): Status {
 }
 
 export default function DebtCycleView(): JSX.Element {
-  const [, setLive] = useState<DebtCycleData | null>(null);
+  const [data, setData] = useState<DebtCycleData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const load = () => {
+    setLoading(true);
+    getDashboard<DebtCycleData>("debt_cycle")
+      .then((r) => {
+        setData(r.payload);
+        setGeneratedAt(r.generated_at);
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    getDashboard("debt_cycle").catch(() => undefined);
+    load();
+    return stopPolling;
   }, []);
 
-  void setLive;
-  const data: DebtCycleData = DEBT_CYCLE_FALLBACK;
+  const startPolling = () => {
+    stopPolling();
+    let attempts = 0;
+    pollRef.current = setInterval(() => {
+      attempts += 1;
+      getDashboard<DebtCycleData>("debt_cycle")
+        .then((r) => {
+          if (r.payload) {
+            stopPolling();
+            setData(r.payload);
+            setGeneratedAt(r.generated_at);
+            setGenerating(false);
+            setNote(null);
+          } else if (attempts >= POLL_MAX_ATTEMPTS) {
+            stopPolling();
+            setGenerating(false);
+            setNote("Still generating. Reload in a moment to see the result.");
+          }
+        })
+        .catch(() => undefined);
+    }, POLL_INTERVAL_MS);
+  };
+
+  const onGenerate = () => {
+    setNote(
+      "Generating a live reading from current data — this can take a few minutes. Keep this tab open.",
+    );
+    setGenerating(true);
+    runAssessment("debt_cycle")
+      .then((r) => {
+        if (r.status === "queued") {
+          startPolling();
+        } else if (r.status === "already_running") {
+          // A run is already in flight (e.g. another tab) — watch for it.
+          setNote("A reading is already being generated — watching for the result.");
+          startPolling();
+        } else {
+          setGenerating(false);
+          setNote("Generation could not start (background scheduler unavailable).");
+        }
+      })
+      .catch(() => {
+        setGenerating(false);
+        setNote("Could not start generation. Please try again.");
+      });
+  };
+
+  if (loading) return <DashLoading />;
+  if (!data) return <DashEmpty onGenerate={onGenerate} generating={generating} note={note} />;
+
+  const generatedLabel = generatedAt
+    ? new Date(generatedAt).toLocaleDateString()
+    : "—";
 
   const heroStats = data.scorecard.rows.map((r) => ({
     k: r.name.replace(/\s*\(.*\)/, "").split("/")[0].trim(),
@@ -149,7 +228,7 @@ export default function DebtCycleView(): JSX.Element {
 
       <Verdict
         testid="t1-verdict"
-        meta={<>T1 SYNTHESIS · DALIO FRAMEWORK <span className="dot" /> April 2026</>}
+        meta={<>T1 SYNTHESIS · DALIO FRAMEWORK <span className="dot" /> {generatedLabel}</>}
         headline={data.verdict.title}
         body={data.verdict.body}
         tone={toneToStatus(data.verdict.tone)}

@@ -160,6 +160,75 @@ def test_most_recent_for_schedule(db_session: Session) -> None:
     assert row.id == newer
 
 
+def test_active_run_for_schedule_returns_only_fresh_running(db_session: Session) -> None:
+    _make_user(db_session)
+    now = datetime.now(UTC)
+    floor = now - timedelta(minutes=30)
+
+    fresh = jobs_svc.start_run(
+        db_session, user_id="u_1", job_type=JobType.MR_DASH, schedule_id="debt_cycle"
+    )
+    db_session.commit()
+    found = jobs_svc.active_run_for_schedule(
+        db_session,
+        user_id="u_1",
+        job_type=JobType.MR_DASH,
+        schedule_id="debt_cycle",
+        not_before=floor,
+    )
+    assert found is not None
+    assert found.id == fresh
+
+    # A completed run no longer counts as in-flight.
+    jobs_svc.mark_completed(db_session, fresh)
+    db_session.commit()
+    assert (
+        jobs_svc.active_run_for_schedule(
+            db_session,
+            user_id="u_1",
+            job_type=JobType.MR_DASH,
+            schedule_id="debt_cycle",
+            not_before=floor,
+        )
+        is None
+    )
+
+    # A still-RUNNING row that started before the floor is a dead orphan.
+    stale = jobs_svc.start_run(
+        db_session, user_id="u_1", job_type=JobType.MR_DASH, schedule_id="debt_cycle"
+    )
+    db_session.commit()
+    stale_row = db_session.get(JobRun, stale)
+    stale_row.started_at = now - timedelta(hours=2)
+    db_session.commit()
+    assert (
+        jobs_svc.active_run_for_schedule(
+            db_session,
+            user_id="u_1",
+            job_type=JobType.MR_DASH,
+            schedule_id="debt_cycle",
+            not_before=floor,
+        )
+        is None
+    )
+
+    # A different dashboard slug never matches.
+    jobs_svc.start_run(
+        db_session, user_id="u_1", job_type=JobType.MR_DASH, schedule_id="four_seasons"
+    )
+    db_session.commit()
+    assert (
+        jobs_svc.active_run_for_schedule(
+            db_session,
+            user_id="u_1",
+            job_type=JobType.MR_DASH,
+            schedule_id="debt_cycle",
+            not_before=floor,
+        )
+        is None
+    )
+
+
 def test_list_for_user_filters_by_type_and_pagination(db_session: Session) -> None:
     _make_user(db_session)
     ids: list[str] = []

@@ -30,17 +30,16 @@ beforeEach(() => {
       { slug: "all_weather", display_name: "All-Weather" },
       { slug: "world_order", display_name: "World Order" },
       { slug: "five_forces", display_name: "Five Forces" },
+      { slug: "summary", display_name: "Summary" },
     ],
   });
   apiMocks.getDashboard.mockResolvedValue({
-    slug: "debt_cycle",
-    display_name: "Debt Cycle",
-    severity: "amber",
-    tiers: [],
-    headline: "Late stage",
-    generated_at: new Date().toISOString(),
-    smart_mode_active: false,
+    payload: null,
+    generated_at: null,
+    is_stale: false,
+    provenance: null,
   });
+  apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
   apiMocks.getConfig.mockResolvedValue({ view_config: {}, threshold_overrides: {} });
   apiMocks.getSchedule.mockResolvedValue({ cron_expression: null, last_assessment_at: null });
 });
@@ -72,12 +71,21 @@ describe("MacroResearch shell", () => {
     expect(screen.getByText("T5")).toBeInTheDocument();
   });
 
-  it("opens the settings drawer with run-now buttons", () => {
+  it("opens the settings drawer and offers Run Now for every framework dashboard", () => {
     renderShell();
     fireEvent.click(screen.getByTestId("mr-settings-button"));
     expect(screen.getByTestId("mr-settings-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("mr-runnow-debt_cycle")).toBeInTheDocument();
-    expect(screen.getByTestId("mr-runnow-five_forces")).toBeInTheDocument();
+    // All five framework dashboards are now engine-implemented and runnable.
+    // (Summary is refreshed from its own overview tab, not this list.)
+    for (const slug of [
+      "debt_cycle",
+      "world_order",
+      "four_seasons",
+      "all_weather",
+      "five_forces",
+    ]) {
+      expect(screen.getByTestId(`mr-runnow-${slug}`)).toBeInTheDocument();
+    }
   });
 
   it("auto-refresh select offers the design's three options", () => {
