@@ -25,8 +25,7 @@ def _all_weather_fixture() -> dict:
             ],
         },
         "cardSummary": (
-            "60/40 audit: 0% gold vs ~15% guidance, no autumn coverage. "
-            "Equity vol dominates risk."
+            "60/40 audit: 0% gold vs ~15% guidance, no autumn coverage. Equity vol dominates risk."
         ),
         "comparison": {
             "label": "Portfolio under audit vs All-Weather reference",

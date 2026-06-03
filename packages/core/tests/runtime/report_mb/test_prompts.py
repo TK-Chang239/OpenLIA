@@ -5,6 +5,7 @@ from openlia.llm.runtime.report_mb.prompts import (
 from openlia.llm.runtime.report_mb.schemas import (
     BriefingContext,
     EnabledConnectors,
+    MacroSnapshotContext,
     RunRequest,
 )
 from openlia.llm.runtime.report_v2_3.templates.spec import SectionSpec, TemplateSpec
@@ -90,6 +91,54 @@ def test_prompt_includes_instructions_block_when_provided():
 def test_prompt_omits_instructions_when_absent():
     prompt = build_system_prompt(_req(EnabledConnectors(), None))
     assert "Analyst instructions" not in prompt
+
+
+def test_prompt_injects_macro_regime_when_snapshot_present():
+    prompt = build_system_prompt(
+        _req(
+            EnabledConnectors(),
+            BriefingContext(
+                run_date="2026-06-02",
+                macro_snapshot=MacroSnapshotContext(
+                    debt_cycle_phase="Late Plateau",
+                    economic_season="Summer",
+                    active_force_count=3,
+                    as_of="2026-06-01",
+                    is_stale=False,
+                ),
+            ),
+        )
+    )
+    assert "Current macro regime" in prompt
+    assert "Late Plateau" in prompt
+    assert "Summer" in prompt
+    assert "3 of the five major forces" in prompt
+    assert "2026-06-01" in prompt
+    assert "possibly stale" not in prompt
+
+
+def test_prompt_omits_macro_regime_when_snapshot_absent():
+    prompt = build_system_prompt(_req(EnabledConnectors(), BriefingContext(run_date="2026-06-02")))
+    assert "Current macro regime" not in prompt
+
+
+def test_prompt_macro_regime_marks_stale():
+    prompt = build_system_prompt(
+        _req(
+            EnabledConnectors(),
+            BriefingContext(
+                run_date="2026-06-02",
+                macro_snapshot=MacroSnapshotContext(
+                    debt_cycle_phase="Late Plateau",
+                    as_of="2026-05-30",
+                    is_stale=True,
+                ),
+            ),
+        )
+    )
+    assert "Current macro regime" in prompt
+    assert "possibly stale" in prompt
+    assert "2026-05-30" in prompt
 
 
 def test_prompt_lists_connector_tools_alongside_market_data():

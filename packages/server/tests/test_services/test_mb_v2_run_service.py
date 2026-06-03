@@ -52,6 +52,66 @@ from runtime.report_mb._fakes import (  # noqa: E402
 )
 
 
+@pytest.fixture
+def macro_dept_reader():
+    """Save and restore the process-global macro_research department's reader.
+
+    The department registry is a process-wide singleton; a fake reader set in
+    a test must not leak into others. Yields the department so a test can set
+    its reader, then restores the original ``_reader`` on teardown.
+    """
+    from openlia.departments import get_department
+
+    dept = get_department("macro_research")
+    assert dept is not None
+    original = dept._reader
+    try:
+        yield dept
+    finally:
+        dept._reader = original
+
+
+class _FakeMacroReader:
+    def __init__(self, entries):
+        self._entries = entries
+
+    def latest_snapshot(self, *, user_id: str, dashboard: str):
+        return self._entries.get(dashboard)
+
+
+def test_resolve_macro_snapshot_populated(macro_dept_reader):
+    from datetime import date
+
+    from openlia.macro_research.schemas import SnapshotEntry
+
+    now = datetime.now(UTC)
+    macro_dept_reader.set_snapshot_reader(
+        _FakeMacroReader(
+            {
+                "debt_cycle": SnapshotEntry(value="Late Plateau", generated_at=now),
+                "four_seasons": SnapshotEntry(value="Summer", generated_at=now),
+                "five_forces": SnapshotEntry(value=3, generated_at=now),
+            }
+        )
+    )
+
+    ctx = svc._resolve_macro_snapshot("u-1")
+
+    assert ctx is not None
+    assert ctx.debt_cycle_phase == "Late Plateau"
+    assert ctx.economic_season == "Summer"
+    assert ctx.active_force_count == 3
+    assert ctx.as_of == now.date().isoformat()
+    assert ctx.as_of == date.today().isoformat()
+    assert ctx.has_data() is True
+
+
+def test_resolve_macro_snapshot_none_when_no_data(macro_dept_reader):
+    macro_dept_reader.set_snapshot_reader(_FakeMacroReader({}))
+
+    assert svc._resolve_macro_snapshot("u-1") is None
+
+
 def _seed_mb_default(db) -> None:
     """Insert the mb_default builtin row, mirroring what the migration does."""
     spec = build_default_template()

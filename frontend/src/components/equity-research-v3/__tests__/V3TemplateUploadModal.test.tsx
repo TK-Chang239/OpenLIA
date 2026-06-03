@@ -75,10 +75,14 @@ describe("V3TemplateUploadModal", () => {
       ) as HTMLInputElement;
       expect(nameField.value).toBe("my-template");
     });
-    // Preview shows section count
-    expect(
-      screen.getByTestId("v3-template-upload-preview"),
-    ).toHaveTextContent("Parsed 2 section(s)");
+    // Preview shows section count. The preview renders on a separate state
+    // update from the name auto-fill (both driven by the async FileReader), so
+    // a synchronous getByTestId can race under full-suite load — wait for it.
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("v3-template-upload-preview"),
+      ).toHaveTextContent("Parsed 2 section(s)");
+    });
 
     fireEvent.click(screen.getByTestId("v3-template-upload-save"));
 
