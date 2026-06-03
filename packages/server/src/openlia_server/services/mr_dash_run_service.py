@@ -168,13 +168,90 @@ def _five_forces_data_context(db: DBSession, user_id: str) -> str:
     )
 
 
+def _summary_state_line(
+    *,
+    label: str,
+    payload: dict | None,
+    block_key: str,
+    extra: str = "",
+) -> str:
+    """One cached-framework headline-state line for the Summary context block.
+
+    Reads the source dashboard's headline block (``block_key`` -> e.g.
+    "phaseBox" or "verdict") for its title; honestly notes a framework that has
+    not been generated yet so the model says so rather than inventing a read.
+    ``extra`` appends a framework-specific signal (e.g. the Five Forces
+    active-count) when present.
+    """
+    if payload is None:
+        return f"- {label}: not yet generated."
+    block = payload.get(block_key, {})
+    title = block.get("title", "")
+    suffix = f" {extra}" if extra else ""
+    return f"- {label}: {title}.{suffix}"
+
+
+def _summary_data_context(db: DBSession, user_id: str) -> str:
+    """Summarize the five cached framework states for the Summary synthesis.
+
+    Reads each framework's cached headline state (Debt Cycle phaseBox, Four
+    Seasons / World Order / All-Weather / Five Forces verdict), plus the World
+    Order scorecard label and the Five Forces active-count, and formats them
+    into one authoritative context block. Frameworks with no cache row are
+    flagged as not yet generated.
+    """
+    debt = _cached_payload(db, user_id, "debt_cycle")
+    seasons = _cached_payload(db, user_id, "four_seasons")
+    world = _cached_payload(db, user_id, "world_order")
+    weather = _cached_payload(db, user_id, "all_weather")
+    forces = _cached_payload(db, user_id, "five_forces")
+
+    world_extra = ""
+    if world is not None:
+        world_extra = f"Scorecard: {world.get('scorecard', {}).get('label', '')}."
+    forces_extra = ""
+    if forces is not None:
+        count = forces.get("loops", {}).get("active", {}).get("countText", "")
+        if count:
+            forces_extra = f"Active forces: {count}."
+
+    lines = [
+        _summary_state_line(label="T1 - Debt Cycle (phase)", payload=debt, block_key="phaseBox"),
+        _summary_state_line(
+            label="T2 - Four Seasons (season)", payload=seasons, block_key="verdict"
+        ),
+        _summary_state_line(
+            label="T4 - World Order (stage)",
+            payload=world,
+            block_key="verdict",
+            extra=world_extra,
+        ),
+        _summary_state_line(
+            label="T3 - All-Weather (coverage)", payload=weather, block_key="verdict"
+        ),
+        _summary_state_line(
+            label="T5 - Five Forces (active-count)",
+            payload=forces,
+            block_key="verdict",
+            extra=forces_extra,
+        ),
+    ]
+    return (
+        "The five framework dashboards' current cached states are below. Treat "
+        "each as the authoritative read for that framework; synthesize, do not "
+        "contradict. Emit one frameworkStatus card per framework reflecting its "
+        "state.\n" + "\n".join(lines)
+    )
+
+
 def _build_data_context(db: DBSession, *, user_id: str, dashboard_slug: str) -> str | None:
     """Server-injected authoritative inputs for this run.
 
     For ``all_weather`` returns a formatted summary of the user's portfolio
     asset-class weights (or a proxy instruction when no holdings exist). For
     ``five_forces`` seeds F1/F3 from the cached Debt Cycle / World Order
-    dashboards. Other dashboards have no server-side inputs yet, so this
+    dashboards. For ``summary`` injects the five framework dashboards' cached
+    headline states. Other dashboards have no server-side inputs yet, so this
     returns ``None``.
     """
     if dashboard_slug == "all_weather":
@@ -188,6 +265,8 @@ def _build_data_context(db: DBSession, *, user_id: str, dashboard_slug: str) -> 
         return f"Portfolio weights: {parts}"
     if dashboard_slug == "five_forces":
         return _five_forces_data_context(db, user_id)
+    if dashboard_slug == "summary":
+        return _summary_data_context(db, user_id)
     return None
 
 

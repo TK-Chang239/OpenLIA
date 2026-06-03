@@ -15,6 +15,7 @@ from openlia.macro_research.payloads import (
     DebtCycleData,
     FiveForcesData,
     FourSeasonsData,
+    SummaryData,
     WorldOrderData,
 )
 from openlia.macro_research.quant.all_weather import classify_all_weather
@@ -46,6 +47,9 @@ PAYLOAD_MODEL_BY_SLUG: dict[str, type[BaseModel]] = {
     "four_seasons": FourSeasonsData,
     "all_weather": AllWeatherData,
     "five_forces": FiveForcesData,
+    # Summary is a pure aggregation view: no classifier (absent from
+    # CLASSIFY_TOOL_BY_SLUG), so build_catalog gives it emit_dashboard only.
+    "summary": SummaryData,
 }
 
 

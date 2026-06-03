@@ -20,7 +20,7 @@ def test_base_protocol_present() -> None:
     assert "slug" in Dashboard.__annotations__
 
 
-def test_registry_exports_five_dashboards() -> None:
+def test_registry_exports_dashboards() -> None:
     from openlia.macro_research.dashboards import DASHBOARDS
 
     assert set(DASHBOARDS.keys()) == {
@@ -29,6 +29,7 @@ def test_registry_exports_five_dashboards() -> None:
         "all_weather",
         "world_order",
         "five_forces",
+        "summary",
     }
 
 
@@ -53,4 +54,5 @@ def test_department_metadata() -> None:
         "all_weather",
         "world_order",
         "five_forces",
+        "summary",
     }
