@@ -135,6 +135,26 @@ class EnabledConnectors(BaseModel):
         return "eodhd" in self.provider_ids
 
 
+class MacroSnapshotContext(BaseModel):
+    """Cross-department macro-regime snapshot (sourced from the Macro Research
+    dashboards) handed to a briefing run so it can frame the day against the
+    current regime. Populated by the server; the engine stays decoupled from
+    the Macro Research department."""
+
+    debt_cycle_phase: str | None = None
+    economic_season: str | None = None
+    active_force_count: int | None = None
+    as_of: str | None = None
+    is_stale: bool = False
+
+    def has_data(self) -> bool:
+        return (
+            self.debt_cycle_phase is not None
+            or self.economic_season is not None
+            or self.active_force_count is not None
+        )
+
+
 class BriefingContext(BaseModel):
     """Briefing metadata handed to a run.
 
@@ -143,12 +163,18 @@ class BriefingContext(BaseModel):
     "Pre-market briefing"), and optional ``time_label`` / ``timezone``
     for when the briefing fires. Injected into the system prompt so the
     model knows which briefing it is writing before it calls any tool.
+
+    ``macro_snapshot`` is an optional cross-department macro-regime
+    snapshot (debt-cycle phase, economic season, active major-force
+    count) sourced from the Macro Research dashboards and populated by the
+    server; when present it frames the day against the current regime.
     """
 
     run_date: str = Field(..., min_length=1)
     schedule_label: str | None = None
     time_label: str | None = None
     timezone: str | None = None
+    macro_snapshot: MacroSnapshotContext | None = None
 
 
 class RunRequest(BaseModel):
