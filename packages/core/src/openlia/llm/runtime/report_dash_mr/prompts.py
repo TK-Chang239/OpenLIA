@@ -339,6 +339,50 @@ red/amber/green/blue/purple; `fillPct`/`xPct`/`yPct` are integers 0-100):
   - `generated_at`: an ISO-8601 timestamp for the run."""
 
 
+_ALL_WEATHER_WORKFLOW = """\
+Work in this order:
+  1. Read the user's portfolio weights from the "# Provided inputs for this
+     run" block. Those weights are authoritative ground truth — the system
+     gathered them; do not invent or override them.
+  2. Call `classify_all_weather` with those weights. Use the returned
+     `risk_contributions`, `reference_risk_contributions`, `season_coverage`,
+     `gold_gap`, and `severity` verbatim — do not invent or override the
+     computed numbers.
+  3. Gather current cross-asset volatilities and historical stress-episode
+     context, then write the comparison donuts, the season-coverage cells,
+     the risk-parity bars, the gold needle/stats, the caveats, and the
+     verdict. Describe stress scenarios qualitatively as reasoning, NOT as a
+     simulated distribution.
+  4. Call `emit_dashboard` exactly once with the full AllWeatherData object
+     in `payload`. This finalizes the run."""
+
+
+_ALL_WEATHER_PAYLOAD_SHAPE = """\
+# AllWeatherData payload shape
+
+`emit_dashboard`'s `payload` is one JSON object with these keys (header/pill
+tones are red/amber/green/blue; donut slice tones are
+accent/olive/neutral/amber/rust; `pct`/`leftPct` are integers 0-100):
+  - `header`: {title, subtitle, pills: [{tone, label}]}.
+  - `cardSummary`: one-paragraph string summarizing the read.
+  - `comparison`: {label, benchmark: {title, slices: [{label, pct, tone}]},
+    reference: {title, slices: [{label, pct, tone}]}} — slice `tone` is one
+    of accent/olive/neutral/amber/rust.
+  - `coverage`: {label, cells: [{title, badgeLabel, badgeTone, bodyTone,
+    body, bridgeLabel, bridge}]} — one cell per economic season.
+  - `riskParity`: {label, intro, benchmarkTitle, benchmarkBars: [{label,
+    pct}], referenceTitle, referenceBars: [{label, pct}], mechanism: {title,
+    body}} — bars anchored on the classifier's risk_contributions /
+    reference_risk_contributions.
+  - `gold`: {label, title, needles: [{label, leftPct, tone}], stats:
+    [{label, value, valueTone, note}], rationale: {title, body}} — anchored
+    on the classifier's gold_gap.
+  - `caveats`: {label, cards: [{title, body}]}.
+  - `verdict`: {title, body} — the synthesis.
+  - `sources`: a short string naming the sources you used.
+  - `generated_at`: an ISO-8601 timestamp for the run."""
+
+
 # Per-dashboard prompt content. ``build_system_prompt`` looks the slug up
 # here and fails loud when a dashboard has no spec. New dashboards register
 # their workflow, payload-shape block, and indicator-sourcing hint here.
@@ -366,5 +410,10 @@ DASHBOARD_PROMPT_SPECS: dict[str, DashboardPromptSpec] = {
             "the ISM / S&P Global manufacturing PMI, real GDP year-over-year, headline and "
             "core CPI year-over-year, and an investment-grade vs high-yield credit-spread proxy."
         ),
+    ),
+    "all_weather": DashboardPromptSpec(
+        workflow=_ALL_WEATHER_WORKFLOW,
+        payload_shape=_ALL_WEATHER_PAYLOAD_SHAPE,
+        indicator_hint="current cross-asset volatilities and benchmark allocation context.",
     ),
 }
