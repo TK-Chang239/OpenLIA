@@ -57,5 +57,7 @@ describe("MbSchedulesView", () => {
     expect(screen.getByText("Pre-Market")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("mb-schedule-edit-s1"));
     expect(onEdit).toHaveBeenCalledTimes(1);
+    // Edit must hand back the full schedule object, not just its id.
+    expect(onEdit).toHaveBeenCalledWith(makeSchedule());
   });
 });

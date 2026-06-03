@@ -107,7 +107,7 @@ export function MbSchedulesView({
                 <li
                   key={s.id}
                   data-testid="mb-schedule-row"
-                  className="group relative flex items-center gap-3 pl-5 pr-4 py-3.5 bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[10px] hover:border-[--color-border-strong] hover:-translate-y-0.5 transition-[transform,border-color] duration-[--duration-normal]"
+                  className="group relative flex items-center gap-3 overflow-hidden pl-5 pr-4 py-3.5 bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[10px] hover:border-[--color-border-strong] hover:-translate-y-0.5 transition-[transform,border-color] duration-[--duration-normal]"
                 >
                   <span
                     aria-hidden="true"
@@ -123,9 +123,11 @@ export function MbSchedulesView({
                       <span className="font-mono text-[14px] tabular-nums text-[--color-text-primary]">
                         {s.time}
                       </span>
-                      <span className="text-[13px] text-[--color-text-secondary] truncate">
-                        {s.label}
-                      </span>
+                      {s.label ? (
+                        <span className="text-[13px] text-[--color-text-secondary] truncate">
+                          {s.label}
+                        </span>
+                      ) : null}
                       {s.is_enabled ? (
                         <span className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-feedback-success]">
                           <span className="w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] animate-live-pulse" />
