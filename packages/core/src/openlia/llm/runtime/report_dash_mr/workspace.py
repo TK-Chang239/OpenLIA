@@ -141,5 +141,9 @@ class RunWorkspace:
             charts=list(self.charts.values()),
             citations=self.ledger.all(),
             cover=self.cover,
-            payload=self.payload.model_dump(mode="json") if self.payload is not None else None,
+            payload=(
+                self.payload.model_dump(mode="json", by_alias=True)
+                if self.payload is not None
+                else None
+            ),
         )
