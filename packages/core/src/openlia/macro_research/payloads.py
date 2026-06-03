@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 # T1Tone matches types.ts: "red" | "amber" | "green" | "blue"
 Tone = Literal["red", "amber", "green", "blue"]
@@ -605,6 +605,184 @@ class FiveForcesData(BaseModel):
     goldAllocation: T5GoldAllocationGroup
     scenarios: T5Scenarios
     verdict: Prose
+    sources: str
+    # Redesign additions (not in types.ts): provenance + freshness.
+    provenance: Provenance = Provenance.LIVE
+    generated_at: datetime
+
+
+# ---------- Summary — cross-framework synthesis. Mirrors types.ts:584-704. ----------
+
+# The Summary surface carries its own RAG+ status scale (six values) shared by
+# every Summary sub-model. It is distinct from the four-value Tone the other
+# dashboards use; do not widen one into the other. From types.ts:12.
+Status = Literal["ok", "warn", "bad", "flat", "info", "acid"]
+
+# T1-T5 framework codes used across the Summary cards, nodes, and edges.
+TCode = Literal["T1", "T2", "T3", "T4", "T5"]
+
+
+class StatTile(BaseModel):
+    k: str
+    v: str
+    status: Status | None = None
+
+
+class MiniActive(BaseModel):
+    active: bool
+    index: int | None = None
+
+
+class ChartPoint(BaseModel):
+    year: int
+    value: float
+
+
+class SpotlightChart(BaseModel):
+    yLabel: str
+    yUnit: str | None = None
+    yMin: float | None = None
+    yMax: float | None = None
+    data: list[ChartPoint]
+    current: ChartPoint
+
+
+class FrameworkStatusStamp(BaseModel):
+    label: str
+    status: Status
+
+
+class FrameworkStatusCard(BaseModel):
+    tcode: TCode
+    slug: str
+    acid: bool | None = None
+    title: str
+    stamp: FrameworkStatusStamp
+    verdictLine: str | None = None
+    summary: str
+    miniVisual: Literal["bars", "quadrant", "ring", "stage", "forces"]
+    # list[float] first in the union so a bare array validates as the histogram
+    # form rather than coercing into MiniActive.
+    miniData: list[float] | MiniActive
+    stats: list[StatTile]
+    footLabel: str
+    spotlight: bool | None = None
+    spotlightChart: SpotlightChart | None = None
+
+
+class RegimeBarSegment(BaseModel):
+    k: str
+    v: str
+    status: Status
+    sub: str
+
+
+class LiaPull(BaseModel):
+    k: str
+    v: str
+
+
+class LiaTake(BaseModel):
+    label: str
+    timestamp: str
+    paragraphs: list[str]
+    # A fixed 4-tuple (types.ts: [LiaPull, LiaPull, LiaPull, LiaPull]).
+    pulls: tuple[LiaPull, LiaPull, LiaPull, LiaPull]
+
+
+class DepMapNode(BaseModel):
+    id: str
+    tcode: TCode
+    name: str
+    status: Status
+    statusLabel: str
+    position: Literal["left-top", "left-mid", "left-bot", "center", "right"]
+
+
+class DepMapEdge(BaseModel):
+    # `from` is a Python keyword; the field is `from_` and serializes to the
+    # JSON key `from` via the alias. populate_by_name lets validation accept
+    # either key.
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: str = Field(alias="from")
+    to: str
+    label: str
+    variant: Literal["solid", "dashed", "accent"]
+
+
+class CascadeStep(BaseModel):
+    badge: str
+    title: str
+    body: str
+    target: bool | None = None
+
+
+class ConsolidatedTrigger(BaseModel):
+    status: Status
+    name: str
+    source: str
+    desc: str
+    fromTabs: str
+
+
+class SummaryHeroStat(BaseModel):
+    k: str
+    v: str
+    status: Status
+
+
+class SummaryHero(BaseModel):
+    eyebrow: str
+    eyebrowStrong: str | None = None
+    headline: str
+    headlineAccent: str
+    lede: str
+    stats: list[SummaryHeroStat]
+
+
+class SummaryRegimeBar(BaseModel):
+    label: str
+    subLabel: str
+    segments: list[RegimeBarSegment]
+
+
+class SummaryFrameworkStatus(BaseModel):
+    label: str
+    subLabel: str
+    cards: list[FrameworkStatusCard]
+
+
+class SummaryDepMap(BaseModel):
+    label: str
+    subLabel: str
+    sub: str
+    nodes: list[DepMapNode]
+    edges: list[DepMapEdge]
+
+
+class SummaryCascade(BaseModel):
+    label: str
+    subLabel: str
+    sub: str
+    row1: list[CascadeStep]
+    row2: list[CascadeStep]
+
+
+class SummaryWatchlist(BaseModel):
+    label: str
+    subLabel: str
+    triggers: list[ConsolidatedTrigger]
+
+
+class SummaryData(BaseModel):
+    hero: SummaryHero
+    liaTake: LiaTake
+    regimeBar: SummaryRegimeBar
+    frameworkStatus: SummaryFrameworkStatus
+    depMap: SummaryDepMap
+    cascade: SummaryCascade
+    watchlist: SummaryWatchlist
     sources: str
     # Redesign additions (not in types.ts): provenance + freshness.
     provenance: Provenance = Provenance.LIVE
