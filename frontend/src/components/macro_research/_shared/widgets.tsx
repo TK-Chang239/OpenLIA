@@ -305,6 +305,52 @@ export function PhaseStrip({
   );
 }
 
+/* ===== Loading skeleton ===== */
+
+export function DashLoading({ testid }: { testid?: string }): JSX.Element {
+  return (
+    <article className="mr-dash-loading" data-testid={testid ?? "mr-dash-loading"}>
+      <div className="mr-skel mr-skel-hero" />
+      <div className="mr-skel mr-skel-line" />
+      <div className="mr-skel mr-skel-block" />
+      <div className="mr-skel mr-skel-line" />
+      <div className="mr-skel mr-skel-block" />
+    </article>
+  );
+}
+
+/* ===== Empty state ===== */
+
+export function DashEmpty({
+  onGenerate,
+  generating,
+  testid,
+}: {
+  onGenerate: () => void;
+  generating?: boolean;
+  testid?: string;
+}): JSX.Element {
+  return (
+    <article className="mr-dash-empty" data-testid={testid ?? "mr-dash-empty"}>
+      <div className="mr-card-sm mr-dash-empty-card">
+        <div className="mr-card-title">This dashboard hasn&rsquo;t been generated yet.</div>
+        <div className="mr-card-body-text">
+          Run the assessment to produce a live reading from current data.
+        </div>
+        <button
+          type="button"
+          className="mr-dash-empty-btn"
+          onClick={onGenerate}
+          disabled={generating}
+          data-testid="mr-dash-empty-generate"
+        >
+          {generating ? "Generating…" : "Generate now"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 /* ===== Source footer ===== */
 
 export function SrcFoot({ children }: { children: ReactNode }): JSX.Element {

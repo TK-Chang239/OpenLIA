@@ -1,9 +1,12 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DEBT_CYCLE_FALLBACK } from "../../../../lib/macro_research/dalio_copy/debt_cycle";
+
 const apiMocks = vi.hoisted(() => ({
   getDashboard: vi.fn(),
+  runAssessment: vi.fn(),
 }));
 
 vi.mock("../../../../api/macro_research", () => apiMocks);
@@ -21,15 +24,14 @@ import SummaryView from "../SummaryView";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: live debt_cycle payload (reuse the canonical T1 shape as fixture).
   apiMocks.getDashboard.mockResolvedValue({
-    slug: "debt_cycle",
-    display_name: "Debt Cycle",
-    severity: "amber",
-    tiers: [],
-    headline: null,
-    generated_at: new Date().toISOString(),
-    smart_mode_active: false,
+    payload: DEBT_CYCLE_FALLBACK,
+    generated_at: "2026-06-01T00:00:00Z",
+    is_stale: false,
+    provenance: "live",
   });
+  apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
 });
 
 function inRouter(node: React.ReactNode) {
@@ -37,9 +39,11 @@ function inRouter(node: React.ReactNode) {
 }
 
 describe("DebtCycleView", () => {
-  it("renders the headline scorecard, phase box, watchlist, and synthesis verdict", () => {
+  it("renders live cache content: scorecard, phase box, watchlist, and synthesis verdict", async () => {
     render(inRouter(<DebtCycleView />));
-    expect(screen.getByText(/T1 · US debt cycle position report/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/T1 · US debt cycle position report/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Section A — headline scorecard/i)).toBeInTheDocument();
     expect(screen.getByTestId("t1-scorecard")).toBeInTheDocument();
     expect(screen.getByText(/Govt debt \/ GDP/i)).toBeInTheDocument();
@@ -48,6 +52,40 @@ describe("DebtCycleView", () => {
     expect(screen.getByTestId("t1-watchlist")).toBeInTheDocument();
     expect(screen.getByTestId("t1-verdict")).toBeInTheDocument();
     expect(screen.getByText(/Section D synthesis/i)).toBeInTheDocument();
+  });
+
+  it("renders the empty state with no fabricated numbers when payload is null", async () => {
+    apiMocks.getDashboard.mockResolvedValueOnce({
+      payload: null,
+      generated_at: null,
+      is_stale: false,
+      provenance: null,
+    });
+    render(inRouter(<DebtCycleView />));
+    expect(
+      await screen.findByText(/hasn.t been generated yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("mr-dash-empty-generate")).toBeInTheDocument();
+    // No live content, and no fabricated reading rendered.
+    expect(screen.queryByTestId("t1-scorecard")).not.toBeInTheDocument();
+    expect(screen.queryByText(/125\.2%/)).not.toBeInTheDocument();
+  });
+
+  it("invokes runAssessment then reloads when Generate now is clicked", async () => {
+    apiMocks.getDashboard.mockResolvedValueOnce({
+      payload: null,
+      generated_at: null,
+      is_stale: false,
+      provenance: null,
+    });
+    render(inRouter(<DebtCycleView />));
+    const btn = await screen.findByTestId("mr-dash-empty-generate");
+    btn.click();
+    await waitFor(() => expect(apiMocks.runAssessment).toHaveBeenCalledWith("debt_cycle"));
+    // After refresh the default (live) payload resolves and content appears.
+    expect(
+      await screen.findByText(/T1 · US debt cycle position report/i),
+    ).toBeInTheDocument();
   });
 });
 
