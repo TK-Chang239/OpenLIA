@@ -23,9 +23,9 @@ import type {
 
 import {
   MbConfigFields,
+  MbSectionHeader,
   MbToggle,
   isBriefEmpty,
-  mbSectionTitle,
 } from "./MbConfigFields";
 
 const DAY_NAMES: readonly MbDayOfWeek[] = [
@@ -205,7 +205,9 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {/* Timing */}
             <section className="mb-7">
-              {mbSectionTitle(t("morning_briefing.schedule_editor.timing_title"))}
+              <MbSectionHeader
+                label={t("morning_briefing.schedule_editor.timing_title")}
+              />
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
                 {t("morning_briefing.schedule_editor.timing_hint")}
               </p>

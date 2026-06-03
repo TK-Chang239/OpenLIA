@@ -55,9 +55,8 @@ describe("MbConfigFields", () => {
   it("routes a language change through onChange", async () => {
     const onChange = vi.fn();
     render(<MbConfigFields draft={draft()} onChange={onChange} />);
-    fireEvent.change(await screen.findByTestId("mb-language-select"), {
-      target: { value: "zh-Hant" },
-    });
+    await screen.findByTestId("mb-template-select");
+    fireEvent.click(screen.getByTestId("mb-language-select-option-zh-Hant"));
     expect(onChange).toHaveBeenCalledWith({ language: "zh-Hant" });
   });
 });

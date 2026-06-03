@@ -7,17 +7,21 @@
  * template/instructions/data-source hooks and the upload sub-modals; the
  * parent owns the draft state and passes a patcher via `onChange`.
  *
- * MB is purely template/instructions-driven — no ticker. The scheduling
- * fields (time/timezone/days/label/is_enabled) live only in the editor.
+ * Visual structure mirrors the ER (Equity Research v3) settings modal:
+ * mono-eyebrow section headers, bordered section rhythm, card-list template /
+ * instructions pickers, and Segmented controls for length / language /
+ * reasoning. MB is purely template/instructions-driven — no ticker.
  */
 import { useState, type ReactNode } from "react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type {
   MbDataSource,
+  MbInstructions,
   MbReasoningEffort,
   MbReportLength,
+  MbTemplate,
 } from "../../api/morning-briefing";
 import { useMbDataSources } from "../../hooks/useMbDataSources";
 import { useMbInstructions } from "../../hooks/useMbInstructions";
@@ -51,11 +55,64 @@ export function isBriefEmpty(draft: MbConfigDraft): boolean {
   return draft.template_id === "freeform" && !draft.instructions_id;
 }
 
-export function mbSectionTitle(text: string) {
+/** Mono-eyebrow section label, matching the ER settings modal. */
+export function MbSectionHeader({ label }: { label: string }) {
   return (
-    <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
-      {text}
-    </h3>
+    <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+      {label}
+    </span>
+  );
+}
+
+interface SegOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+/** Segmented radio control, matching the ER settings modal. */
+export function MbSegmented<T extends string>({
+  ariaLabel,
+  value,
+  options,
+  onChange,
+  testId,
+}: {
+  ariaLabel: string;
+  value: T;
+  options: readonly SegOption<T>[];
+  onChange: (next: T) => void;
+  testId?: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className="flex gap-[2px] rounded-lg border border-[--color-border-subtle] bg-[--color-bg-base] p-[3px]"
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={opt.value}
+            data-testid={testId ? `${testId}-option-${opt.value}` : undefined}
+            onClick={() => onChange(opt.value)}
+            className={[
+              "flex-1 rounded-md px-[10px] py-2 text-center font-display text-[12.5px] transition-colors",
+              active
+                ? "bg-[--color-bg-elevated] font-medium text-[--color-text-primary] shadow-[0_1px_2px_rgba(13,13,11,0.06)]"
+                : "text-[--color-text-secondary] hover:text-[--color-text-primary]",
+            ].join(" ")}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -112,6 +169,84 @@ export function MbToggle({
   );
 }
 
+/** Dashed mono "Upload" pill, matching the ER settings modal. */
+function UploadPill({
+  onClick,
+  testId,
+  label,
+}: {
+  onClick: () => void;
+  testId: string;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      className="inline-flex items-center gap-[6px] rounded-md border border-dashed border-[--color-border-strong] bg-transparent px-[10px] py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-solid hover:border-[--color-feedback-success] hover:text-[--color-feedback-success] transition-colors"
+    >
+      <Upload size={11} strokeWidth={2} /> {label}
+    </button>
+  );
+}
+
+/** A single selectable card in the template / instructions picker lists. */
+function OptionRow({
+  active,
+  onClick,
+  testId,
+  title,
+  sublabel,
+  onDelete,
+  deleteAria,
+}: {
+  active: boolean;
+  onClick: () => void;
+  testId: string;
+  title: string;
+  sublabel?: string;
+  onDelete?: () => void;
+  deleteAria?: string;
+}) {
+  return (
+    <div
+      className={[
+        "flex items-center gap-2 rounded-md border px-3 py-2",
+        active
+          ? "border-[--color-accent-primary] bg-[rgba(212,255,0,0.06)]"
+          : "border-[--color-border-subtle] bg-[--color-bg-base] hover:border-[--color-border-strong]",
+      ].join(" ")}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        data-testid={testId}
+        className="flex min-w-0 flex-1 flex-col text-left"
+      >
+        <span className="truncate text-[12.5px] font-medium text-[--color-text-primary]">
+          {title}
+        </span>
+        {sublabel ? (
+          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+            {sublabel}
+          </span>
+        ) : null}
+      </button>
+      {onDelete ? (
+        <button
+          type="button"
+          aria-label={deleteAria}
+          onClick={onDelete}
+          className="rounded p-1 text-[--color-feedback-error] hover:bg-[--color-surface-hover]"
+        >
+          <Trash2 size={12} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 interface Props {
   draft: MbConfigDraft;
   onChange: (patch: Partial<MbConfigDraft>) => void;
@@ -140,43 +275,44 @@ export function MbConfigFields({ draft, onChange }: Props) {
     web_search: draft.web_search,
   });
 
-  const LENGTH_LABELS: Record<MbReportLength, string> = {
-    concise: t("morning_briefing.schedule_editor.length_concise"),
-    normal: t("morning_briefing.schedule_editor.length_normal"),
-    elaborative: t("morning_briefing.schedule_editor.length_elaborative"),
-  };
+  const LENGTH_OPTIONS: readonly SegOption<MbReportLength>[] = LENGTH_IDS.map(
+    (id) => ({
+      value: id,
+      label: t(`morning_briefing.schedule_editor.length_${id}`),
+    }),
+  );
 
-  const REASONING_OPTIONS: readonly {
-    value: MbReasoningEffort;
-    label: string;
-  }[] = [
-    {
-      value: null,
-      label: t("morning_briefing.schedule_editor.reasoning_default"),
-    },
-    {
-      value: "medium",
-      label: t("morning_briefing.schedule_editor.reasoning_medium"),
-    },
-    {
-      value: "high",
-      label: t("morning_briefing.schedule_editor.reasoning_high"),
-    },
+  const LANGUAGE_OPTIONS: readonly SegOption<"en" | "zh-Hant">[] = [
+    { value: "en", label: "English" },
+    { value: "zh-Hant", label: "繁體中文" },
   ];
+
+  const REASONING_OPTIONS: readonly SegOption<"default" | "medium" | "high">[] =
+    [
+      {
+        value: "default",
+        label: t("morning_briefing.schedule_editor.reasoning_default"),
+      },
+      {
+        value: "medium",
+        label: t("morning_briefing.schedule_editor.reasoning_medium"),
+      },
+      {
+        value: "high",
+        label: t("morning_briefing.schedule_editor.reasoning_high"),
+      },
+    ];
+  const reasoningValue: "default" | "medium" | "high" =
+    draft.reasoning_effort ?? "default";
 
   const sortedTemplates = [...templates].sort((a, b) => {
     if (a.is_builtin !== b.is_builtin) return a.is_builtin ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
-  const activeTemplate = templates.find((tpl) => tpl.id === draft.template_id);
-
   const sortedInstructions = [...instructions].sort((a, b) => {
     if (a.is_builtin !== b.is_builtin) return a.is_builtin ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
-  const activeInstructions = instructions.find(
-    (ins) => ins.id === draft.instructions_id,
-  );
 
   function handleModel(sel: MbModelSelection | null) {
     if (!sel) return;
@@ -195,10 +331,10 @@ export function MbConfigFields({ draft, onChange }: Props) {
     setUploadOpen(false);
   }
 
-  async function handleDeleteTemplate() {
-    if (!activeTemplate || activeTemplate.is_builtin) return;
-    await removeTemplate(activeTemplate.id);
-    onChange({ template_id: "freeform" });
+  async function handleDeleteTemplate(tpl: MbTemplate) {
+    if (tpl.is_builtin) return;
+    await removeTemplate(tpl.id);
+    if (draft.template_id === tpl.id) onChange({ template_id: "freeform" });
   }
 
   async function handleUploadInstructions(name: string, file: File) {
@@ -207,8 +343,8 @@ export function MbConfigFields({ draft, onChange }: Props) {
     setInstructionsOpen(false);
   }
 
-  async function handleDeleteInstructions() {
-    if (!activeInstructions || activeInstructions.is_builtin) return;
+  async function handleDeleteInstructions(ins: MbInstructions) {
+    if (ins.is_builtin) return;
     if (
       !window.confirm(
         t("morning_briefing.schedule_editor.instructions_delete_confirm"),
@@ -216,8 +352,8 @@ export function MbConfigFields({ draft, onChange }: Props) {
     ) {
       return;
     }
-    await removeInstructions(activeInstructions.id);
-    onChange({ instructions_id: null });
+    await removeInstructions(ins.id);
+    if (draft.instructions_id === ins.id) onChange({ instructions_id: null });
   }
 
   const isWebSearchSource = (s: MbDataSource) =>
@@ -287,70 +423,68 @@ export function MbConfigFields({ draft, onChange }: Props) {
   }
 
   return (
-    <>
+    <div className="[&>section]:border-b [&>section]:border-[--color-border-subtle] [&>section]:py-5 [&>section:first-child]:pt-0 [&>section:last-child]:border-b-0 [&>section:last-child]:pb-0">
       {/* Model */}
-      <section className="mb-7">
-        {mbSectionTitle(t("morning_briefing.schedule_editor.model_title"))}
+      <section>
+        <MbSectionHeader
+          label={t("morning_briefing.schedule_editor.model_title")}
+        />
         <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
           {t("morning_briefing.schedule_editor.model_hint")}
         </p>
         <MbModelPicker
           onChange={handleModel}
-          value={{
-            provider_kind: draft.provider_kind,
-            model: draft.model,
-          }}
+          value={{ provider_kind: draft.provider_kind, model: draft.model }}
         />
       </section>
 
-      <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
-
       {/* Template */}
-      <section className="mb-7">
-        {mbSectionTitle(t("morning_briefing.schedule_editor.template_title"))}
-        <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+      <section>
+        <div className="mb-[10px] flex items-center justify-between">
+          <MbSectionHeader
+            label={t("morning_briefing.schedule_editor.template_title")}
+          />
+          <UploadPill
+            onClick={() => setUploadOpen(true)}
+            testId="mb-template-upload-open"
+            label={t("morning_briefing.schedule_editor.template_upload")}
+          />
+        </div>
+        <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-[10px]">
           {t("morning_briefing.schedule_editor.template_hint")}
         </p>
-        <div className="flex items-center gap-2">
-          <select
-            value={draft.template_id}
-            onChange={(e) => onChange({ template_id: e.target.value })}
-            data-testid="mb-template-select"
-            className="flex-1 h-9 rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
-          >
-            <option value="freeform">
-              {t("morning_briefing.schedule_editor.template_freeform")}
-            </option>
-            {sortedTemplates.map((tpl) => (
-              <option key={tpl.id} value={tpl.id}>
-                {tpl.name}
-                {tpl.is_builtin
-                  ? ""
-                  : t("morning_briefing.schedule_editor.template_custom_suffix")}
-              </option>
-            ))}
-          </select>
-          {activeTemplate && !activeTemplate.is_builtin ? (
-            <button
-              type="button"
-              onClick={() => void handleDeleteTemplate()}
-              aria-label={t(
+        <div data-testid="mb-template-select" className="flex flex-col gap-[4px]">
+          <OptionRow
+            active={draft.template_id === "freeform"}
+            onClick={() => onChange({ template_id: "freeform" })}
+            testId="mb-template-option-freeform"
+            title={t("morning_briefing.schedule_editor.template_freeform")}
+            sublabel={t(
+              "morning_briefing.schedule_editor.template_freeform_sublabel",
+            )}
+          />
+          {sortedTemplates.map((tpl) => (
+            <OptionRow
+              key={tpl.id}
+              active={draft.template_id === tpl.id}
+              onClick={() => onChange({ template_id: tpl.id })}
+              testId={`mb-template-option-${tpl.id}`}
+              title={tpl.name}
+              sublabel={
+                tpl.is_builtin
+                  ? t("morning_briefing.schedule_editor.template_builtin")
+                  : t("morning_briefing.schedule_editor.template_uploaded")
+              }
+              onDelete={
+                tpl.is_builtin
+                  ? undefined
+                  : () => void handleDeleteTemplate(tpl)
+              }
+              deleteAria={t(
                 "morning_briefing.schedule_editor.template_delete_aria",
               )}
-              data-testid="mb-template-delete"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[--color-border-subtle] text-[--color-text-secondary] hover:text-[--color-feedback-danger] hover:border-[--color-feedback-danger] transition-colors"
-            >
-              <Trash2 size={14} />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setUploadOpen(true)}
-            data-testid="mb-template-upload-open"
-            className="inline-flex items-center h-9 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px] whitespace-nowrap"
-          >
-            {t("morning_briefing.schedule_editor.template_upload")}
-          </button>
+            />
+          ))}
         </div>
         {draft.template_id === "freeform" ? (
           <p
@@ -362,66 +496,61 @@ export function MbConfigFields({ draft, onChange }: Props) {
         ) : null}
       </section>
 
-      <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
-
       {/* Instructions */}
-      <section className="mb-7">
-        {mbSectionTitle(t("morning_briefing.schedule_editor.instructions_title"))}
-        <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+      <section>
+        <div className="mb-[10px] flex items-center justify-between">
+          <MbSectionHeader
+            label={t("morning_briefing.schedule_editor.instructions_title")}
+          />
+          <UploadPill
+            onClick={() => setInstructionsOpen(true)}
+            testId="mb-instructions-upload-open"
+            label={t("morning_briefing.schedule_editor.instructions_upload")}
+          />
+        </div>
+        <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-[10px]">
           {t("morning_briefing.schedule_editor.instructions_hint")}
         </p>
-        <div className="flex items-center gap-2">
-          <select
-            value={draft.instructions_id ?? ""}
-            onChange={(e) =>
-              onChange({ instructions_id: e.target.value || null })
-            }
-            data-testid="mb-instructions-select"
-            className="flex-1 h-9 rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
-          >
-            <option value="">
-              {t("morning_briefing.schedule_editor.instructions_none")}
-            </option>
-            {sortedInstructions.map((ins) => (
-              <option key={ins.id} value={ins.id}>
-                {ins.name}
-                {ins.is_builtin
-                  ? ""
-                  : t(
-                      "morning_briefing.schedule_editor.instructions_custom_suffix",
-                    )}
-              </option>
-            ))}
-          </select>
-          {activeInstructions && !activeInstructions.is_builtin ? (
-            <button
-              type="button"
-              onClick={() => void handleDeleteInstructions()}
-              aria-label={t(
+        <div
+          data-testid="mb-instructions-select"
+          className="flex flex-col gap-[4px]"
+        >
+          <OptionRow
+            active={draft.instructions_id === null}
+            onClick={() => onChange({ instructions_id: null })}
+            testId="mb-instructions-option-none"
+            title={t("morning_briefing.schedule_editor.instructions_none")}
+          />
+          {sortedInstructions.map((ins) => (
+            <OptionRow
+              key={ins.id}
+              active={draft.instructions_id === ins.id}
+              onClick={() => onChange({ instructions_id: ins.id })}
+              testId={`mb-instructions-option-${ins.id}`}
+              title={ins.name}
+              sublabel={
+                ins.is_builtin
+                  ? t("morning_briefing.schedule_editor.instructions_builtin")
+                  : t("morning_briefing.schedule_editor.instructions_uploaded")
+              }
+              onDelete={
+                ins.is_builtin
+                  ? undefined
+                  : () => void handleDeleteInstructions(ins)
+              }
+              deleteAria={t(
                 "morning_briefing.schedule_editor.instructions_delete_aria",
               )}
-              data-testid="mb-instructions-delete"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[--color-border-subtle] text-[--color-text-secondary] hover:text-[--color-feedback-danger] hover:border-[--color-feedback-danger] transition-colors"
-            >
-              <Trash2 size={14} />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setInstructionsOpen(true)}
-            data-testid="mb-instructions-upload-open"
-            className="inline-flex items-center h-9 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px] whitespace-nowrap"
-          >
-            {t("morning_briefing.schedule_editor.instructions_upload")}
-          </button>
+            />
+          ))}
         </div>
       </section>
 
-      <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
-
       {/* Connectors */}
-      <section className="mb-7">
-        {mbSectionTitle(t("morning_briefing.schedule_editor.connectors_title"))}
+      <section>
+        <MbSectionHeader
+          label={t("morning_briefing.schedule_editor.connectors_title")}
+        />
         <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
           {t("morning_briefing.schedule_editor.connectors_hint")}
         </p>
@@ -439,84 +568,57 @@ export function MbConfigFields({ draft, onChange }: Props) {
         )}
       </section>
 
-      <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
-
       {/* Length */}
-      <section className="mb-7">
-        {mbSectionTitle(t("morning_briefing.schedule_editor.length_title"))}
-        <div
-          role="radiogroup"
-          aria-label={t("morning_briefing.schedule_editor.length_aria")}
-          className="inline-flex gap-1 p-1 bg-[--color-surface-hover] rounded-lg mt-2"
-        >
-          {LENGTH_IDS.map((id) => {
-            const active = draft.length === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                aria-label={id}
-                onClick={() => onChange({ length: id })}
-                className={[
-                  "px-3.5 py-1.5 rounded-md text-[13px] transition-all duration-[--duration-fast]",
-                  active
-                    ? "bg-[--color-bg-elevated] text-[--color-text-primary] font-medium shadow-sm"
-                    : "text-[--color-text-secondary] hover:text-[--color-text-primary]",
-                ].join(" ")}
-              >
-                {LENGTH_LABELS[id]}
-              </button>
-            );
-          })}
-        </div>
+      <section>
+        <MbSectionHeader
+          label={t("morning_briefing.schedule_editor.length_title")}
+        />
+        <MbSegmented
+          ariaLabel={t("morning_briefing.schedule_editor.length_aria")}
+          value={draft.length as MbReportLength}
+          options={LENGTH_OPTIONS}
+          onChange={(v) => onChange({ length: v })}
+          testId="mb-length-select"
+        />
       </section>
 
-      <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
-
       {/* Language */}
-      <section className={draft.provider_kind === "anthropic" ? "mb-7" : "mb-2"}>
-        {mbSectionTitle(t("morning_briefing.schedule_editor.language_title"))}
-        <select
-          value={draft.language}
-          onChange={(e) => onChange({ language: e.target.value })}
-          data-testid="mb-language-select"
-          className="mt-2 h-9 w-[200px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
-        >
-          <option value="en">English</option>
-          <option value="zh-Hant">繁體中文</option>
-        </select>
+      <section>
+        <MbSectionHeader
+          label={t("morning_briefing.schedule_editor.language_title")}
+        />
+        <MbSegmented
+          ariaLabel={t("morning_briefing.schedule_editor.language_title")}
+          value={draft.language as "en" | "zh-Hant"}
+          options={LANGUAGE_OPTIONS}
+          onChange={(v) => onChange({ language: v })}
+          testId="mb-language-select"
+        />
       </section>
 
       {/* Reasoning effort — Anthropic only */}
       {draft.provider_kind === "anthropic" ? (
-        <>
-          <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
-          <section className="mb-2">
-            {mbSectionTitle(t("morning_briefing.schedule_editor.reasoning_title"))}
-            <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-2">
-              {t("morning_briefing.schedule_editor.reasoning_hint")}
-            </p>
-            <select
-              value={draft.reasoning_effort ?? ""}
-              onChange={(e) =>
-                onChange({
-                  reasoning_effort: (e.target.value ||
-                    null) as MbReasoningEffort,
-                })
-              }
-              data-testid="mb-reasoning-select"
-              className="h-9 w-[200px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-3 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
-            >
-              {REASONING_OPTIONS.map((opt) => (
-                <option key={opt.value ?? "null"} value={opt.value ?? ""}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </section>
-        </>
+        <section>
+          <MbSectionHeader
+            label={t("morning_briefing.schedule_editor.reasoning_title")}
+          />
+          <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-[10px]">
+            {t("morning_briefing.schedule_editor.reasoning_hint")}
+          </p>
+          <MbSegmented
+            ariaLabel={t("morning_briefing.schedule_editor.reasoning_title")}
+            value={reasoningValue}
+            options={REASONING_OPTIONS}
+            onChange={(v) =>
+              onChange({
+                reasoning_effort: (v === "default"
+                  ? null
+                  : v) as MbReasoningEffort,
+              })
+            }
+            testId="mb-reasoning-select"
+          />
+        </section>
       ) : null}
 
       <MbTemplateUploadModal
@@ -531,6 +633,6 @@ export function MbConfigFields({ draft, onChange }: Props) {
         onClose={() => setInstructionsOpen(false)}
         onUpload={handleUploadInstructions}
       />
-    </>
+    </div>
   );
 }
