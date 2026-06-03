@@ -988,7 +988,6 @@ def maintenance(
             f"expired {counts['password_resets_expired']} rows, "
             f"deleted {counts['password_resets_deleted']} old rows",
         ),
-        ("mr_assessment_cache:", f"deleted {counts['mr_cache_deleted']} stale rows"),
         ("rs_snapshots:", f"deleted {counts['rs_snapshots_deleted']} old snapshots"),
         (
             "user_notifications:",

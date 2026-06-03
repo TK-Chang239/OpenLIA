@@ -108,7 +108,7 @@ def test_mark_failed(db_session: Session) -> None:
 def test_mark_cancelled(db_session: Session) -> None:
     _make_user(db_session)
     run_id = jobs_svc.start_run(
-        db_session, user_id="u_1", job_type=JobType.MR_ASSESSMENT, schedule_id="s1"
+        db_session, user_id="u_1", job_type=JobType.MR_DASH, schedule_id="s1"
     )
     jobs_svc.mark_cancelled(db_session, run_id, error_message="Server restarted during execution")
     db_session.commit()

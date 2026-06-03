@@ -34,9 +34,7 @@ def test_mark_orphans_cancelled_flips_all_running_rows(db_session: Session) -> N
         db_session, user_id="u_1", job_type=JobType.MB_BRIEFING, schedule_id="s1"
     )
     r2 = jobs_svc.start_run(db_session, user_id="u_1", job_type=JobType.EU_SCAN, schedule_id="s2")
-    r3 = jobs_svc.start_run(
-        db_session, user_id="u_1", job_type=JobType.MR_ASSESSMENT, schedule_id="s3"
-    )
+    r3 = jobs_svc.start_run(db_session, user_id="u_1", job_type=JobType.MR_DASH, schedule_id="s3")
     jobs_svc.mark_completed(db_session, r3)
     db_session.commit()
     n = mark_orphans_cancelled(db_session)

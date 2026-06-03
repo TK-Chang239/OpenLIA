@@ -1,5 +1,5 @@
 """Verifies the 7 dashboard tables in §7 of database-design.md:
-  pt_user_configs, pt_presets, mr_dashboard_state, mr_assessment_cache,
+  pt_user_configs, pt_presets, mr_dashboard_state, mr_dashboard_cache,
   rs_user_config, rs_snapshots, fe_saved_formulas.
 
 Exercised against a tmp SQLite file via Base.metadata.create_all.
@@ -7,8 +7,6 @@ Alembic round-trip is tested in Task 4 of this plan.
 """
 
 from __future__ import annotations
-
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -243,60 +241,6 @@ def test_mr_dashboard_state_user_dashboard_unique(create_tables, db_session: Ses
         db_session.commit()
 
 
-# ---------- mr_assessment_cache ----------
-
-
-def test_mr_assessment_cache_columns(create_tables) -> None:
-    from openlia_server.db.models.dashboard import MrAssessmentCache
-
-    cols = {c.name: c for c in MrAssessmentCache.__table__.columns}
-    expected = {
-        "id",
-        "dashboard",
-        "assessment_type",
-        "input_hash",
-        "result",
-        "model_ref",
-        "token_usage",
-        "generated_at",
-        "expires_at",
-    }
-    assert set(cols.keys()) == expected
-
-
-def test_mr_assessment_cache_key_unique(create_tables, db_session: Session) -> None:
-    """UNIQUE(dashboard, assessment_type, input_hash) — cache hit discriminator."""
-    from openlia_server.db.models.dashboard import MrAssessmentCache
-
-    now = datetime.now(UTC)
-    row = MrAssessmentCache(
-        id="a1",
-        dashboard="debt_cycle",
-        assessment_type="t4",
-        input_hash="hash-1",
-        result={},
-        model_ref="gpt-4",
-        generated_at=now,
-        expires_at=now + timedelta(days=7),
-    )
-    db_session.add(row)
-    db_session.commit()
-
-    dup = MrAssessmentCache(
-        id="a2",
-        dashboard="debt_cycle",
-        assessment_type="t4",
-        input_hash="hash-1",
-        result={},
-        model_ref="gpt-4",
-        generated_at=now,
-        expires_at=now + timedelta(days=7),
-    )
-    db_session.add(dup)
-    with pytest.raises(IntegrityError):
-        db_session.commit()
-
-
 # ---------- rs_user_config ----------
 
 
@@ -441,7 +385,7 @@ def test_dashboard_and_scheduler_registered_via_models_register_all() -> None:
         "pt_user_configs",
         "pt_presets",
         "mr_dashboard_state",
-        "mr_assessment_cache",
+        "mr_dashboard_cache",
         "rs_user_config",
         "rs_snapshots",
         "fe_saved_formulas",

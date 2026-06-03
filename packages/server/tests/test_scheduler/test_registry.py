@@ -16,7 +16,6 @@ def test_job_types_match_spec() -> None:
     assert {t.value for t in JobType} == {
         "mb_briefing",
         "eu_scan",
-        "mr_assessment",
         "mr_dash",
         "rs_snapshot",
         "graph_extraction",
@@ -52,7 +51,7 @@ def test_notification_types_match_spec() -> None:
 def test_job_key_user_scoped() -> None:
     assert job_key(JobType.MB_BRIEFING, user_id="u_abc") == "mb_briefing:u_abc"
     assert job_key(JobType.EU_SCAN, user_id="u_abc") == "eu_scan:u_abc"
-    assert job_key(JobType.MR_ASSESSMENT, user_id="u_abc") == "mr_assessment:u_abc"
+    assert job_key(JobType.MR_DASH, user_id="u_abc") == "mr_dash:u_abc"
 
 
 def test_job_key_maintenance_has_fixed_key() -> None:
@@ -78,7 +77,7 @@ def test_parse_job_key_rejects_unknown_prefix() -> None:
 def test_department_mapping() -> None:
     assert department_for_job_type(JobType.MB_BRIEFING) == "morning_briefing"
     assert department_for_job_type(JobType.EU_SCAN) == "earnings_update"
-    assert department_for_job_type(JobType.MR_ASSESSMENT) == "macro_research"
+    assert department_for_job_type(JobType.MR_DASH) == "macro_research"
     assert department_for_job_type(JobType.RS_SNAPSHOT) == "retail_sentiment"
     assert department_for_job_type(JobType.GRAPH_EXTRACTION) == "secretary"
 

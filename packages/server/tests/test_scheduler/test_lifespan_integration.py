@@ -7,14 +7,10 @@ from datetime import UTC, datetime
 import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
-    FakeBatchRunner,
-    FakeMRBuilder,
-    FakeMRCacheStore,
     FakeReportRunner,
     FakeReportStore,
     StubEUScanPlanner,
 )
-from openlia.llm.runtime.messages import ReportRequest
 from openlia.llm.runtime.report_mb import RunResult
 from openlia.llm.runtime.report_mb.default_template import build_default_template
 from openlia_server.db.models.auth import User
@@ -140,13 +136,8 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
         settings=SchedulerSettings(enabled=True),
         scheduler=fake_scheduler,
         report_runner=FakeReportRunner(events=[]),
-        batch_runner=FakeBatchRunner(results=[]),
         eu_planner=StubEUScanPlanner(),
-        mr_builder=FakeMRBuilder(
-            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
-        ),
         report_store=FakeReportStore(next_id="rep_final"),
-        mr_cache_store=FakeMRCacheStore(),
     )
     await svc.start()
 

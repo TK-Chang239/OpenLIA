@@ -5,14 +5,10 @@ from datetime import datetime
 import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
-    FakeBatchRunner,
-    FakeMRBuilder,
-    FakeMRCacheStore,
     FakeReportRunner,
     FakeReportStore,
     StubEUScanPlanner,
 )
-from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.scheduler.registry import JobType
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
@@ -31,11 +27,7 @@ class _FakeDispatcher:
 def _builders():
     return dict(
         eu_planner=StubEUScanPlanner(),
-        mr_builder=FakeMRBuilder(
-            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
-        ),
         report_store=FakeReportStore(),
-        mr_cache_store=FakeMRCacheStore(),
     )
 
 
@@ -45,7 +37,6 @@ def _common(session_factory):
         settings=SchedulerSettings(enabled=True),
         scheduler=FakeAPScheduler(),
         report_runner=FakeReportRunner(events=[]),
-        batch_runner=FakeBatchRunner(results=[]),
         **_builders(),
     )
 

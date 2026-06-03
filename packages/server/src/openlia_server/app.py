@@ -101,7 +101,6 @@ from openlia_server.services.pt_config import PtConfigService
 from openlia_server.services.pt_runner import PtRunner
 from openlia_server.services.report_export import BrowserLauncher
 from openlia_server.services.runtime import (
-    build_batch_runner,
     build_chat_runner,
     build_report_runner,
 )
@@ -476,14 +475,9 @@ def _make_lifespan(
                 getattr(app.state, "earnings_recent_adapter", None) or _NoopEarningsRecentAdapter()
             )
             eu_planner = EuScanPlannerImpl(adapter=earnings_adapter)
-            from openlia_server.services.mr_assessment import MRAssessmentBuilderImpl
-            from openlia_server.services.mr_cache import MRCacheStoreImpl
             from openlia_server.services.mr_schedules import MRScheduleService
             from openlia_server.services.reports import ReportStoreImpl
 
-            mr_data_provider = getattr(app.state, "mr_data_provider", None)
-            mr_builder = MRAssessmentBuilderImpl(data_provider=mr_data_provider)
-            mr_cache_store_lifespan = MRCacheStoreImpl()
             report_store_impl = ReportStoreImpl()
 
             # EU v2 scheduler jobs are additive behind the engine gate:
@@ -513,11 +507,8 @@ def _make_lifespan(
                         _sm,
                         skill_registry=getattr(app.state, "skills_registry", None),
                     ),
-                    batch_runner=build_batch_runner(_sm),
                     eu_planner=eu_planner,
-                    mr_builder=mr_builder,
                     report_store=report_store_impl,
-                    mr_cache_store=mr_cache_store_lifespan,
                     # Phase 1 portfolio live data: scheduled price refresh
                     # against app.state.financial_adapter at fire time.
                     financial_adapter_provider=lambda: getattr(
@@ -833,57 +824,22 @@ def create_app(
         )
     )
 
-    # Macro Research — singletons for dashboard CRUD, cache, runner, schedule.
-    from openlia_server.services.mr_cache import MRCacheStoreImpl
+    # Macro Research — singletons for dashboard CRUD + schedule.
     from openlia_server.services.mr_dashboard import MRDashboardService
-    from openlia_server.services.mr_runner import MRRunner
     from openlia_server.services.mr_schedules import MRScheduleService
 
     mr_dashboard_svc = MRDashboardService(session_factory=factory)
-    mr_cache_store = MRCacheStoreImpl()
-    mr_data_provider = getattr(app.state, "mr_data_provider", None) or _NoopPtDispatcher()
-
-    class _MRDataFetchAdapter:
-        """Wrap a PT-style dispatcher to expose the simpler fetch(requirement=...)
-        signature the MR assembler expects.
-
-        NEW-19-10: only the signature-mismatch fallback is swallowed; real
-        fetch failures escape so a misconfigured provider surfaces in the
-        route response instead of silently masking dashboards as zeroed.
-        Production wiring should install a registry-backed adapter onto
-        `app.state.mr_data_provider` before the first request; the noop
-        dispatcher remains as a default for tests and dev with no provider.
-        """
-
-        def __init__(self, inner: Any) -> None:
-            self._inner = inner
-
-        def fetch(self, *, requirement: str, **kwargs: Any) -> Any:
-            try:
-                return self._inner.fetch(requirement=requirement, panel_id="mr", params={})
-            except TypeError:
-                # Inner already matches MR signature — call it directly.
-                return self._inner.fetch(requirement=requirement)
-
-    mr_runner = MRRunner(
-        data_provider=_MRDataFetchAdapter(mr_data_provider),
-        cache_store=mr_cache_store,
-        dashboard_service=mr_dashboard_svc,
-        session_factory=factory,
-    )
     # Factory-time MR schedule service. The lifespan replaces this with
     # a scheduler-bound instance on app.state.mr_schedule_service before
     # the first request. The route layer reads from app.state for every
     # handler so there is no risk of binding the no-scheduler instance.
     mr_schedule_svc = MRScheduleService(session_factory=factory)
-    app.state.mr_runner = mr_runner
     app.state.mr_dashboard_service = mr_dashboard_svc
-    app.state.mr_cache_store = mr_cache_store
     app.state.mr_schedule_service = mr_schedule_svc
 
     # Wire the cross-department snapshot reader into the registered department
     # so MacroResearchDepartment.get_current_snapshot reads the new
-    # MrDashboardCache table (mirrors the scheduler's wire_mr pattern).
+    # MrDashboardCache table.
     from openlia.departments import get_department
 
     from openlia_server.services.mr_snapshot_reader import MrDashboardSnapshotReader

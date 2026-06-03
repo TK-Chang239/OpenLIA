@@ -71,7 +71,7 @@ def test_scheduler_wires_real_builders() -> None:
 
             mb_exec = scheduler_svc.executors[JobType.MB_BRIEFING]
             eu_exec = scheduler_svc.executors[JobType.EU_SCAN]
-            mr_exec = scheduler_svc.executors[JobType.MR_ASSESSMENT]
+            mr_dash_exec = scheduler_svc.executors[JobType.MR_DASH]
 
             # The MB executor runs the report_mb engine inline via
             # mb_v2_run_service.
@@ -79,29 +79,7 @@ def test_scheduler_wires_real_builders() -> None:
 
             assert mb_exec._run_service is mb_v2_run_service
             assert type(eu_exec._eu_planner).__name__ == "EuScanPlannerImpl"
-            assert type(mr_exec._mr_builder).__name__ == "MRAssessmentBuilderImpl"
-            assert type(mr_exec._mr_cache_store).__name__ == "MRCacheStoreImpl"
-            assert mr_exec._batch_runner is not None
-
-
-def test_production_wiring_has_batch_runner() -> None:
-    """P0-04 acceptance: MR executor receives a real BatchRunner."""
-    from openlia_server.scheduler.registry import JobType
-
-    with patch.dict(
-        os.environ,
-        {
-            "OPENLIA_SCHEDULER_ENABLED": "1",
-            "OPENLIA_DB_URL": "sqlite:///:memory:",
-        },
-        clear=False,
-    ):
-        from openlia_server.app import create_app
-
-        app = create_app()
-        with TestClient(app):
-            mr_exec = app.state.scheduler.executors[JobType.MR_ASSESSMENT]
-            assert mr_exec._batch_runner is not None
+            assert type(mr_dash_exec).__name__ == "MrDashExecutor"
 
 
 def test_lifespan_exposes_wizard_background_task_set() -> None:

@@ -212,7 +212,6 @@ def test_mr_run_assessment_returns_409_when_disabled(db_session_factory) -> None
         build_macro_research_router,
     )
 
-    runner = MagicMock()
     dashboard_svc = MagicMock()
     dashboard_svc.get_or_create.return_value = MagicMock(view_config={}, threshold_overrides={})
 
@@ -223,7 +222,6 @@ def test_mr_run_assessment_returns_409_when_disabled(db_session_factory) -> None
     router = build_macro_research_router(
         db_session_factory=db_session_factory,
         mode="personal",
-        mr_runner=runner,
         dashboard_service=dashboard_svc,
         require_auth_override=_override_auth,
     )
@@ -240,7 +238,7 @@ def test_mr_run_assessment_returns_409_when_disabled(db_session_factory) -> None
 
     client = TestClient(app)
     r = client.post(
-        "/departments/macro_research/dashboards/world_order/assessment/run",
+        "/departments/macro_research/dashboards/world_order/refresh",
         json={},
     )
     assert r.status_code == 409
@@ -295,11 +293,11 @@ async def test_scheduler_run_job_skips_disabled_dept() -> None:
         session_factory=_StubFactory(),
         scheduler=None,
         settings=SchedulerSettings(enabled=True),
-        executors={JobType.MR_ASSESSMENT: _StubExecutor()},
+        executors={JobType.MR_DASH: _StubExecutor()},
         dept_health_provider=lambda: health_map,
     )
 
-    await svc._run_job(JobType.MR_ASSESSMENT, "user-1", "panel-foo", "run-1")
+    await svc._run_job(JobType.MR_DASH, "user-1", "panel-foo", "run-1")
     # Disabled dept must be skipped — executor never fires.
     assert fired == []
 
@@ -344,11 +342,11 @@ async def test_scheduler_run_job_runs_when_active() -> None:
         session_factory=_StubFactory(),
         scheduler=None,
         settings=SchedulerSettings(enabled=True),
-        executors={JobType.MR_ASSESSMENT: _StubExecutor()},
+        executors={JobType.MR_DASH: _StubExecutor()},
         dept_health_provider=lambda: health_map,
     )
 
-    await svc._run_job(JobType.MR_ASSESSMENT, "user-1", "panel-foo", "run-1")
+    await svc._run_job(JobType.MR_DASH, "user-1", "panel-foo", "run-1")
     assert len(fired) == 1
 
 
@@ -384,8 +382,8 @@ async def test_scheduler_run_job_runs_when_no_provider() -> None:
         session_factory=_StubFactory(),
         scheduler=None,
         settings=SchedulerSettings(enabled=True),
-        executors={JobType.MR_ASSESSMENT: _StubExecutor()},
+        executors={JobType.MR_DASH: _StubExecutor()},
     )
 
-    await svc._run_job(JobType.MR_ASSESSMENT, "user-1", "panel-foo", "run-1")
+    await svc._run_job(JobType.MR_DASH, "user-1", "panel-foo", "run-1")
     assert len(fired) == 1
