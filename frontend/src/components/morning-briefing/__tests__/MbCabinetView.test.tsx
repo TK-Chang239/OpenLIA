@@ -45,11 +45,20 @@ describe("MbCabinetView", () => {
     expect(
       screen.getByTestId("mb-cabinet-upload-template"),
     ).toBeInTheDocument();
+    // Built-in rows show a badge, not a delete button.
+    expect(
+      screen.queryByTestId("mb-cabinet-delete-template-t1"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("mb-cabinet-delete-template-t2"),
+    ).toBeInTheDocument();
   });
 
   it("opens the delete confirm for a user template", () => {
     renderCabinet();
+    // No confirm dialog until the delete button is clicked.
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("mb-cabinet-delete-template-t2"));
-    expect(screen.getByText("My Tpl")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   });
 });

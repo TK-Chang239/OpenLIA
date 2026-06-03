@@ -73,11 +73,11 @@ export function MbCabinetView({
       className="fixed inset-0 bg-[--color-bg-base] z-50 overflow-y-auto"
       data-testid="mb-cabinet"
     >
-      <header className="flex items-center justify-between h-14 px-4 sm:px-6 border-b border-[--color-border-subtle]">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center h-14 px-4 sm:px-6 border-b border-[--color-border-subtle]">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-[--color-border-subtle] text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors"
+          className="justify-self-start inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-[--color-border-subtle] text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors"
         >
           <ChevronLeft size={14} /> {t("morning_briefing.library.back")}
         </button>
@@ -89,7 +89,7 @@ export function MbCabinetView({
             {t("morning_briefing.library.title")}
           </h2>
         </div>
-        <span className="w-[92px]" />
+        <div />
       </header>
 
       <div className="max-w-[900px] mx-auto px-4 sm:px-6 py-6">
@@ -101,7 +101,6 @@ export function MbCabinetView({
           uploadTestId="mb-cabinet-upload-template"
           onUpload={() => setTemplateUploadOpen(true)}
           emptyLabel={t("morning_briefing.library.empty_templates")}
-          isEmpty={sortedTemplates.length === 0}
           className="mb-8"
         >
           {sortedTemplates.map((tpl) => (
@@ -128,7 +127,6 @@ export function MbCabinetView({
           uploadTestId="mb-cabinet-upload-instructions"
           onUpload={() => setInstructionsUploadOpen(true)}
           emptyLabel={t("morning_briefing.library.empty_instructions")}
-          isEmpty={sortedInstructions.length === 0}
         >
           {sortedInstructions.map((ins) => (
             <CabinetRow
@@ -186,7 +184,6 @@ function CabinetSection({
   uploadTestId,
   onUpload,
   emptyLabel,
-  isEmpty,
   className = "",
   children,
 }: {
@@ -197,19 +194,23 @@ function CabinetSection({
   uploadTestId: string;
   onUpload: () => void;
   emptyLabel: string;
-  isEmpty: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
+  const isEmpty = count === 0;
   return (
     <section className={className}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="inline-flex items-center gap-2 text-[15px] font-semibold text-[--color-text-primary]">
-          <span className="text-[--color-text-secondary]">{icon}</span>
-          {heading}
-          <span className="font-mono text-[11px] tabular-nums text-[--color-text-tertiary]">
-            {count}
+          <span aria-hidden="true" className="text-[--color-text-secondary]">
+            {icon}
           </span>
+          {heading}
+          {count > 0 ? (
+            <span className="font-mono text-[11px] tabular-nums text-[--color-text-tertiary]">
+              {count}
+            </span>
+          ) : null}
         </h3>
         <button
           type="button"
@@ -252,7 +253,9 @@ function CabinetRow({
 }) {
   return (
     <li className="flex items-center gap-3 px-4 py-3 bg-[--color-bg-elevated] hover:bg-[--color-surface-hover] transition-colors">
-      <span className="text-[--color-text-tertiary]">{icon}</span>
+      <span aria-hidden="true" className="text-[--color-text-tertiary]">
+        {icon}
+      </span>
       <span className="flex-1 text-[14px] text-[--color-text-primary] truncate">
         {name}
       </span>

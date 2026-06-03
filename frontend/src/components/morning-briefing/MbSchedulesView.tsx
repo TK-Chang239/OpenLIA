@@ -47,11 +47,11 @@ export function MbSchedulesView({
       className="fixed inset-0 bg-[--color-bg-base] z-50 overflow-y-auto"
       data-testid="mb-schedules"
     >
-      <header className="flex items-center justify-between h-14 px-4 sm:px-6 border-b border-[--color-border-subtle]">
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center h-14 px-4 sm:px-6 border-b border-[--color-border-subtle]">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-[--color-border-subtle] text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors"
+          className="justify-self-start inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-[--color-border-subtle] text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors"
         >
           <ChevronLeft size={14} /> {t("morning_briefing.schedules.back")}
         </button>
@@ -67,7 +67,7 @@ export function MbSchedulesView({
           type="button"
           onClick={onAdd}
           data-testid="mb-schedules-add"
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] transition-colors"
+          className="justify-self-end inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] transition-colors"
         >
           <Plus size={13} /> {t("morning_briefing.schedules.add")}
         </button>
