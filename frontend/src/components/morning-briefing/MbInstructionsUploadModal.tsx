@@ -167,7 +167,7 @@ export function MbInstructionsUploadModal({
             <div
               role="alert"
               data-testid="mb-instructions-upload-error"
-              className="rounded-md border border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] px-3 py-2 text-[12px] text-[--color-feedback-danger]"
+              className="rounded-md border border-[--color-feedback-error] bg-[rgba(220,80,80,0.08)] px-3 py-2 text-[12px] text-[--color-feedback-error]"
             >
               {error}
             </div>

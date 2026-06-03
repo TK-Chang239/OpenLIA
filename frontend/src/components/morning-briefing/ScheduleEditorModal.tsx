@@ -23,9 +23,9 @@ import type {
 
 import {
   MbConfigFields,
+  MbSectionHeader,
   MbToggle,
   isBriefEmpty,
-  mbSectionTitle,
 } from "./MbConfigFields";
 
 const DAY_NAMES: readonly MbDayOfWeek[] = [
@@ -174,19 +174,19 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
   return (
     <Dialog.Root open onOpenChange={(v) => (!v ? onClose() : null)}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] max-h-[85vh] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[12px] shadow-lg flex flex-col overflow-hidden">
-          <header className="flex items-center justify-between px-5 h-12 border-b border-[--color-border-subtle] flex-shrink-0">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(13,13,11,0.45)]" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] max-h-[85vh] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[14px] shadow-[0_16px_40px_rgba(13,13,11,0.18)] flex flex-col overflow-hidden">
+          <header className="flex items-start justify-between px-[22px] py-[18px] border-b border-[--color-border-subtle] flex-shrink-0">
             <div>
               <Dialog.Title asChild>
-                <h2 className="text-[15px] font-semibold text-[--color-text-primary] m-0">
+                <h2 className="text-[16px] font-semibold tracking-[-0.005em] text-[--color-text-primary] m-0">
                   {editing
                     ? t("morning_briefing.schedule_editor.edit_title")
                     : t("morning_briefing.schedule_editor.add_title")}
                 </h2>
               </Dialog.Title>
               <Dialog.Description asChild>
-                <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-[--color-text-tertiary] m-0">
+                <p className="mt-1 font-mono text-[10px] tracking-[0.1em] uppercase text-[--color-text-tertiary] m-0">
                   {t("morning_briefing.schedule_editor.subtitle")}
                 </p>
               </Dialog.Description>
@@ -195,9 +195,9 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
               <button
                 type="button"
                 aria-label={t("morning_briefing.schedule_editor.close_aria")}
-                className="text-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
+                className="ml-3 inline-flex h-7 w-7 items-center justify-center rounded-md text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] transition-colors"
               >
-                <X size={16} />
+                <X size={14} strokeWidth={2} />
               </button>
             </Dialog.Close>
           </header>
@@ -205,7 +205,9 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {/* Timing */}
             <section className="mb-7">
-              {mbSectionTitle(t("morning_briefing.schedule_editor.timing_title"))}
+              <MbSectionHeader
+                label={t("morning_briefing.schedule_editor.timing_title")}
+              />
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
                 {t("morning_briefing.schedule_editor.timing_hint")}
               </p>
@@ -277,7 +279,7 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
                 {noDays ? (
                   <p
                     data-testid="mb-schedule-no-days"
-                    className="mt-2 text-[12px] text-[--color-feedback-danger]"
+                    className="mt-2 text-[12px] text-[--color-feedback-error]"
                   >
                     {t("morning_briefing.schedule_editor.days_select_one")}
                   </p>
@@ -323,11 +325,11 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
             />
           </div>
 
-          <footer className="flex items-center justify-end gap-3 px-5 h-14 border-t border-[--color-border-subtle] flex-shrink-0">
+          <footer className="flex items-center justify-end gap-3 px-[22px] py-[14px] rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] flex-shrink-0">
             {bothEmpty ? (
               <p
                 data-testid="mb-both-empty-error"
-                className="mr-auto text-[12px] text-[--color-feedback-danger] leading-[1.4]"
+                className="mr-auto text-[12px] text-[--color-feedback-error] leading-[1.4]"
               >
                 {t("morning_briefing.schedule_editor.both_empty_error")}
               </p>

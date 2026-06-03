@@ -945,6 +945,7 @@
     "new_schedule": "New schedule",
     "run_now": "Run now",
     "library": {
+      "eyebrow": "Library",
       "title": "Library",
       "back": "← Back to briefings",
       "templates_heading": "Templates",
@@ -977,6 +978,15 @@
     "empty_sub": "Create a schedule or run one now, and LIA will write your morning briefing from your template and instructions.",
     "open_library": "Open Library",
     "viewer_metadata": "Morning Briefing",
+    "hero": {
+      "eyebrow": "Morning Briefing",
+      "dept": "Scheduled",
+      "headline": "Your morning briefing",
+      "lede": "Scheduled briefings written from your templates and instructions — ready before your day starts.",
+      "stat_briefings_wk": "Briefings this week",
+      "stat_active_schedules": "Active schedules",
+      "stat_next_run": "Next run"
+    },
     "feed": {
       "briefing": "Briefing",
       "today": "Today",
@@ -1010,13 +1020,16 @@
       "template_hint": "A template is the briefing's outline — the sections it includes and their order. Pick a ready-made one, upload your own, or choose None to let the analyst design the layout.",
       "template_freeform": "None — free structure",
       "template_freeform_hint": "No fixed outline — the analyst chooses its own sections, guided by your instructions.",
-      "template_custom_suffix": " (custom)",
       "template_upload": "Upload template",
       "template_delete_aria": "Delete template",
+      "template_builtin": "built-in",
+      "template_uploaded": "uploaded",
+      "template_freeform_sublabel": "no template — analyst designs the structure",
+      "instructions_builtin": "built-in",
+      "instructions_uploaded": "uploaded",
       "instructions_title": "Instructions",
       "instructions_hint": "Standing guidance for how the analyst should work — what to focus on, the angle, the tone. Optional.",
       "instructions_none": "None",
-      "instructions_custom_suffix": " (custom)",
       "instructions_upload": "Upload instructions",
       "instructions_delete_aria": "Delete instruction profile",
       "instructions_delete_confirm": "Delete this instruction profile?",
@@ -1066,6 +1079,8 @@
       "sun": "Sun"
     },
     "schedules": {
+      "eyebrow": "Schedules",
+      "enabled_badge": "Enabled",
       "title": "Schedules",
       "back": "← Back to briefings",
       "add": "New schedule",
@@ -1079,6 +1094,7 @@
       "remove_confirm": "Delete"
     },
     "run_now_modal": {
+      "eyebrow": "Morning Briefing",
       "title": "Run a briefing now",
       "description": "Configure the settings below, then generate a briefing immediately. Your choices are remembered for next time.",
       "empty_error": "Pick a template or instructions before generating.",
