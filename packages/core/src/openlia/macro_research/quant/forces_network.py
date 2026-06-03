@@ -30,10 +30,10 @@ FORCE_LABELS: dict[str, str] = {
 
 # A force is "active" (able to transmit) at score >= this — same threshold as
 # quant/forces.py.
-ACTIVE_THRESHOLD = 7.0
+ACTIVE_THRESHOLD: float = 7.0
 
 # Each force partly persists period-over-period.
-PERSISTENCE = 0.7
+PERSISTENCE: float = 0.7
 
 # Directed structural coupling A[driver][driven] in [0, 1], zero diagonal.
 # Reference assumptions (adjustable); Dalio's documented force linkages. Only
