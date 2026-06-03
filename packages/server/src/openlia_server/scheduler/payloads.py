@@ -6,12 +6,12 @@ by `_scheduler_fakes.py` in this plan's test tree."""
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
-from openlia.llm.runtime.messages import BatchItem, BatchResult, ReportRequest
+from openlia.llm.runtime.messages import ReportRequest
 from sqlalchemy.orm import Session
 
 
@@ -48,36 +48,6 @@ class EUScanPlanner(Protocol):
 
 
 # ------------------------------------------------------------------
-# MR — Macro Research
-# ------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class MRAssessmentPayload:
-    """Output of MRAssessmentBuilder.
-
-    `synthesize` is a callable the builder owns: it takes the list of
-    T4 BatchResults produced by BatchRunner and returns the finished
-    ReportRequest for T5 (synthesis). The builder is responsible for
-    formatting T4 results into T5's user_input / custom_sections; the
-    executor only orchestrates the two runner calls.
-    """
-
-    items: list[BatchItem]
-    t4_task: str
-    t4_schema: type
-    synthesize: Callable[[list[BatchResult]], ReportRequest]
-
-
-class MRAssessmentBuilder(Protocol):
-    """Given a user, build the batch items for T4 (plus the pydantic
-    schema and task slot name BatchRunner needs) and a `synthesize`
-    callable that converts T4 BatchResults into the T5 ReportRequest."""
-
-    def build(self, *, session: Session, user_id: str) -> MRAssessmentPayload: ...
-
-
-# ------------------------------------------------------------------
 # ReportStore — where finished ReportRunner outputs land
 # ------------------------------------------------------------------
 
@@ -93,19 +63,6 @@ class ReportStore(Protocol):
         department: str,
         payload: dict[str, Any],
     ) -> str: ...  # returns report_id
-
-
-# ------------------------------------------------------------------
-# MRCacheStore — where T4/T5 output lands
-# ------------------------------------------------------------------
-
-
-class MRCacheStore(Protocol):
-    """Persist T4/T5 output into mr_assessment_cache."""
-
-    def save(
-        self, *, session: Session, user_id: str, payload: dict[str, Any]
-    ) -> str: ...  # returns cache_id
 
 
 # ------------------------------------------------------------------

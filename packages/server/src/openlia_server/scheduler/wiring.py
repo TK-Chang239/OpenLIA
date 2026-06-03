@@ -22,7 +22,6 @@ from openlia_server.scheduler.executors.graph_extraction import (
 )
 from openlia_server.scheduler.executors.maintenance import MaintenanceExecutor
 from openlia_server.scheduler.executors.mb import MBBriefingExecutor
-from openlia_server.scheduler.executors.mr import MRAssessmentExecutor
 from openlia_server.scheduler.executors.mr_dash import MrDashExecutor
 from openlia_server.scheduler.executors.portfolio_prices import (
     production_executor as portfolio_executor_factory,
@@ -32,8 +31,6 @@ from openlia_server.scheduler.payloads import (
     EUScanPlanner,
     EuV2CalendarSyncer,
     EuV2Dispatcher,
-    MRAssessmentBuilder,
-    MRCacheStore,
     ReportStore,
     RSSnapshotRunner,
 )
@@ -48,19 +45,13 @@ def build_scheduler_service(
     settings: SchedulerSettings,
     scheduler: Any,
     report_runner: Any,
-    batch_runner: Any,
     eu_planner: EUScanPlanner,
-    mr_builder: MRAssessmentBuilder,
     report_store: ReportStore,
-    mr_cache_store: MRCacheStore,
     rs_runner: RSSnapshotRunner | None = None,
     financial_adapter_provider: Callable[[], Any] | None = None,
     eu_v2_syncer: EuV2CalendarSyncer | None = None,
     eu_v2_dispatcher: EuV2Dispatcher | None = None,
 ) -> SchedulerService:
-    if batch_runner is None:
-        raise TypeError("batch_runner is required (got None)")
-
     executors: dict[JobType, Any] = {
         # The MB executor runs the report_mb engine inline via mb_v2_run_service
         # (its module-default collaborator). `report_runner` / `report_store`
@@ -73,13 +64,6 @@ def build_scheduler_service(
             eu_planner=eu_planner,
             report_runner=report_runner,
             report_store=report_store,
-        ),
-        JobType.MR_ASSESSMENT: MRAssessmentExecutor(
-            session_factory=session_factory,
-            mr_builder=mr_builder,
-            batch_runner=batch_runner,
-            report_runner=report_runner,
-            mr_cache_store=mr_cache_store,
         ),
         JobType.MR_DASH: MrDashExecutor(session_factory=session_factory),
         JobType.SYSTEM_MAINTENANCE: MaintenanceExecutor(

@@ -30,21 +30,6 @@ class FakeLLMClient:
 
 
 @dataclass
-class FakeMRCacheStore:
-    saved: list[dict[str, Any]] = field(default_factory=list)
-    read_result: dict[str, Any] | None = None
-
-    def save(self, *, session: Any, user_id: str, payload: dict[str, Any]) -> str:
-        self.saved.append({"user_id": user_id, "payload": payload})
-        return "cache-1"
-
-    def read_latest(
-        self, *, session: Any, user_id: str, dashboard: str, assessment_type: str
-    ) -> dict[str, Any] | None:
-        return self.read_result
-
-
-@dataclass
 class FakeReportStore:
     saved: list[dict[str, Any]] = field(default_factory=list)
 

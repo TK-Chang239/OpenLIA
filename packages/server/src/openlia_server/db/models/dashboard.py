@@ -2,7 +2,7 @@
 
 Rows:
   pt_user_configs, pt_presets — Panic Thermometer.
-  mr_dashboard_state, mr_assessment_cache — Macro Research Dalio dashboards.
+  mr_dashboard_state, mr_dashboard_cache — Macro Research Dalio dashboards.
   rs_user_config, rs_snapshots — Retail Sentiment.
   fe_saved_formulas — shared formula-engine DSL rows.
 
@@ -10,8 +10,6 @@ Notes:
   - pt_presets.user_id is nullable: NULL rows are shipped library presets.
   - pt_user_configs.active_preset_id uses SET NULL so deleting a preset
     demotes the active config to "custom unsaved."
-  - mr_assessment_cache is global (no user_id) — assessments depend on
-    market data + thresholds, not user identity.
   - rs_snapshots is also global — one row per ticker per refresh cycle.
   - fe_saved_formulas.expression is stored as Text; Plan 17 (formula engine)
     validates the DSL at the service layer on write.
@@ -171,35 +169,9 @@ class MrDashboardState(Base):
     )
 
 
-class MrAssessmentCache(Base):
-    """Cached T4/T5 LLM assessment results. Global, not per-user."""
-
-    __tablename__ = "mr_assessment_cache"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    dashboard: Mapped[str] = mapped_column(String(32), nullable=False)
-    assessment_type: Mapped[str] = mapped_column(String(16), nullable=False)
-    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
-    token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "dashboard",
-            "assessment_type",
-            "input_hash",
-            name="uq_mr_assessment_dash_type_hash",
-        ),
-    )
-
-
 class MrDashboardCache(Base):
     """Latest dashboard payload per (user, dashboard). The report_dash_mr
-    engine writes here on each scheduled/refresh run; the route reads it.
-    Distinct from mr_assessment_cache (the legacy tiered-engine cache)."""
+    engine writes here on each scheduled/refresh run; the route reads it."""
 
     __tablename__ = "mr_dashboard_cache"
 

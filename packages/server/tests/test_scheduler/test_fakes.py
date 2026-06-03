@@ -7,14 +7,12 @@ from __future__ import annotations
 import pytest
 from _scheduler_fakes import (
     FakeEUPlanner,
-    FakeMRBuilder,
-    FakeMRCacheStore,
     FakeReportRunner,
     FakeReportStore,
     FakeSleep,
 )
 from openlia.llm.runtime.events import ReportComplete, ReportStart
-from openlia.llm.runtime.messages import BatchItem, ReportRequest
+from openlia.llm.runtime.messages import ReportRequest
 
 
 @pytest.mark.asyncio
@@ -38,34 +36,11 @@ def test_fake_eu_planner_returns_configured_targets() -> None:
     assert fp.plan(session=None, user_id="u_1", schedule_id="s_1", since=None) == targets
 
 
-def test_fake_mr_builder_returns_batch_and_synth() -> None:
-    from openlia.llm.runtime.messages import BatchResult
-
-    fb = FakeMRBuilder(
-        items=[BatchItem(id="i1", context={})],
-        synth=ReportRequest(mode="mr_synth", user_input="t5"),
-    )
-    p = fb.build(session=None, user_id="u_1")
-    assert p.items[0].id == "i1"
-    assert p.t4_task == "t4"
-
-    req = p.synthesize([BatchResult(id="i1", ok=True, data={"x": 1}, error=None)])
-    assert req.mode == "mr_synth"
-    assert fb.received_results[0][0].id == "i1"
-
-
 def test_fake_report_store_captures_saves() -> None:
     store = FakeReportStore(next_id="r_xyz")
     rid = store.save(session=None, user_id="u_1", department="morning_briefing", payload={"a": 1})
     assert rid == "r_xyz"
     assert store.saves[0]["department"] == "morning_briefing"
-
-
-def test_fake_mr_cache_store_captures_saves() -> None:
-    store = FakeMRCacheStore(next_id="c_1")
-    cid = store.save(session=None, user_id="u_1", payload={"risk": "low"})
-    assert cid == "c_1"
-    assert store.saves[0]["user_id"] == "u_1"
 
 
 @pytest.mark.asyncio

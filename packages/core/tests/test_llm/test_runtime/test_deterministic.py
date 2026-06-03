@@ -121,36 +121,3 @@ async def test_fetch_rs_social_posts_raises_on_missing_spec() -> None:
     dispatcher = _FakeDispatcher({})
     with pytest.raises(NeedNotResolved):
         await fetch_rs_social_posts(dispatcher=dispatcher, ticker="AAPL")
-
-
-@pytest.mark.asyncio
-async def test_dashboard_assembler_v2_path_invokes_dispatcher() -> None:
-    """End-to-end: DashboardAssembler with `dispatcher=` injected runs T1
-    via the dispatcher and produces a populated DashboardResult."""
-    from openlia.macro_research.assembler import DashboardAssembler
-
-    results: dict[tuple[str, frozenset], Any] = {
-        ("debt_gdp", frozenset({("country", "US")})): 130.0,
-        ("interest_revenue", frozenset({("country", "US")})): 22.0,
-        ("stock_quote", frozenset({("ticker", "TIP")})): {"price": 110.0},
-        ("stock_quote", frozenset({("ticker", "UUP")})): {"price": 28.5},
-    }
-    dispatcher = _FakeDispatcher(results)
-    asm = DashboardAssembler(dispatcher=dispatcher)
-    result = await asm.run(
-        dashboard_slug="debt_cycle",
-        user_id="u-1",
-        portfolio=None,
-        t4_cached=None,
-        smart_mode=False,
-    )
-    # All four T1 requirements were dispatched.
-    assert {name for name, _ in dispatcher.calls} == {
-        "debt_gdp",
-        "interest_revenue",
-        "stock_quote",
-    }
-    assert dispatcher.dept_stack == []  # context manager exited cleanly
-    t1 = next(t for t in result.tiers if t.tier == "T1")
-    assert t1.data["inputs"]["macro_indicator:debt_gdp"] == 130.0
-    assert t1.data["inputs"]["stock_quote:TIP"] == {"price": 110.0}

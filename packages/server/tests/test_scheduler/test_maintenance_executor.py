@@ -6,10 +6,7 @@ import pytest
 from _scheduler_fakes import FakeSleep
 from openlia_server.db.models.auth import PasswordResetRequest, User
 from openlia_server.db.models.auth import Session as AuthSession
-from openlia_server.db.models.dashboard import (
-    MrAssessmentCache,
-    RsSnapshot,
-)
+from openlia_server.db.models.dashboard import RsSnapshot
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.maintenance import (
     MaintenanceExecutor,
@@ -73,30 +70,6 @@ def _seed(session: Session) -> dict[str, list[str]]:
         expires_at=now + timedelta(days=1),
     )
     session.add_all([r_flip, r_old, r_live])
-
-    c_old = MrAssessmentCache(
-        id="c_old",
-        dashboard="debt_cycle",
-        assessment_type="t4",
-        input_hash="h1",
-        result={},
-        model_ref="m",
-        token_usage=None,
-        generated_at=now - timedelta(days=40),
-        expires_at=now - timedelta(days=31),
-    )
-    c_new = MrAssessmentCache(
-        id="c_new",
-        dashboard="debt_cycle",
-        assessment_type="t4",
-        input_hash="h2",
-        result={},
-        model_ref="m",
-        token_usage=None,
-        generated_at=now - timedelta(days=1),
-        expires_at=now + timedelta(days=6),
-    )
-    session.add_all([c_old, c_new])
 
     rs_old = RsSnapshot(
         id="rs_old",
@@ -184,7 +157,6 @@ def _seed(session: Session) -> dict[str, list[str]]:
     return {
         "sessions": ["s_new"],
         "password_reset_requests": ["r_flip", "r_live"],
-        "mr_assessment_cache": ["c_new"],
         "rs_snapshots": ["rs_new"],
         "user_notifications": ["n_new"],
         "job_runs": ["j_old_failed", "j_new_ok"],
@@ -200,7 +172,6 @@ def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
     assert summary["sessions_deleted"] == 1
     assert summary["password_resets_expired"] == 1
     assert summary["password_resets_deleted"] == 1
-    assert summary["mr_cache_deleted"] == 1
     assert summary["rs_snapshots_deleted"] == 1
     assert summary["notifications_deleted"] == 1
     assert summary["job_runs_deleted"] == 2
@@ -210,9 +181,6 @@ def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
 
     prrs = {r.id: r.status for r in db_session.query(PasswordResetRequest).all()}
     assert prrs == {"r_flip": "expired", "r_live": "pending"}
-
-    caches = {c.id for c in db_session.query(MrAssessmentCache).all()}
-    assert caches == set(expected["mr_assessment_cache"])
 
     snaps = {r.id for r in db_session.query(RsSnapshot).all()}
     assert snaps == set(expected["rs_snapshots"])

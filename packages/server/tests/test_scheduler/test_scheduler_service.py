@@ -599,13 +599,13 @@ async def test_run_now_dispatches_one_shot_with_pre_allocated_run_id(
     await svc.start()
 
     await svc.run_now(
-        job_type=JobType.MR_ASSESSMENT,
+        job_type=JobType.MR_DASH,
         user_id="u_1",
         schedule_id="debt_cycle",
         run_id="run-123",
     )
 
-    expected_key = f"{job_key(JobType.MR_ASSESSMENT, 'u_1')}:run_now:run-123"
+    expected_key = f"{job_key(JobType.MR_DASH, 'u_1')}:run_now:run-123"
     assert expected_key in scheduler.jobs
     job = scheduler.jobs[expected_key]
     assert isinstance(job.trigger, DateTrigger)
