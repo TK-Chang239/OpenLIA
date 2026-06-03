@@ -10,10 +10,14 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from openlia.macro_research.payloads import DebtCycleData
+from openlia.macro_research.payloads import DebtCycleData, WorldOrderData
 from openlia.macro_research.quant.classification import (
     DebtCycleInputs,
     classify_debt_cycle,
+)
+from openlia.macro_research.quant.world_order import (
+    WorldOrderInputs,
+    classify_world_order,
 )
 
 from ...report_v2_3.research import (
@@ -24,7 +28,10 @@ from ...report_v2_3.research import (
 )
 from ...report_v2_3.schemas import ComputedSource
 
-PAYLOAD_MODEL_BY_SLUG: dict[str, type[BaseModel]] = {"debt_cycle": DebtCycleData}
+PAYLOAD_MODEL_BY_SLUG: dict[str, type[BaseModel]] = {
+    "debt_cycle": DebtCycleData,
+    "world_order": WorldOrderData,
+}
 
 
 def implemented_dashboard_slugs() -> frozenset[str]:
@@ -132,9 +139,74 @@ def build_classify_debt_cycle_tool() -> ResearchTool:
     )
 
 
+def build_classify_world_order_tool() -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            out = classify_world_order(
+                WorldOrderInputs(
+                    usd_reserve_share=float(args["usd_reserve_share"]),
+                    cb_gold_purchases=float(args["cb_gold_purchases"]),
+                    foreign_treasury_trend=float(args["foreign_treasury_trend"]),
+                    dxy=float(args["dxy"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ToolExecutionError(
+                "classify_world_order requires numeric usd_reserve_share, "
+                f"cb_gold_purchases, foreign_treasury_trend, dxy. {exc}"
+            ) from exc
+        return ToolResult(
+            payload={
+                "stage": out.stage,
+                "severity": out.severity,
+                "indicator_statuses": out.indicator_statuses,
+            },
+            provenance=ComputedSource(method="classify_world_order", derived_from=["(inputs)"]),
+            summary=f"stage={out.stage} severity={out.severity}",
+        )
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="classify_world_order",
+            description=(
+                "Deterministic Dalio world-order stage + RAG classification from the four "
+                "reserve-currency indicators. Pass the latest values you gathered; use the "
+                "returned stage, severity, and indicator_statuses verbatim in the payload."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "usd_reserve_share": {
+                        "type": "number",
+                        "description": "USD share of global FX reserves, % (IMF COFER)",
+                    },
+                    "cb_gold_purchases": {
+                        "type": "number",
+                        "description": "Net central-bank gold purchases, tonnes (WGC)",
+                    },
+                    "foreign_treasury_trend": {
+                        "type": "number",
+                        "description": "Foreign US Treasury holdings trend, % year-over-year (TIC)",
+                    },
+                    "dxy": {"type": "number", "description": "US dollar index (DXY) level"},
+                },
+                "required": [
+                    "usd_reserve_share",
+                    "cb_gold_purchases",
+                    "foreign_treasury_trend",
+                    "dxy",
+                ],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
 # Per-slug deterministic classify-tool builders. A slug present here gets its
 # classifier tool added to the catalog alongside emit_dashboard. New dashboards
 # register their builder here.
 CLASSIFY_TOOL_BY_SLUG: dict[str, Callable[[], ResearchTool]] = {
     "debt_cycle": build_classify_debt_cycle_tool,
+    "world_order": build_classify_world_order_tool,
 }
