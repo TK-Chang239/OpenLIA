@@ -53,4 +53,20 @@ describe("MbRunNowModal", () => {
     render(<MbRunNowModal open onClose={vi.fn()} onStarted={vi.fn()} />);
     expect(await screen.findByTestId("mb-run-now-start")).toBeDisabled();
   });
+
+  it("prefills from the remembered draft each time it opens", async () => {
+    const { rerender } = render(
+      <MbRunNowModal open={false} onClose={vi.fn()} onStarted={vi.fn()} />,
+    );
+    // Seed AFTER the initial (closed) mount so this exercises the open effect.
+    window.localStorage.setItem(
+      RUN_NOW_LS_KEY,
+      JSON.stringify({ language: "zh-Hant" }),
+    );
+    rerender(<MbRunNowModal open onClose={vi.fn()} onStarted={vi.fn()} />);
+    const lang = (await screen.findByTestId(
+      "mb-language-select",
+    )) as HTMLSelectElement;
+    expect(lang.value).toBe("zh-Hant");
+  });
 });
