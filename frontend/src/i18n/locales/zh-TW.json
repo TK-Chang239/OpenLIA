@@ -945,6 +945,7 @@
     "new_schedule": "新增排程",
     "run_now": "立即執行",
     "library": {
+      "eyebrow": "資料庫",
       "title": "資料庫",
       "back": "← 返回簡報",
       "templates_heading": "範本",
@@ -977,6 +978,15 @@
     "empty_sub": "建立排程或立即執行，LIA 將依您的範本與指示撰寫晨間簡報。",
     "open_library": "開啟資料庫",
     "viewer_metadata": "晨間簡報",
+    "hero": {
+      "eyebrow": "晨間簡報",
+      "dept": "已排程",
+      "headline": "您的晨間簡報",
+      "lede": "依您的範本與指示自動撰寫的排程簡報——在您一天開始前就緒。",
+      "stat_briefings_wk": "本週簡報",
+      "stat_active_schedules": "啟用排程",
+      "stat_next_run": "下次執行"
+    },
     "feed": {
       "briefing": "簡報",
       "today": "今天",
@@ -1010,13 +1020,16 @@
       "template_hint": "範本是簡報的大綱——它包含的章節及其順序。選擇現成範本、上傳自己的範本，或選「無」讓分析師自行設計版面。",
       "template_freeform": "無——自由結構",
       "template_freeform_hint": "沒有固定大綱——分析師依您的指示自行選擇章節。",
-      "template_custom_suffix": "（自訂）",
       "template_upload": "上傳範本",
       "template_delete_aria": "刪除範本",
+      "template_builtin": "內建",
+      "template_uploaded": "已上傳",
+      "template_freeform_sublabel": "無範本——由分析師設計結構",
+      "instructions_builtin": "內建",
+      "instructions_uploaded": "已上傳",
       "instructions_title": "指示",
       "instructions_hint": "對分析師工作方式的常設指引——著重什麼、採取什麼角度、用什麼語氣。選填。",
       "instructions_none": "無",
-      "instructions_custom_suffix": "（自訂）",
       "instructions_upload": "上傳指示",
       "instructions_delete_aria": "刪除指示設定檔",
       "instructions_delete_confirm": "要刪除此指示設定檔嗎？",
@@ -1066,6 +1079,8 @@
       "sun": "日"
     },
     "schedules": {
+      "eyebrow": "排程",
+      "enabled_badge": "已啟用",
       "title": "排程",
       "back": "← 返回簡報",
       "add": "新增排程",
@@ -1079,6 +1094,7 @@
       "remove_confirm": "刪除"
     },
     "run_now_modal": {
+      "eyebrow": "晨間簡報",
       "title": "立即執行簡報",
       "description": "在下方設定選項，然後立即產生簡報。系統會記住您的選擇供下次使用。",
       "empty_error": "產生前請先選擇範本或指示。",

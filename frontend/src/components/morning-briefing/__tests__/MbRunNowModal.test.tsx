@@ -64,9 +64,7 @@ describe("MbRunNowModal", () => {
       JSON.stringify({ language: "zh-Hant" }),
     );
     rerender(<MbRunNowModal open onClose={vi.fn()} onStarted={vi.fn()} />);
-    const lang = (await screen.findByTestId(
-      "mb-language-select",
-    )) as HTMLSelectElement;
-    expect(lang.value).toBe("zh-Hant");
+    const opt = await screen.findByTestId("mb-language-select-option-zh-Hant");
+    expect(opt).toHaveAttribute("aria-checked", "true");
   });
 });
