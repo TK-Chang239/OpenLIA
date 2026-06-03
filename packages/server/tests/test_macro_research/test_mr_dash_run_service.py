@@ -317,6 +317,71 @@ def test_five_forces_data_context_notes_missing_source(db_session, make_user):
     assert "Early stage" in ctx
 
 
+def test_summary_data_context_summarizes_cached_states(db_session, make_user):
+    user = make_user()
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="debt_cycle",
+        payload={"phaseBox": {"tone": "red", "title": "Late Plateau"}},
+    )
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="four_seasons",
+        payload={"verdict": {"title": "Autumn"}},
+    )
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="world_order",
+        payload={"verdict": {"title": "Late empire"}, "scorecard": {"label": "Reserve scorecard"}},
+    )
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="all_weather",
+        payload={"verdict": {"title": "Tactical tilt"}},
+    )
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="five_forces",
+        payload={
+            "verdict": {"title": "Elevated"},
+            "loops": {"active": {"countText": "3 / 5"}},
+        },
+    )
+
+    ctx = _build_data_context(db_session, user_id=user.id, dashboard_slug="summary")
+
+    assert ctx is not None
+    assert "Late Plateau" in ctx
+    assert "Autumn" in ctx
+    assert "Late empire" in ctx
+    assert "Reserve scorecard" in ctx
+    assert "Tactical tilt" in ctx
+    assert "Elevated" in ctx
+    assert "3 / 5" in ctx
+
+
+def test_summary_data_context_notes_missing_frameworks(db_session, make_user):
+    user = make_user()
+    # Only debt_cycle cached; the other four frameworks are absent.
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="debt_cycle",
+        payload={"phaseBox": {"tone": "red", "title": "Late Plateau"}},
+    )
+
+    ctx = _build_data_context(db_session, user_id=user.id, dashboard_slug="summary")
+
+    assert ctx is not None
+    assert "Late Plateau" in ctx
+    assert "not yet generated" in ctx
+
+
 def test_other_slug_data_context_is_none(db_session, make_user):
     user = make_user()
     assert _build_data_context(db_session, user_id=user.id, dashboard_slug="debt_cycle") is None

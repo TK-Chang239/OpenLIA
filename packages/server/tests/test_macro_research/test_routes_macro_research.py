@@ -72,7 +72,7 @@ def test_list_dashboards(client: TestClient) -> None:
     assert r.status_code == 200
     body = r.json()
     assert "dashboards" in body
-    assert len(body["dashboards"]) == 5
+    assert len(body["dashboards"]) == 6
 
 
 def test_get_dashboard(client: TestClient, session_factory) -> None:
