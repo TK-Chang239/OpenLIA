@@ -391,3 +391,108 @@ class FourSeasonsData(BaseModel):
     # Redesign additions (not in types.ts): provenance + freshness.
     provenance: Provenance = Provenance.LIVE
     generated_at: datetime
+
+
+# ---------- T3 — All-Weather Audit. Mirrors types.ts:248-341 verbatim. ----------
+
+# T3 donut slices carry their own tone scale (asset-class palette); it is
+# unrelated to the shared RAG Tone and must not be widened into it.
+T3SliceTone = Literal["accent", "olive", "neutral", "amber", "rust"]
+
+
+class T3Pill(BaseModel):
+    tone: Tone
+    label: str
+
+
+class T3DonutSlice(BaseModel):
+    label: str
+    pct: float
+    tone: T3SliceTone
+
+
+class T3DonutCard(BaseModel):
+    title: str
+    slices: list[T3DonutSlice]
+
+
+class T3CoverageCell(BaseModel):
+    title: str
+    badgeLabel: str
+    badgeTone: Tone
+    bodyTone: Tone
+    body: str
+    bridgeLabel: str
+    bridge: str
+
+
+class T3RiskBar(BaseModel):
+    label: str
+    pct: float
+
+
+class T3GoldNeedle(BaseModel):
+    label: str
+    leftPct: float
+    tone: Tone
+
+
+class T3GoldStat(BaseModel):
+    label: str
+    value: str
+    valueTone: Tone
+    note: str
+
+
+class T3CaveatCard(BaseModel):
+    title: str
+    body: str
+
+
+class T3Comparison(BaseModel):
+    label: str
+    benchmark: T3DonutCard
+    reference: T3DonutCard
+
+
+class T3Coverage(BaseModel):
+    label: str
+    cells: list[T3CoverageCell]
+
+
+class T3RiskParity(BaseModel):
+    label: str
+    intro: str
+    benchmarkTitle: str
+    benchmarkBars: list[T3RiskBar]
+    referenceTitle: str
+    referenceBars: list[T3RiskBar]
+    mechanism: Prose
+
+
+class T3Gold(BaseModel):
+    label: str
+    title: str
+    needles: list[T3GoldNeedle]
+    stats: list[T3GoldStat]
+    rationale: Prose
+
+
+class T3Caveats(BaseModel):
+    label: str
+    cards: list[T3CaveatCard]
+
+
+class AllWeatherData(BaseModel):
+    header: DashHeader
+    cardSummary: str
+    comparison: T3Comparison
+    coverage: T3Coverage
+    riskParity: T3RiskParity
+    gold: T3Gold
+    caveats: T3Caveats
+    verdict: Prose
+    sources: str
+    # Redesign additions (not in types.ts): provenance + freshness.
+    provenance: Provenance = Provenance.LIVE
+    generated_at: datetime
