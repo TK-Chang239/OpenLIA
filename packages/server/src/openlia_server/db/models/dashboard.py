@@ -28,6 +28,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
@@ -192,6 +193,30 @@ class MrAssessmentCache(Base):
             "input_hash",
             name="uq_mr_assessment_dash_type_hash",
         ),
+    )
+
+
+class MrDashboardCache(Base):
+    """Latest dashboard payload per (user, dashboard). The report_dash_mr
+    engine writes here on each scheduled/refresh run; the route reads it.
+    Distinct from mr_assessment_cache (the legacy tiered-engine cache)."""
+
+    __tablename__ = "mr_dashboard_cache"
+
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    dashboard: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    provenance: Mapped[str] = mapped_column(String(16), nullable=False, default="live")
+    model_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_mr_dashboard_cache"),
+        UniqueConstraint("user_id", "dashboard", name="uq_mr_dashboard_cache_user_dashboard"),
+        Index("ix_mr_dashboard_cache_user_dashboard", "user_id", "dashboard"),
     )
 
 
