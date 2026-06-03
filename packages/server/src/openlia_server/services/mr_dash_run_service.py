@@ -100,7 +100,7 @@ def build_run_request(
 
 
 def _null_transports() -> MbDataTransports:
-    """A loud transport bundle for when EODHD is not configured.
+    """A silent null transport bundle for when EODHD is not configured.
 
     Every data callable returns an empty result rather than raising — the
     dashboard engine leans on web search, so a missing EODHD key should
