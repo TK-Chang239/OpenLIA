@@ -188,6 +188,10 @@ class RunRequest(BaseModel):
     briefing_context: BriefingContext | None = None
     # Free-form analyst methodology/guidance injected into the system prompt.
     instructions: str | None = None
+    # Server-injected authoritative inputs for this run (e.g. the user's
+    # portfolio weights for an audit dashboard). When set, surfaced in the
+    # system prompt as ground truth the model must not contradict.
+    data_context: str | None = None
 
 
 class CoverMetric(BaseModel):

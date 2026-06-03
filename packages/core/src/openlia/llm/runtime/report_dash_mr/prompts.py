@@ -81,6 +81,7 @@ def build_system_prompt(
         subject=request.subject,
         language=language_label,
         length_target=length_target,
+        data_context_block=_render_data_context_block(request.data_context),
         instructions_block=_render_instructions_block(request.instructions),
         workflow=spec.workflow,
         payload_shape=spec.payload_shape,
@@ -105,6 +106,21 @@ def _render_instructions_block(instructions: str | None) -> str:
         "authoritative for how to approach this dashboard — what to research and "
         "emphasize, how to reason, and which tools/endpoints to favor.\n\n"
         f"{instructions.strip()}\n\n"
+    )
+
+
+def _render_data_context_block(data_context: str | None) -> str:
+    """The server-injected ground-truth inputs block, or empty when none.
+
+    Ends with two newlines so spacing collapses cleanly when absent.
+    """
+    if not data_context or not data_context.strip():
+        return ""
+    return (
+        "# Provided inputs for this run\n\n"
+        "The following data was gathered for you by the system. Treat it as "
+        "authoritative ground truth for this run; do not contradict it.\n\n"
+        f"{data_context.strip()}\n\n"
     )
 
 
@@ -164,7 +180,7 @@ dashboard payload that the front end renders verbatim.
 # Narrative length
 {length_target} (a soft target — write what the read requires).
 
-{instructions_block}# Workflow
+{data_context_block}{instructions_block}# Workflow
 
 {workflow}
 
