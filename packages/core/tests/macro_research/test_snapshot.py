@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
 
-from openlia.macro_research.payloads import DebtCycleData
-from openlia.macro_research.snapshot import debt_cycle_phase_from_payload
+import pytest
+from openlia.macro_research.payloads import DebtCycleData, FourSeasonsData
+from openlia.macro_research.snapshot import (
+    debt_cycle_phase_from_payload,
+    economic_season_from_payload,
+)
 
 
 def _payload(phase_title: str) -> DebtCycleData:
@@ -25,3 +29,81 @@ def _payload(phase_title: str) -> DebtCycleData:
 
 def test_phase_extracted_from_phasebox_title():
     assert debt_cycle_phase_from_payload(_payload("Phase: late plateau")) == "Phase: late plateau"
+
+
+def _season(name: str) -> dict:
+    return {"name": name, "sub": "s", "pillLabel": "p", "tone": "amber"}
+
+
+def _four_seasons(markers: list[dict]) -> FourSeasonsData:
+    return FourSeasonsData(
+        header={"title": "T2", "subtitle": "s", "pills": []},
+        cardSummary="x",
+        scorecard={"rows": []},
+        quadrant={
+            "seasons": {
+                "tl": _season("Stagflation"),
+                "tr": _season("Reflation"),
+                "bl": _season("Deflation"),
+                "br": _season("Goldilocks"),
+            },
+            "markers": markers,
+        },
+        verdict={"title": "v", "body": "b", "sideCards": []},
+        parallels={"cards": []},
+        transitionRisk={
+            "intro": "i",
+            "bull": {"title": "bu", "body": "b"},
+            "bear": {"title": "be", "body": "b"},
+            "keyIndicator": {"title": "k", "body": "b"},
+        },
+        assetPlaybook={"cards": []},
+        notes=[],
+        sources="s",
+        generated_at=datetime.now(UTC),
+    )
+
+
+def _marker(x: int, y: int, variant: str = "now") -> dict:
+    return {"label": "now", "xPct": x, "yPct": y, "variant": variant, "tone": "amber"}
+
+
+def test_economic_season_top_left():
+    payload = _four_seasons([_marker(x=20, y=20)])
+    assert economic_season_from_payload(payload) == "Stagflation"
+
+
+def test_economic_season_top_right():
+    payload = _four_seasons([_marker(x=80, y=20)])
+    assert economic_season_from_payload(payload) == "Reflation"
+
+
+def test_economic_season_bottom_left():
+    payload = _four_seasons([_marker(x=20, y=80)])
+    assert economic_season_from_payload(payload) == "Deflation"
+
+
+def test_economic_season_bottom_right():
+    payload = _four_seasons([_marker(x=80, y=80)])
+    assert economic_season_from_payload(payload) == "Goldilocks"
+
+
+def test_economic_season_selects_now_marker_over_others():
+    payload = _four_seasons(
+        [
+            _marker(x=20, y=20, variant="prev"),
+            _marker(x=80, y=80, variant="now"),
+        ]
+    )
+    assert economic_season_from_payload(payload) == "Goldilocks"
+
+
+def test_economic_season_falls_back_to_first_marker_when_no_now():
+    payload = _four_seasons([_marker(x=80, y=20, variant="prev")])
+    assert economic_season_from_payload(payload) == "Reflation"
+
+
+def test_economic_season_raises_when_no_markers():
+    payload = _four_seasons([])
+    with pytest.raises(ValueError):
+        economic_season_from_payload(payload)

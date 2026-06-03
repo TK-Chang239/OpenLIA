@@ -12,7 +12,7 @@ import ScheduleEditor from "./ScheduleEditor";
 // mirror of the engine's PAYLOAD_MODEL_BY_SLUG / implemented_dashboard_slugs().
 // TODO: grow this list as backend dashboards are added (keep in sync with
 // packages/core/.../report_dash_mr/tools/dashboard_tools.py).
-const IMPLEMENTED_DASHBOARDS = ["debt_cycle"];
+const IMPLEMENTED_DASHBOARDS = ["debt_cycle", "world_order", "four_seasons"];
 
 interface ThresholdRow {
   key: string;
