@@ -30,6 +30,7 @@ beforeEach(() => {
       { slug: "all_weather", display_name: "All-Weather" },
       { slug: "world_order", display_name: "World Order" },
       { slug: "five_forces", display_name: "Five Forces" },
+      { slug: "summary", display_name: "Summary" },
     ],
   });
   apiMocks.getDashboard.mockResolvedValue({
@@ -70,17 +71,21 @@ describe("MacroResearch shell", () => {
     expect(screen.getByText("T5")).toBeInTheDocument();
   });
 
-  it("opens the settings drawer and only offers Run Now for implemented dashboards", () => {
+  it("opens the settings drawer and offers Run Now for every framework dashboard", () => {
     renderShell();
     fireEvent.click(screen.getByTestId("mr-settings-button"));
     expect(screen.getByTestId("mr-settings-panel")).toBeInTheDocument();
-    // Engine-implemented dashboards are runnable from Run Now.
-    expect(screen.getByTestId("mr-runnow-debt_cycle")).toBeInTheDocument();
-    expect(screen.getByTestId("mr-runnow-world_order")).toBeInTheDocument();
-    expect(screen.getByTestId("mr-runnow-four_seasons")).toBeInTheDocument();
-    // Dashboards the engine cannot generate yet are not runnable.
-    expect(screen.queryByTestId("mr-runnow-all_weather")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mr-runnow-five_forces")).not.toBeInTheDocument();
+    // All five framework dashboards are now engine-implemented and runnable.
+    // (Summary is refreshed from its own overview tab, not this list.)
+    for (const slug of [
+      "debt_cycle",
+      "world_order",
+      "four_seasons",
+      "all_weather",
+      "five_forces",
+    ]) {
+      expect(screen.getByTestId(`mr-runnow-${slug}`)).toBeInTheDocument();
+    }
   });
 
   it("auto-refresh select offers the design's three options", () => {
