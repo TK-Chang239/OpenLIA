@@ -945,6 +945,7 @@
     "new_schedule": "New schedule",
     "run_now": "Run now",
     "library": {
+      "eyebrow": "Library",
       "title": "Library",
       "back": "← Back to briefings",
       "templates_heading": "Templates",

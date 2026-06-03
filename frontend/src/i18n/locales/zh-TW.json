@@ -945,6 +945,7 @@
     "new_schedule": "新增排程",
     "run_now": "立即執行",
     "library": {
+      "eyebrow": "資料庫",
       "title": "資料庫",
       "back": "← 返回簡報",
       "templates_heading": "範本",
