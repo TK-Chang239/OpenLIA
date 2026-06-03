@@ -926,3 +926,28 @@ git commit -m "chore(macro-research): lint/format fixups for Four Seasons Markov
 - **`"Transitioning"` is not a Markov state** — `resolve_quadrant` maps it to the nearest quadrant from the marker coordinates, so the tool always feeds `markov_outlook` a canonical season.
 - **No server `mr_dash_run_service` change** — Four Seasons gathers its own indicators; nothing is injected.
 - If `npx vitest`/`tsc` is run from the repo root it will fail; run from `frontend/`.
+
+## Post-implementation amendments (review-driven)
+
+Changes made during code review / verification, reflected in the final code:
+
+1. **Task 5 — explicit array key-mapping.** `_FOUR_SEASONS_WORKFLOW` step 3 and the
+   `markov_four_seasons` tool descriptor spell out that `next_quarter`/`horizon`
+   are season->probability dicts to convert into `{season, prob}` arrays (not
+   emitted verbatim) — the same snake_case/camelCase + dict→array clarity the
+   All-Weather build needed.
+2. **Task 7 — adverse-season bar tone.** The transition-probability bars tint the
+   adverse season (`adverseSeason`) red (`mr-fill-bad`) instead of all-green, so
+   the risk signal reads correctly; a redundant `marginTop` on the horizon
+   section was dropped (CSS handles the separator).
+3. **Extra fixture fix (not in the per-task list):** making
+   `T2TransitionRisk.probabilities` required (Task 3) also broke
+   `packages/core/tests/macro_research/test_snapshot.py`, which builds a
+   `FourSeasonsData` directly to test the `economic_season_from_payload` snapshot
+   deriver. Its `_four_seasons` fixture's `transitionRisk` block was given a
+   `probabilities` entry. (The other two FourSeasonsData fixtures —
+   `test_payloads_four_seasons.py` and `test_runner_four_seasons.py` — were
+   updated in Tasks 3 and 6.)
+4. Trivial lint hygiene: `ADVERSE_SEASON: str` annotation (Task 1); hoisted the
+   `markov_outlook` test import to the top of `test_markov.py`, removing a
+   `# noqa: E402` (Task 2).
