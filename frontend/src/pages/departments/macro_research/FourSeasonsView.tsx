@@ -227,7 +227,12 @@ export default function FourSeasonsView(): JSX.Element {
               <div key={p.season} className="mr-bar-row">
                 <div className="mr-bar-label">{p.season}</div>
                 <div className="mr-bar-track">
-                  <div className="mr-bar-fill mr-fill-ok" style={{ width: `${p.prob * 100}%` }} />
+                  <div
+                    className={`mr-bar-fill ${
+                      p.season === data.transitionRisk.probabilities.adverseSeason ? "mr-fill-bad" : "mr-fill-ok"
+                    }`}
+                    style={{ width: `${p.prob * 100}%` }}
+                  />
                 </div>
                 <div className="mr-bar-val">{fmtProb(p.prob)}</div>
               </div>
@@ -257,7 +262,7 @@ export default function FourSeasonsView(): JSX.Element {
               </div>
             </div>
           </div>
-          <div className="mr-bar-section" style={{ marginTop: 12 }}>
+          <div className="mr-bar-section">
             <div className="mr-bar-section-title">
               {data.transitionRisk.probabilities.horizonQuarters} quarters ahead
             </div>
@@ -265,7 +270,12 @@ export default function FourSeasonsView(): JSX.Element {
               <div key={p.season} className="mr-bar-row">
                 <div className="mr-bar-label">{p.season}</div>
                 <div className="mr-bar-track">
-                  <div className="mr-bar-fill mr-fill-ok" style={{ width: `${p.prob * 100}%` }} />
+                  <div
+                    className={`mr-bar-fill ${
+                      p.season === data.transitionRisk.probabilities.adverseSeason ? "mr-fill-bad" : "mr-fill-ok"
+                    }`}
+                    style={{ width: `${p.prob * 100}%` }}
+                  />
                 </div>
                 <div className="mr-bar-val">{fmtProb(p.prob)}</div>
               </div>
