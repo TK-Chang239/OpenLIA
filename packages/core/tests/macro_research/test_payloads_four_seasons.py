@@ -90,13 +90,25 @@ def _four_seasons_fixture() -> dict:
                 },
             },
             "markers": [
-                {"label": "Apr 2026", "xPct": 46, "yPct": 14, "variant": "now", "tone": "red"},
-                {"label": "Jan 2026", "xPct": 50, "yPct": 30, "variant": "prev", "tone": "amber"},
+                {
+                    "label": "Apr 2026",
+                    "xPct": 46,
+                    "yPct": 14,
+                    "variant": "now",
+                    "tone": "red",
+                },
+                {
+                    "label": "Jan 2026",
+                    "xPct": 50,
+                    "yPct": 30,
+                    "variant": "prev",
+                    "tone": "amber",
+                },
             ],
         },
         "verdict": {
             "title": "Transitioning summer -> autumn",
-            "body": "GDP collapsed from 4.4% to 0.5% annualised. Growth falling + inflation rising.",
+            "body": "GDP collapsed from 4.4% to 0.5%. Growth falling + inflation rising.",
             "sideCards": [
                 {
                     "label": "Confidence level",
@@ -120,7 +132,7 @@ def _four_seasons_fixture() -> dict:
                 },
                 {
                     "title": "1973-74 - the structural analog",
-                    "body": "Arab oil embargo triggered an energy spike while growth was decelerating.",
+                    "body": "Arab oil embargo triggered an energy spike while growth decelerated.",
                 },
             ],
         },
@@ -132,7 +144,7 @@ def _four_seasons_fixture() -> dict:
             },
             "bear": {
                 "title": "If autumn confirms (bear case)",
-                "body": "Iran war drags on, energy inflation feeds into services. PMI rolls below 50.",
+                "body": "Iran war drags on, energy inflation feeds into services. PMI rolls below.",
             },
             "keyIndicator": {
                 "title": "Key indicator to watch",

@@ -10,10 +10,14 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from openlia.macro_research.payloads import DebtCycleData, WorldOrderData
+from openlia.macro_research.payloads import DebtCycleData, FourSeasonsData, WorldOrderData
 from openlia.macro_research.quant.classification import (
     DebtCycleInputs,
     classify_debt_cycle,
+)
+from openlia.macro_research.quant.seasons import (
+    SeasonsInputs,
+    classify_four_seasons,
 )
 from openlia.macro_research.quant.world_order import (
     WorldOrderInputs,
@@ -31,6 +35,7 @@ from ...report_v2_3.schemas import ComputedSource
 PAYLOAD_MODEL_BY_SLUG: dict[str, type[BaseModel]] = {
     "debt_cycle": DebtCycleData,
     "world_order": WorldOrderData,
+    "four_seasons": FourSeasonsData,
 }
 
 
@@ -203,10 +208,80 @@ def build_classify_world_order_tool() -> ResearchTool:
     )
 
 
+def build_classify_four_seasons_tool() -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            out = classify_four_seasons(
+                SeasonsInputs(
+                    pmi=float(args["pmi"]),
+                    gdp_yoy=float(args["gdp_yoy"]),
+                    cpi_yoy=float(args["cpi_yoy"]),
+                    credit_spread=float(args["credit_spread"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ToolExecutionError(
+                "classify_four_seasons requires numeric pmi, gdp_yoy, "
+                f"cpi_yoy, credit_spread. {exc}"
+            ) from exc
+        return ToolResult(
+            payload={
+                "season": out.season,
+                "severity": out.severity,
+                "confidence": out.confidence,
+                "growth_axis": out.growth_axis,
+                "inflation_axis": out.inflation_axis,
+                "marker_x_pct": out.marker_x_pct,
+                "marker_y_pct": out.marker_y_pct,
+                "best_assets": out.best_assets,
+                "worst_assets": out.worst_assets,
+            },
+            provenance=ComputedSource(method="classify_four_seasons", derived_from=["(inputs)"]),
+            summary=f"season={out.season} severity={out.severity}",
+        )
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="classify_four_seasons",
+            description=(
+                "Deterministic Dalio four-seasons classification from the four growth and "
+                "inflation indicators. Pass the latest values you gathered; use the returned "
+                "season, severity, confidence, growth_axis, inflation_axis, marker_x_pct, "
+                "marker_y_pct, best_assets, and worst_assets verbatim in the payload."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pmi": {
+                        "type": "number",
+                        "description": "Manufacturing PMI (ISM / S&P Global) level",
+                    },
+                    "gdp_yoy": {
+                        "type": "number",
+                        "description": "Real GDP growth, percent year-over-year",
+                    },
+                    "cpi_yoy": {
+                        "type": "number",
+                        "description": "Headline CPI, percent year-over-year",
+                    },
+                    "credit_spread": {
+                        "type": "number",
+                        "description": "IG vs HY credit-spread proxy (decimal, e.g. 0.04)",
+                    },
+                },
+                "required": ["pmi", "gdp_yoy", "cpi_yoy", "credit_spread"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
 # Per-slug deterministic classify-tool builders. A slug present here gets its
 # classifier tool added to the catalog alongside emit_dashboard. New dashboards
 # register their builder here.
 CLASSIFY_TOOL_BY_SLUG: dict[str, Callable[[], ResearchTool]] = {
     "debt_cycle": build_classify_debt_cycle_tool,
     "world_order": build_classify_world_order_tool,
+    "four_seasons": build_classify_four_seasons_tool,
 }

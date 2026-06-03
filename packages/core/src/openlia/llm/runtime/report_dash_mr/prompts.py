@@ -275,6 +275,54 @@ red/amber/green/blue; `fillPct` is an integer 0-100):
   - `generated_at`: an ISO-8601 timestamp for the run."""
 
 
+_FOUR_SEASONS_WORKFLOW = """\
+Work in this order:
+  1. Gather the four-seasons indicators, each with a value and an as-of
+     date:
+       - Manufacturing PMI (ISM / S&P Global)
+       - Real GDP growth, percent year-over-year
+       - Headline and core CPI, percent year-over-year
+       - An investment-grade vs high-yield credit-spread proxy
+     Prefer the enabled connector tools first; fall back to `web_search`
+     of official sources (ISM, S&P Global, BEA, BLS, FRED).
+  2. Call `classify_four_seasons` with those values. Use the returned
+     `season`, `severity`, `confidence`, `growth_axis`, `inflation_axis`,
+     `marker_x_pct`, `marker_y_pct`, `best_assets`, and `worst_assets`
+     verbatim — do not invent or override the computed season. Place the
+     quadrant `now` marker at `marker_x_pct`/`marker_y_pct`.
+  3. Write the scorecard trend reads, the parallels, the transition-risk
+     bull/bear cards, the asset playbook, and the synthesis verdict from
+     the cited data you gathered.
+  4. Call `emit_dashboard` exactly once with the full FourSeasonsData
+     object in `payload`. This finalizes the run."""
+
+
+_FOUR_SEASONS_PAYLOAD_SHAPE = """\
+# FourSeasonsData payload shape
+
+`emit_dashboard`'s `payload` is one JSON object with these keys (tones are
+red/amber/green/blue/purple; `fillPct`/`xPct`/`yPct` are integers 0-100):
+  - `header`: {title, subtitle, pills: [{tone, label}]}.
+  - `cardSummary`: one-paragraph string summarizing the read.
+  - `scorecard`: {rows: [{name, sub, fillPct, fillTone, current, currentTone,
+    currentMeta, trend, axisLabel, axisTone, direction, directionLabel,
+    directionTone}]} — one row per indicator; `direction` is one of
+    up/down/flat.
+  - `quadrant`: {seasons: {tl, tr, bl, br: {name, sub, pillLabel, tone}},
+    markers: [{label, xPct, yPct, variant, tone}]} — `variant` is one of
+    now/prev; place the `now` marker at the classifier's
+    marker_x_pct/marker_y_pct.
+  - `verdict`: {title, body, sideCards: [{label, value, valueTone, note}]}.
+  - `parallels`: {cards: [{title, body}]}.
+  - `transitionRisk`: {intro, bull: {title, body}, bear: {title, body},
+    keyIndicator: {title, body}}.
+  - `assetPlaybook`: {cards: [{tone, label, posture, body}]} — anchor on the
+    classifier's best_assets/worst_assets.
+  - `notes`: [{title, body}].
+  - `sources`: a short string naming the sources you used.
+  - `generated_at`: an ISO-8601 timestamp for the run."""
+
+
 # Per-dashboard prompt content. ``build_system_prompt`` looks the slug up
 # here and fails loud when a dashboard has no spec. New dashboards register
 # their workflow, payload-shape block, and indicator-sourcing hint here.
@@ -293,6 +341,14 @@ DASHBOARD_PROMPT_SPECS: dict[str, DashboardPromptSpec] = {
             "USD share of global FX reserves (IMF COFER), net central-bank gold purchases "
             "(World Gold Council), foreign holdings of US Treasuries (US Treasury TIC), and "
             "the US dollar index (DXY)."
+        ),
+    ),
+    "four_seasons": DashboardPromptSpec(
+        workflow=_FOUR_SEASONS_WORKFLOW,
+        payload_shape=_FOUR_SEASONS_PAYLOAD_SHAPE,
+        indicator_hint=(
+            "the ISM / S&P Global manufacturing PMI, real GDP year-over-year, headline and "
+            "core CPI year-over-year, and an investment-grade vs high-yield credit-spread proxy."
         ),
     ),
 }

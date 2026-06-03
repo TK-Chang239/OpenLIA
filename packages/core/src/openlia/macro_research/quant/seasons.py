@@ -83,7 +83,9 @@ def classify_four_seasons(inputs: SeasonsInputs) -> SeasonsClassification:
         confidence = "transitioning"
 
     growth_axis = "rising" if growth_rising else ("falling" if growth_falling else "flat")
-    inflation_axis = "rising" if inflation_rising else ("falling" if inflation_falling else "steady")
+    inflation_axis = (
+        "rising" if inflation_rising else ("falling" if inflation_falling else "steady")
+    )
 
     playbook = _PLAYBOOK.get(season, {"best": [], "worst": []})
 
