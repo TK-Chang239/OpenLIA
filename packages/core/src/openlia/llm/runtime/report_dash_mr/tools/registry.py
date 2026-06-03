@@ -6,10 +6,12 @@ the model can invoke. The catalog binds tools to the per-run
 plumb those through every tool call.
 
 The engine has no tool discovery and no extended/valuation tools — the
-catalog is a fixed set gated by the user's connector toggles. Output
-tools (``write_section``, ``set_cover``, ``emit_chart``, ``finalize``)
-are always present; the curated market data tools and native web search
-are each included only when their connector is enabled.
+catalog is a fixed set gated by the user's connector toggles. The
+catalog always includes ``emit_dashboard`` (validates and emits the
+typed dashboard payload for the requested ``dashboard_slug``) and the
+deterministic ``classify_debt_cycle`` quant tool. The curated
+market-data tools and native web search are gated by connector toggles
+as before.
 
 Data tool transports (EODHD callables) arrive via the ``MbDataTransports``
 bundle passed in by the wiring layer — same dependency-injection shape
@@ -24,6 +26,11 @@ from typing import TYPE_CHECKING
 from ....types import ToolSchema
 from ...report_v2_3.research import ResearchTool
 from ..schemas import EnabledConnectors
+from .dashboard_tools import (
+    PAYLOAD_MODEL_BY_SLUG,
+    build_classify_debt_cycle_tool,
+    build_emit_dashboard_tool,
+)
 from .data_tools import build_data_tools
 from .web_search import WEB_SEARCH_TOOL_NAME, build_web_search_descriptor
 
@@ -90,14 +97,14 @@ def build_catalog(
     through ``dispatcher`` (when provided) as dispatcher-backed tools.
     Native web search is gated by ``enabled_connectors.web_search``.
     """
-    from .dashboard_tools import (
-        PAYLOAD_MODEL_BY_SLUG,
-        build_classify_debt_cycle_tool,
-        build_emit_dashboard_tool,
-    )
-
+    payload_model = PAYLOAD_MODEL_BY_SLUG.get(dashboard_slug)
+    if payload_model is None:
+        raise ValueError(
+            f"Unknown dashboard_slug {dashboard_slug!r}. "
+            f"Known dashboards: {sorted(PAYLOAD_MODEL_BY_SLUG)}."
+        )
     core: list[ResearchTool] = [
-        build_emit_dashboard_tool(workspace, PAYLOAD_MODEL_BY_SLUG[dashboard_slug]),
+        build_emit_dashboard_tool(workspace, payload_model),
         build_classify_debt_cycle_tool(),
     ]
 

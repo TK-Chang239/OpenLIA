@@ -1,4 +1,4 @@
-"""Top-level runner for Morning Briefing runs.
+"""Top-level runner for Macro Research dashboard runs.
 
 One LLM session. One tool-use loop. One final emit. The loop:
 
@@ -11,6 +11,8 @@ One LLM session. One tool-use loop. One final emit. The loop:
   4. When web search is enabled, ingest any web citations the adapter
      returned into the ledger.
   5. Repeat until the workspace is finalized OR a hard limit trips.
+     The loop ends when the model calls ``emit_dashboard`` (which
+     finalizes the workspace).
 
 Forked from the Earnings Update v2 engine: a fixed connector-gated
 catalog of market-wide tools, no revise pass, and no batch mode.
@@ -49,7 +51,7 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class Runner:
-    """Executes one Morning Briefing run end-to-end.
+    """Executes one Macro Research dashboard run end-to-end.
 
     Construct with the run's ``request`` and an ``MbDataTransports``
     bundle (the EODHD callables the data tools dispatch against). The
@@ -76,7 +78,7 @@ class Runner:
         emitter: EventEmitter | None = None,
         cancel_token: CancelToken | None = None,
     ) -> RunResult:
-        """Execute the Morning Briefing run.
+        """Execute the Macro Research dashboard run.
 
         Pass ``session`` to use a pre-built session (tests inject a fake
         adapter via ``LLMSession.attach_adapter``). When omitted a fresh
@@ -90,6 +92,8 @@ class Runner:
         ``cancel_token`` is checked between turns. Cancellation is
         cooperative — the runner exits at the next safe point with
         status='failed' and a clear message; partial work persists.
+        The loop ends when the model calls ``emit_dashboard`` (which
+        finalizes the workspace).
         """
         request = self.request
         if session is None:
@@ -185,7 +189,8 @@ class Runner:
                     emitter,
                     status="failed",
                     message=(
-                        f"Morning Briefing run cancelled at turn {turn}. Partial work preserved."
+                        f"Macro Research dashboard run cancelled at turn {turn}."
+                        " Partial work preserved."
                     ),
                     event_type="run.cancelled",
                 )
@@ -195,7 +200,7 @@ class Runner:
                     emitter,
                     status="failed",
                     message=(
-                        f"Morning Briefing run exceeded {self.max_wall_time_seconds}s wall "
+                        f"Macro Research dashboard run exceeded {self.max_wall_time_seconds}s wall "
                         f"time after {turn} turns. Partial work preserved."
                     ),
                 )
@@ -228,7 +233,7 @@ class Runner:
                     status="failed",
                     message=(
                         "Model ended turn without calling any tool and "
-                        "without calling finalize(). Likely the run was "
+                        "without calling emit_dashboard(). Likely the run was "
                         "truncated or the prompt was misunderstood."
                     ),
                 )
@@ -268,8 +273,8 @@ class Runner:
             emitter,
             status="failed",
             message=(
-                f"Morning Briefing run hit hard limit of {self.max_turns} model turns "
-                f"without calling finalize(). Partial work preserved."
+                f"Macro Research dashboard run hit hard limit of {self.max_turns} model turns "
+                f"without calling emit_dashboard(). Partial work preserved."
             ),
         )
 
@@ -341,7 +346,7 @@ async def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) 
         body = json.dumps({"error": str(exc)})
         return Message(role="tool", content=body, tool_call_id=call.id)
     except Exception as exc:
-        log.exception("Morning Briefing tool %s raised unexpectedly", call.name)
+        log.exception("Macro Research dashboard tool %s raised unexpectedly", call.name)
         body = json.dumps({"error": f"unexpected: {exc}"})
         return Message(role="tool", content=body, tool_call_id=call.id)
 
