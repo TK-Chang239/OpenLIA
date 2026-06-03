@@ -86,7 +86,9 @@ def test_rehydrate_registers_persisted_mr_schedule_at_lifespan() -> None:
             MrDashboardState(
                 id=str(uuid.uuid4()),
                 user_id=user_id,
-                dashboard="world_order",
+                # Canonical MR schedule row is debt_cycle (the implemented
+                # dashboard); rehydrate_all only matches the canonical slug.
+                dashboard="debt_cycle",
                 view_config={},
                 threshold_overrides={},
                 assessment_schedule="0 0 * * 0",

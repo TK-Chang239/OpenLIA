@@ -26,6 +26,16 @@ from ...report_v2_3.schemas import ComputedSource
 PAYLOAD_MODEL_BY_SLUG: dict[str, type[BaseModel]] = {"debt_cycle": DebtCycleData}
 
 
+def implemented_dashboard_slugs() -> frozenset[str]:
+    """Slugs the engine can actually generate — the single source of truth.
+
+    Backed by ``PAYLOAD_MODEL_BY_SLUG``. Scheduling and on-demand refresh
+    gate against this so they never queue a dashboard the engine cannot
+    produce.
+    """
+    return frozenset(PAYLOAD_MODEL_BY_SLUG)
+
+
 def build_emit_dashboard_tool(workspace: Any, payload_model: type[BaseModel]) -> ResearchTool:
     def _execute(args: dict[str, Any]) -> ToolResult:
         raw = args.get("payload")

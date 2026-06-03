@@ -41,6 +41,7 @@ from .schemas import (
     TemplateSpec,
 )
 from .session import CapabilityError, CredentialError, LLMSession
+from .tools.dashboard_tools import implemented_dashboard_slugs
 from .transports import MbDataTransports
 from .workspace import RunWorkspace, WrittenSection
 
@@ -75,5 +76,6 @@ __all__ = [
     "SectionSpec",
     "TemplateSpec",
     "WrittenSection",
+    "implemented_dashboard_slugs",
     "is_finish_sentinel",
 ]
