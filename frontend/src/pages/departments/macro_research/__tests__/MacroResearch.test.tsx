@@ -70,12 +70,15 @@ describe("MacroResearch shell", () => {
     expect(screen.getByText("T5")).toBeInTheDocument();
   });
 
-  it("opens the settings drawer with run-now buttons", () => {
+  it("opens the settings drawer and only offers Run Now for implemented dashboards", () => {
     renderShell();
     fireEvent.click(screen.getByTestId("mr-settings-button"));
     expect(screen.getByTestId("mr-settings-panel")).toBeInTheDocument();
+    // debt_cycle is the only engine-implemented dashboard today.
     expect(screen.getByTestId("mr-runnow-debt_cycle")).toBeInTheDocument();
-    expect(screen.getByTestId("mr-runnow-five_forces")).toBeInTheDocument();
+    // Unimplemented dashboards are not runnable from Run Now.
+    expect(screen.queryByTestId("mr-runnow-five_forces")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mr-runnow-world_order")).not.toBeInTheDocument();
   });
 
   it("auto-refresh select offers the design's three options", () => {

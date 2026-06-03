@@ -1,5 +1,9 @@
 """MR schedule service — singleton schedule per user tracked on
-the canonical `world_order` mr_dashboard_state row."""
+the canonical `debt_cycle` mr_dashboard_state row.
+
+The canonical dashboard must be one the engine can actually produce: a
+fired MR_DASH job runs `run_to_cache(dashboard_slug=CANONICAL_DASHBOARD)`,
+so pinning it to an unimplemented slug makes every scheduled run fail."""
 
 from __future__ import annotations
 
@@ -29,9 +33,9 @@ def _validate_cron(cron_expression: str) -> None:
 
 
 class MRScheduleService:
-    """One schedule per user — persisted on the world_order dashboard row."""
+    """One schedule per user — persisted on the debt_cycle dashboard row."""
 
-    CANONICAL_DASHBOARD = "world_order"
+    CANONICAL_DASHBOARD = "debt_cycle"
 
     def __init__(
         self,

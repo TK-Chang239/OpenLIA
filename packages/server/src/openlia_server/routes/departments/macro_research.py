@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from openlia.llm.runtime.report_dash_mr import implemented_dashboard_slugs
 from openlia.macro_research.dashboards import DASHBOARDS
 from pydantic import BaseModel
 
@@ -138,6 +139,11 @@ def build_macro_research_router(
         gate_dept_or_409(request, "macro_research")
         if slug not in DASHBOARDS:
             raise HTTPException(status_code=404, detail=f"dashboard {slug!r} not found")
+        if slug not in implemented_dashboard_slugs():
+            raise HTTPException(
+                status_code=409,
+                detail=f"dashboard {slug!r} is not yet available for generation",
+            )
 
         # Pre-allocate a JobRun row so the route can return a real id
         # synchronously and the executor reuses the same row when fired.

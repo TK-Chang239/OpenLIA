@@ -168,7 +168,9 @@ def test_refresh_without_scheduler_marks_cancelled(
     app.include_router(router)
     # No scheduler on app.state.
     client = TestClient(app)
-    r = client.post("/departments/macro_research/dashboards/world_order/refresh")
+    # debt_cycle is the implemented dashboard; world_order would now hit the
+    # 409 implemented-gate before reaching the scheduler-disabled branch.
+    r = client.post("/departments/macro_research/dashboards/debt_cycle/refresh")
     assert r.status_code == 202
     body = r.json()
     assert body["status"] == "cancelled"
@@ -181,6 +183,18 @@ def test_refresh_without_scheduler_marks_cancelled(
 def test_refresh_404_for_unknown(client: TestClient) -> None:
     r = client.post("/departments/macro_research/dashboards/not_real/refresh")
     assert r.status_code == 404
+
+
+def test_refresh_409_for_unimplemented(client: TestClient, session_factory, fake_scheduler) -> None:
+    # four_seasons is a known dashboard but the engine cannot generate it yet.
+    r = client.post("/departments/macro_research/dashboards/four_seasons/refresh")
+    assert r.status_code == 409
+    assert "not yet available" in r.json()["detail"]
+    # No JobRun was pre-allocated and the scheduler was not dispatched.
+    with session_factory() as s:
+        rows = s.query(JobRun).filter_by(schedule_id="four_seasons").all()
+        assert rows == []
+    fake_scheduler.run_now.assert_not_awaited()
 
 
 def test_put_threshold_overrides(client: TestClient) -> None:
