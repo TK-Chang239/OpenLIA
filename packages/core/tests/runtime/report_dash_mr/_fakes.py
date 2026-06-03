@@ -1,4 +1,4 @@
-"""Test fakes for the v3 engine.
+"""Test fakes for the report_dash_mr engine.
 
 ``FakeLLMProvider`` replays a scripted sequence of ``LLMResponse``
 objects, one per ``generate`` call, so the runner's tool-use loop can
@@ -84,8 +84,8 @@ class FakeLLMProvider(LLMProvider):
         return response
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        # EU v2 engine does not stream; satisfy the ABC.
-        raise NotImplementedError("FakeLLMProvider.stream is not used by v3.")
+        # report_dash_mr engine does not stream; satisfy the ABC.
+        raise NotImplementedError("FakeLLMProvider.stream is not used by report_dash_mr.")
 
     async def test_connection(self, model: str) -> TestResult:
         return TestResult(ok=True, latency_ms=0, error_class=None, error_msg=None)

@@ -1,18 +1,22 @@
-"""In-flight run state for an EU v2 run.
+"""In-flight run state for a Macro Research dashboard run.
 
 A ``RunWorkspace`` holds what the model has produced so far —
-sections written, charts emitted, and the citation ledger. The
-runner threads one workspace through the entire loop; tools mutate
-it directly. At finalize the workspace renders to a ``RunResult``.
+sections written, charts emitted, the citation ledger, and the typed
+dashboard payload. The runner threads one workspace through the entire
+loop; tools mutate it directly. When the model calls ``emit_dashboard``
+the payload is stored and ``finalized`` is set, ending the loop.
 
-Separated from ``runner.py`` so output tools (``write_section``,
-``emit_chart``, ``finalize``) can hold a reference without importing
-the loop.
+Separated from ``runner.py`` so output tools can hold a reference
+without importing the loop.
 
-EU v2 has no revision flow: every run is an original run. The
-``revision_mode`` field is retained at ``False`` only because the
-output tools (forked from v3) still read it as a guard; the engine
-never sets it to ``True``.
+The section/chart/cover fields (``sections``, ``charts``, ``cover``,
+``section_order``, etc.) are vestigial fork carry-over from the
+Morning Briefing / EU v2 engines — the dashboard engine does not use
+them, but they remain pending a later cleanup pass.
+
+The engine has no revision flow: every run is an original run. The
+``revision_mode`` field is always ``False``; it is vestigial, pending
+cleanup (see below).
 """
 
 from __future__ import annotations
@@ -47,9 +51,9 @@ class RunWorkspace:
     sections: dict[str, WrittenSection] = field(default_factory=dict)
     charts: dict[str, ChartSpec] = field(default_factory=dict)
     finalized: bool = False
-    # Always ``False`` for EU v2 (no revision flow). Retained only
-    # because the v3-forked output tools still read it as a guard;
-    # the engine never flips it.
+    # Always ``False``; vestigial, pending cleanup. The dashboard engine
+    # has no revision flow. Retained only because the forked output tools
+    # still read it as a guard; the engine never sets it to ``True``.
     revision_mode: bool = False
     # Ordered list of section_ids the renderer / to_result should
     # emit. Pre-populated with template section ids in template order;

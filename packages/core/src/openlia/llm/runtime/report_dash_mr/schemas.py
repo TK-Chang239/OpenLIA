@@ -1,18 +1,20 @@
-"""Lean schemas for the Morning Briefing engine.
+"""Lean schemas for the Macro Research dashboard engine.
 
-Forked from the Earnings Update v2 engine. The schema surface stays
-small: a chart spec, a citation log entry, the run request, and the run
-result. Citations live in a server-side ledger keyed by ``source_id``
-and the model cites them inline with standard Markdown footnote syntax
-(``[^web_3]``).
+Forked from the Morning Briefing engine, which was itself forked from
+Earnings Update v2. The schema surface stays small: a chart spec, a
+citation log entry, the run request, and the run result. Citations live
+in a server-side ledger keyed by ``source_id`` and the model cites them
+inline with standard Markdown footnote syntax (``[^web_3]``).
 
-Morning Briefing deltas vs. EU v2:
-  - The earnings anchor is replaced by a briefing anchor.
-    ``RunRequest`` carries ``enabled_connectors`` (which tool groups to
-    build) and ``briefing_context`` (which briefing this run writes:
-    its run date, schedule label, and time/timezone). ``instructions``
-    (free-form analyst methodology injected into the system prompt) is
-    supported, same as EU.
+Macro Research dashboard deltas vs. Morning Briefing / EU v2:
+  - ``RunRequest`` adds ``dashboard_slug`` (identifies which typed
+    dashboard this run produces, e.g. ``"debt_cycle"``).
+  - ``RunResult`` adds ``payload`` (the JSON-serialized typed dashboard
+    object, e.g. ``DebtCycleData``). ``payload`` is ``None`` until the
+    model calls ``emit_dashboard``; it is set when the run finalizes.
+  - ``template`` is optional and vestigial — the dashboard engine does
+    not require a section template; ``dashboard_slug`` drives the output
+    schema instead.
   - No revision schemas — the engine has no revise flow.
 
 The ``TemplateSpec`` itself is reused verbatim from v2.3 — same Pydantic
@@ -226,11 +228,14 @@ class CoverSpec(BaseModel):
 
 
 class RunResult(BaseModel):
-    """Output of an EU v2 run.
+    """Output of a Macro Research dashboard run.
 
     Populates ``sections``, ``charts``, and ``citations`` from the
     ledger. ``cover`` is populated when the model called ``set_cover`` during
     the run; otherwise it stays None and the cover renders bare.
+    ``payload`` carries the typed dashboard object (e.g. ``DebtCycleData``
+    serialized to a plain dict via ``model_dump``); it is ``None`` until
+    the model calls ``emit_dashboard``.
     """
 
     status: RunStatus
