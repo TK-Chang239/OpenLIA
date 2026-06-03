@@ -98,6 +98,28 @@ def _complete_all_weather_payload() -> dict:
             "label": "Section D - retail investor caveats",
             "cards": [{"title": "Leverage assumption", "body": "Designed for leverage."}],
         },
+        "stressTest": {
+            "label": "Section E - Monte-Carlo stress test",
+            "intro": "10,000-path 1-year simulation.",
+            "distribution": {
+                "title": "Base-case distribution",
+                "bars": [
+                    {"label": "5th pct", "userPct": -0.18, "refPct": -0.09},
+                    {"label": "Median", "userPct": 0.06, "refPct": 0.05},
+                ],
+            },
+            "scenarios": [
+                {
+                    "name": "Equity crash / deleveraging",
+                    "userMedianPct": -0.22,
+                    "userP5Pct": -0.41,
+                    "refMedianPct": -0.08,
+                    "refP5Pct": -0.19,
+                    "tone": "red",
+                }
+            ],
+            "note": "Gaussian draws.",
+        },
         "verdict": {
             "title": "Synthesis verdict",
             "body": "The 60/40 concentrates risk in equities.",
@@ -140,6 +162,12 @@ async def test_runner_classify_then_emit_all_weather():
                 {"weights": {"equities": 0.6, "long_bonds": 0.4}},
             )
         ),
+        script_tool_calls(
+            (
+                "simulate_all_weather_stress",
+                {"weights": {"equities": 0.6, "long_bonds": 0.4}},
+            )
+        ),
         script_tool_calls(("emit_dashboard", {"payload": payload})),
     ]
     session = LLMSession.create(provider_kind="stub", model="stub")
@@ -156,3 +184,5 @@ async def test_runner_classify_then_emit_all_weather():
     assert validated.comparison.benchmark.slices[0].tone == "accent"
     assert validated.gold.needles[0].tone == "red"
     assert validated.verdict.title == "Synthesis verdict"
+    assert validated.stressTest.scenarios[0].tone == "red"
+    assert validated.stressTest.distribution.bars[0].userPct == -0.18
