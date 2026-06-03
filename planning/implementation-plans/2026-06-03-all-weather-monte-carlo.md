@@ -420,7 +420,6 @@ def simulate_all_weather_stress(
     w_ref = np.array([REFERENCE_ALLOCATION.get(a, 0.0) for a in ASSET_ORDER], dtype=float)
     if seed is None:
         seed = _seed_from_weights(w_user)
-    rng = np.random.default_rng(seed)
 
     base_mu = np.array([EXPECTED_RETURNS[a] for a in ASSET_ORDER], dtype=float)
     base_corr = correlation_matrix(CORRELATIONS)
@@ -430,14 +429,18 @@ def simulate_all_weather_stress(
     base_user_pcts: dict[str, float] = {}
     base_ref_pcts: dict[str, float] = {}
 
-    for sc in SCENARIOS:
+    # Per-scenario RNG derived from the master seed so a scenario's draws are
+    # independent of iteration order — reordering/extending SCENARIOS never
+    # silently changes another scenario's (cached) output.
+    for i, sc in enumerate(SCENARIOS):
+        sc_rng = np.random.default_rng([seed, i])
         mu = base_mu + np.array([sc.drift_shift.get(a, 0.0) for a in ASSET_ORDER], dtype=float)
         vols = np.array(
             [DEFAULT_VOLS[a] * sc.vol_mult.get(a, 1.0) for a in ASSET_ORDER], dtype=float
         )
         corr = (1.0 - sc.corr_stress) * base_corr + sc.corr_stress * crisis
         cov = corr * np.outer(vols, vols)
-        draws = rng.multivariate_normal(mu * horizon_years, cov * horizon_years, size=n_paths)
+        draws = sc_rng.multivariate_normal(mu * horizon_years, cov * horizon_years, size=n_paths)
         user_ret = draws @ w_user
         ref_ret = draws @ w_ref
         user_stat = PortfolioStat(
@@ -454,6 +457,9 @@ def simulate_all_weather_stress(
         if sc.name == "Base case":
             base_user_pcts = {f"p{q}": float(np.percentile(user_ret, q)) for q in _PERCENTILES}
             base_ref_pcts = {f"p{q}": float(np.percentile(ref_ret, q)) for q in _PERCENTILES}
+
+    if not base_user_pcts:
+        raise RuntimeError("SCENARIOS must contain a 'Base case' entry")
 
     return AllWeatherStress(
         distribution=DistributionStat(
