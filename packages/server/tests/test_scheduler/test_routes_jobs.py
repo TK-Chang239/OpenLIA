@@ -50,14 +50,10 @@ def client_with_user(route_session_factory):
     """Stand up a minimal app with stubbed scheduler and a logged-in user."""
     from _scheduler_fakes import (
         FakeAPScheduler,
-        FakeBatchRunner,
-        FakeMRBuilder,
-        FakeMRCacheStore,
         FakeReportRunner,
         FakeReportStore,
         StubEUScanPlanner,
     )
-    from openlia.llm.runtime.messages import ReportRequest
     from openlia_server.scheduler import wiring as wiring_mod
     from openlia_server.scheduler.settings import SchedulerSettings
 
@@ -80,13 +76,8 @@ def client_with_user(route_session_factory):
         settings=SchedulerSettings(enabled=True),
         scheduler=scheduler,
         report_runner=FakeReportRunner(events=[]),
-        batch_runner=FakeBatchRunner(results=[]),
         eu_planner=StubEUScanPlanner(),
-        mr_builder=FakeMRBuilder(
-            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
-        ),
         report_store=FakeReportStore(),
-        mr_cache_store=FakeMRCacheStore(),
     )
 
     @asynccontextmanager

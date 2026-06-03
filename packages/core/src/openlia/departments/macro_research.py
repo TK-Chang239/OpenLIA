@@ -49,7 +49,7 @@ class MacroResearchDepartment:
 
     def set_snapshot_reader(self, reader: _SnapshotReader) -> None:
         """Inject the snapshot reader post-construction. The server wires the
-        DB-backed reader at startup (mirrors the scheduler's wire_mr pattern)."""
+        DB-backed reader at startup."""
         self._reader = reader
 
     def dashboard_slugs(self) -> tuple[str, ...]:

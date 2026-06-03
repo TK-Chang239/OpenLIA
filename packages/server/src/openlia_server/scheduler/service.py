@@ -213,22 +213,6 @@ class SchedulerService:
             misfire_grace_time=self.settings.misfire_grace_seconds,
         )
 
-    def wire_mr(self, *, builder: Any, cache_store: Any) -> None:
-        """Replace the stub builder/cache on the MR executor with real implementations.
-
-        Called once after build_scheduler_service() so the MR executor
-        stops raising DepartmentPayloadBuilderNotWired at fire time.
-        """
-        from openlia_server.scheduler.registry import JobType
-
-        executor = self.executors.get(JobType.MR_ASSESSMENT)
-        if executor is None:
-            return
-        if hasattr(executor, "_mr_builder"):
-            executor._mr_builder = builder
-        if hasattr(executor, "_mr_cache_store"):
-            executor._mr_cache_store = cache_store
-
     async def remove_all_for_user(self, user_id: str) -> None:
         # MB allows multiple schedules per user — find every row and remove
         # each by its own (user_id, schedule_id) key.

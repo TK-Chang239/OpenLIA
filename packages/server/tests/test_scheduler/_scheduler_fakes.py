@@ -19,15 +19,12 @@ from typing import Any
 from openlia.llm.runtime.events import SseEvent
 from openlia.llm.runtime.messages import (
     Attachment,
-    BatchItem,
-    BatchResult,
     ChatMessage,
     ReportRequest,
 )
 from openlia_server.scheduler.payloads import (
     DepartmentPayloadBuilderNotWired,
     EUScanTarget,
-    MRAssessmentPayload,
 )
 from sqlalchemy.orm import Session
 
@@ -50,11 +47,6 @@ class StubEUScanPlanner:
         raise DepartmentPayloadBuilderNotWired("EUScanPlanner not provided")
 
 
-class StubMRAssessmentBuilder:
-    def build(self, *, session: Session | None, user_id: str) -> MRAssessmentPayload:
-        raise DepartmentPayloadBuilderNotWired("MRAssessmentBuilder not provided")
-
-
 class StubReportStore:
     def save(
         self,
@@ -65,11 +57,6 @@ class StubReportStore:
         payload: dict[str, Any],
     ) -> str:
         raise DepartmentPayloadBuilderNotWired("ReportStore not provided")
-
-
-class StubMRCacheStore:
-    def save(self, *, session: Session | None, user_id: str, payload: dict[str, Any]) -> str:
-        raise DepartmentPayloadBuilderNotWired("MRCacheStore not provided")
 
 
 # ------------------------------------------------------------------
@@ -117,37 +104,6 @@ class FakeEUPlanner:
 
 
 @dataclass
-class FakeMRBuilder:
-    items: list[BatchItem]
-    synth: ReportRequest
-    t4_task: str = "t4"
-    t4_schema: type = field(default_factory=lambda: _default_t4_schema())
-    received_results: list[list[BatchResult]] = field(default_factory=list)
-
-    def build(self, *, session: Session | None, user_id: str) -> MRAssessmentPayload:
-        def _synthesize(results: list[BatchResult]) -> ReportRequest:
-            self.received_results.append(list(results))
-            return self.synth
-
-        return MRAssessmentPayload(
-            items=list(self.items),
-            t4_task=self.t4_task,
-            t4_schema=self.t4_schema,
-            synthesize=_synthesize,
-        )
-
-
-def _default_t4_schema() -> type:
-    from pydantic import BaseModel
-
-    class _T4(BaseModel):
-        label: str
-        score: float
-
-    return _T4
-
-
-@dataclass
 class FakeReportStore:
     next_id: str = "r_stub"
     saves: list[dict[str, Any]] = field(default_factory=list)
@@ -167,22 +123,6 @@ class FakeReportStore:
                 "payload": payload,
             }
         )
-        return self.next_id
-
-
-@dataclass
-class FakeMRCacheStore:
-    next_id: str = "c_stub"
-    saves: list[dict[str, Any]] = field(default_factory=list)
-
-    def save(
-        self,
-        *,
-        session: Session | None,
-        user_id: str,
-        payload: dict[str, Any],
-    ) -> str:
-        self.saves.append({"user_id": user_id, "payload": payload})
         return self.next_id
 
 
@@ -224,35 +164,6 @@ class FakeReportRunner:
             yield ev
         if self.raise_exc is not None:
             raise self.raise_exc
-
-
-@dataclass
-class FakeBatchRunner:
-    results: list[BatchResult]
-    raise_exc: Exception | None = None
-    calls: list[dict[str, Any]] = field(default_factory=list)
-
-    async def run(
-        self,
-        *,
-        department_id: str,
-        task: str,
-        items: list[BatchItem],
-        schema: type,
-        concurrency: int = 8,
-        user_id: str | None = None,
-    ) -> list[BatchResult]:
-        self.calls.append(
-            {
-                "department_id": department_id,
-                "task": task,
-                "items": list(items),
-                "user_id": user_id,
-            }
-        )
-        if self.raise_exc is not None:
-            raise self.raise_exc
-        return list(self.results)
 
 
 # ------------------------------------------------------------------

@@ -11,14 +11,10 @@ from datetime import UTC, datetime
 import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
-    FakeBatchRunner,
-    FakeMRBuilder,
-    FakeMRCacheStore,
     FakeReportRunner,
     FakeReportStore,
 )
 from openlia.llm.runtime.events import ReportComplete
-from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.departments import EuWatchlistEntry
 from openlia_server.db.models.scheduler import EuSchedule
@@ -105,13 +101,8 @@ async def test_added_ticker_picked_up_on_next_fire(session_factory) -> None:
                 ),
             ]
         ),
-        batch_runner=FakeBatchRunner(results=[]),
         eu_planner=planner,
-        mr_builder=FakeMRBuilder(
-            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
-        ),
         report_store=FakeReportStore(),
-        mr_cache_store=FakeMRCacheStore(),
     )
     await svc.start()
 

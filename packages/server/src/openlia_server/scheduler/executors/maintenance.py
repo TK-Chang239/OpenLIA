@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.db.models.auth import Session as AuthSession
 from openlia_server.db.models.content import RepoItem, Report
-from openlia_server.db.models.dashboard import MrAssessmentCache, RsSnapshot
+from openlia_server.db.models.dashboard import RsSnapshot
 from openlia_server.db.models.pipeline_runs import PipelineRun
 from openlia_server.db.models.safety import LiaGuardrailEvent
 from openlia_server.db.models.scheduler import JobRun, UserNotification
@@ -27,7 +27,6 @@ from openlia_server.services.scheduler import sweep_expired_reports
 
 SESSIONS_RETENTION_DAYS = 7
 PASSWORD_RESET_RETENTION_DAYS = 90
-MR_CACHE_POST_EXPIRY_DAYS = 30
 RS_SNAPSHOT_RETENTION_DAYS = 90
 NOTIFICATION_RETENTION_DAYS = 30
 JOB_RUN_RETENTION_DAYS = 90
@@ -65,15 +64,6 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
             delete(PasswordResetRequest).where(
                 PasswordResetRequest.requested_at
                 < now - timedelta(days=PASSWORD_RESET_RETENTION_DAYS)
-            )
-        ).rowcount
-        or 0
-    )
-
-    mr_cache_deleted = (
-        session.execute(
-            delete(MrAssessmentCache).where(
-                MrAssessmentCache.expires_at < now - timedelta(days=MR_CACHE_POST_EXPIRY_DAYS)
             )
         ).rowcount
         or 0
@@ -184,7 +174,6 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         "sessions_deleted": int(sessions_deleted),
         "password_resets_expired": int(password_resets_expired),
         "password_resets_deleted": int(password_resets_deleted),
-        "mr_cache_deleted": int(mr_cache_deleted),
         "rs_snapshots_deleted": int(rs_snapshots_deleted),
         "notifications_deleted": int(notifications_deleted),
         "job_runs_deleted": int(job_runs_deleted),

@@ -5,13 +5,9 @@ from __future__ import annotations
 
 from _scheduler_fakes import (
     FakeAPScheduler,
-    FakeBatchRunner,
-    FakeMRBuilder,
-    FakeMRCacheStore,
     FakeReportRunner,
     FakeReportStore,
 )
-from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
 from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
@@ -29,12 +25,7 @@ def test_wiring_accepts_real_eu_planner(session_factory) -> None:
         settings=SchedulerSettings(enabled=True),
         scheduler=FakeAPScheduler(),
         report_runner=FakeReportRunner(events=[]),
-        batch_runner=FakeBatchRunner(results=[]),
         eu_planner=planner,
-        mr_builder=FakeMRBuilder(
-            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
-        ),
         report_store=FakeReportStore(),
-        mr_cache_store=FakeMRCacheStore(),
     )
     assert svc is not None
