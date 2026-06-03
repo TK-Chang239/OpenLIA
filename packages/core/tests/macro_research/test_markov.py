@@ -1,0 +1,64 @@
+"""Baked Four Seasons transition matrix + quadrant resolver. Pure; no I/O, no LLM."""
+
+from openlia.macro_research.quant.markov import (
+    SEASON_ORDER,
+    TRANSITION_MATRIX,
+    resolve_quadrant,
+)
+from openlia.macro_research.quant.seasons import SeasonsInputs, classify_four_seasons
+
+
+def test_season_order_is_the_four_quadrants() -> None:
+    assert SEASON_ORDER == ("Spring", "Summer", "Autumn", "Winter")
+
+
+def test_matrix_rows_are_stochastic() -> None:
+    for season in SEASON_ORDER:
+        row = TRANSITION_MATRIX[season]
+        assert set(row) == set(SEASON_ORDER)
+        assert all(p >= 0.0 for p in row.values())
+        assert abs(sum(row.values()) - 1.0) < 1e-9
+
+
+def test_resolve_quadrant_passes_through_canonical_seasons() -> None:
+    spring = classify_four_seasons(
+        SeasonsInputs(pmi=54.0, gdp_yoy=2.5, cpi_yoy=1.8, credit_spread=0.03)
+    )
+    assert spring.season == "Spring"
+    assert resolve_quadrant(spring) == "Spring"
+
+    autumn = classify_four_seasons(
+        SeasonsInputs(pmi=47.0, gdp_yoy=0.2, cpi_yoy=4.0, credit_spread=0.06)
+    )
+    assert autumn.season == "Autumn"
+    assert resolve_quadrant(autumn) == "Autumn"
+
+
+def test_resolve_quadrant_maps_transitioning_via_marker() -> None:
+    # Mixed signals -> classifier returns "Transitioning"; resolver picks the
+    # nearest quadrant from the marker coordinates (growth x>=50, inflation y>=50).
+    c = classify_four_seasons(SeasonsInputs(pmi=48.0, gdp_yoy=1.5, cpi_yoy=2.5, credit_spread=0.04))
+    assert c.season == "Transitioning"
+    # pmi 48 -> x = (48-45)*10 = 30 (<50, growth falling)
+    # cpi 2.5 -> y = (2.5-1)*25 = 37.5 (<50, inflation falling) -> Winter
+    assert resolve_quadrant(c) == "Winter"
+
+
+def test_resolve_quadrant_each_marker_corner() -> None:
+    from openlia.macro_research.quant.seasons import SeasonsClassification
+
+    def _stub(x: int, y: int) -> SeasonsClassification:
+        return SeasonsClassification(
+            season="Transitioning",
+            severity="amber",
+            confidence="transitioning",
+            growth_axis="flat",
+            inflation_axis="steady",
+            marker_x_pct=x,
+            marker_y_pct=y,
+        )
+
+    assert resolve_quadrant(_stub(80, 20)) == "Spring"  # growth rising, inflation falling
+    assert resolve_quadrant(_stub(80, 80)) == "Summer"  # growth rising, inflation rising
+    assert resolve_quadrant(_stub(20, 80)) == "Autumn"  # growth falling, inflation rising
+    assert resolve_quadrant(_stub(20, 20)) == "Winter"  # growth falling, inflation falling
