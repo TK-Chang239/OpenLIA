@@ -3,6 +3,7 @@
 from openlia.macro_research.quant.markov import (
     SEASON_ORDER,
     TRANSITION_MATRIX,
+    markov_outlook,
     resolve_quadrant,
 )
 from openlia.macro_research.quant.seasons import SeasonsInputs, classify_four_seasons
@@ -62,9 +63,6 @@ def test_resolve_quadrant_each_marker_corner() -> None:
     assert resolve_quadrant(_stub(80, 80)) == "Summer"  # growth rising, inflation rising
     assert resolve_quadrant(_stub(20, 80)) == "Autumn"  # growth falling, inflation rising
     assert resolve_quadrant(_stub(20, 20)) == "Winter"  # growth falling, inflation falling
-
-
-from openlia.macro_research.quant.markov import markov_outlook  # noqa: E402
 
 
 def test_outlook_distribution_is_the_matrix_row() -> None:
