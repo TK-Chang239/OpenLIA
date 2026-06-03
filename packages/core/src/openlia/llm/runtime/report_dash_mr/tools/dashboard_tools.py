@@ -602,8 +602,8 @@ def build_analyze_five_forces_network_tool() -> ResearchTool:
                 "{fromLabel, toLabel, strength} array), the per-force `projections` (each a "
                 "{force, current, projected, delta} object; render as an array), the "
                 "`amplifier` and `absorber` force labels, and the aggregate `contagion` "
-                "(0-1) plus `contagion_label`. Use the returned numbers verbatim to fill "
-                "loops.network."
+                "(0-1) plus `contagion_label` (renders as `contagionLabel` in the payload). "
+                "Use the returned numbers verbatim to fill loops.network."
             ),
             parameters={
                 "type": "object",

@@ -435,9 +435,9 @@ Work in this order:
      `loops.network` from its output, mapping the numbers exactly — do not
      invent or override them: `amplifier`->`amplifier`, `absorber`->`absorber`,
      `contagion`->`contagion`, `contagion_label`->`contagionLabel`,
-     `edges`->`edges`, `projections`->`projections`. The returned `edges` is a
-     list of {from_label, to_label, strength}; render each as
-     {fromLabel, toLabel, strength}. The returned `projections` is a list of
+     `edges`->`edges` (each {from_label, to_label, strength} becomes
+     {fromLabel, toLabel, strength}),
+     `projections`->`projections`. The returned `projections` is a list of
      {force, current, projected, delta}; render each verbatim. You author only
      the short `label` header.
   5. Write the force scorecard rows, the interlocking-loop blocks plus the
