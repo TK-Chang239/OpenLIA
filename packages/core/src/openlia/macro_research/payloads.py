@@ -483,6 +483,34 @@ class T3Caveats(BaseModel):
     cards: list[T3CaveatCard]
 
 
+class T3StressBar(BaseModel):
+    label: str
+    userPct: float
+    refPct: float
+
+
+class T3StressScenarioRow(BaseModel):
+    name: str
+    userMedianPct: float
+    userP5Pct: float
+    refMedianPct: float
+    refP5Pct: float
+    tone: Tone
+
+
+class T3StressDistribution(BaseModel):
+    title: str
+    bars: list[T3StressBar]
+
+
+class T3StressTest(BaseModel):
+    label: str
+    intro: str
+    distribution: T3StressDistribution
+    scenarios: list[T3StressScenarioRow]
+    note: str
+
+
 class AllWeatherData(BaseModel):
     header: DashHeader
     cardSummary: str
@@ -491,6 +519,7 @@ class AllWeatherData(BaseModel):
     riskParity: T3RiskParity
     gold: T3Gold
     caveats: T3Caveats
+    stressTest: T3StressTest
     verdict: Prose
     sources: str
     # Redesign additions (not in types.ts): provenance + freshness.
