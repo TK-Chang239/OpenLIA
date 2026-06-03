@@ -462,6 +462,13 @@ git commit -m "feat(mr): derive MRSnapshot debt_cycle_phase from cached payload"
 
 ## Phase 1B — Engine (`report_dash_mr`)
 
+> **REVISION (2026-06-03, during execution) — supersedes the Task 5/6 code below.**
+> Recon of the real forked engine showed the speculative code below was wrong in three ways, so Tasks 5 and 6 are consolidated and corrected:
+> 1. **Real tool API** (`report_v2_3.research`): `ToolDescriptor(name, description, parameters=<JSON-Schema dict>)`; `ResearchTool(descriptor, execute)`; `execute(args) -> ToolResult(payload=<dict>, provenance=ComputedSource(method=..., derived_from=[...]), summary=...)`; raise `ToolExecutionError(msg)` on bad input. (NOT `ToolResult(ok=, data=)` / `input_schema=`.)
+> 2. **`RunRequest` has no `dashboard_slug`** and `template` is required; **`RunResult` has no `payload`**; the workspace is built around `write_section`/`finalize`. So the engine needs: `RunRequest += dashboard_slug: str`, `template` made optional; `RunResult += payload: dict|None`; `RunWorkspace += payload + set_payload()` (sets `finalized=True`, so the existing loop exit fires) and `to_result(... payload=self.payload.model_dump(mode="json"))`; tolerate `template=None`.
+> 3. **`build_catalog` swaps output tools**: replace `build_output_tools(...)` with `[emit_dashboard, classify_debt_cycle]`, keep the eodhd/dispatcher/web_search blocks, and take `dashboard_slug`. The runner passes `request.dashboard_slug`, uses a dashboard-specific initial user turn + system prompt (gather → classify_debt_cycle → emit_dashboard; NOT "write sections/finalize"). Template becomes vestigial (intentional Phase-1 tech-debt; a later phase can strip section/chart/cover machinery).
+> Engine test models `packages/core/tests/runtime/report_mb/_fakes.py` + `test_runner.py` (fake adapter via `LLMSession.attach_adapter`, scripting turn1=classify_debt_cycle call, turn2=emit_dashboard call). The authoritative brief for this is the dispatched Task 5 implementer prompt.
+
 ### Task 4: Fork the engine package skeleton
 
 Copy the `report_mb` engine as the base. The only structural difference is the **output contract**: instead of `write_section`/`emit_chart`/`finalize` producing free-form sections, this engine has a single `emit_dashboard` tool that accepts a validated typed payload and finalizes the run. The turn loop, session, ledger, events, and transports are reused as-is.
