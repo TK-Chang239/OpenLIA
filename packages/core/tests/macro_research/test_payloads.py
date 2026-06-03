@@ -1,12 +1,11 @@
 import pytest
-from pydantic import ValidationError
-
 from openlia.macro_research.payloads import (
-    DebtCycleData,
     DashHeader,
-    ScoreRow,
+    DebtCycleData,
     Provenance,
+    ScoreRow,
 )
+from pydantic import ValidationError
 
 
 def test_minimal_debt_cycle_payload_validates():

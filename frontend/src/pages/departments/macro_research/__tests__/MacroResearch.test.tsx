@@ -74,11 +74,13 @@ describe("MacroResearch shell", () => {
     renderShell();
     fireEvent.click(screen.getByTestId("mr-settings-button"));
     expect(screen.getByTestId("mr-settings-panel")).toBeInTheDocument();
-    // debt_cycle is the only engine-implemented dashboard today.
+    // Engine-implemented dashboards are runnable from Run Now.
     expect(screen.getByTestId("mr-runnow-debt_cycle")).toBeInTheDocument();
-    // Unimplemented dashboards are not runnable from Run Now.
+    expect(screen.getByTestId("mr-runnow-world_order")).toBeInTheDocument();
+    expect(screen.getByTestId("mr-runnow-four_seasons")).toBeInTheDocument();
+    // Dashboards the engine cannot generate yet are not runnable.
+    expect(screen.queryByTestId("mr-runnow-all_weather")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mr-runnow-five_forces")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mr-runnow-world_order")).not.toBeInTheDocument();
   });
 
   it("auto-refresh select offers the design's three options", () => {

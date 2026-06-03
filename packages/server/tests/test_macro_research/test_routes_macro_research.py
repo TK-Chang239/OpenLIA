@@ -240,13 +240,13 @@ def test_refresh_404_for_unknown(client: TestClient) -> None:
 
 
 def test_refresh_409_for_unimplemented(client: TestClient, session_factory, fake_scheduler) -> None:
-    # four_seasons is a known dashboard but the engine cannot generate it yet.
-    r = client.post("/departments/macro_research/dashboards/four_seasons/refresh")
+    # all_weather is a known dashboard but the engine cannot generate it yet.
+    r = client.post("/departments/macro_research/dashboards/all_weather/refresh")
     assert r.status_code == 409
     assert "not yet available" in r.json()["detail"]
     # No JobRun was pre-allocated and the scheduler was not dispatched.
     with session_factory() as s:
-        rows = s.query(JobRun).filter_by(schedule_id="four_seasons").all()
+        rows = s.query(JobRun).filter_by(schedule_id="all_weather").all()
         assert rows == []
     fake_scheduler.run_now.assert_not_awaited()
 

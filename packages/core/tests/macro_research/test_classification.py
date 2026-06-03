@@ -1,8 +1,7 @@
 import pytest
-
 from openlia.macro_research.quant.classification import (
-    DebtCycleInputs,
     DebtCycleClassification,
+    DebtCycleInputs,
     classify_debt_cycle,
 )
 
