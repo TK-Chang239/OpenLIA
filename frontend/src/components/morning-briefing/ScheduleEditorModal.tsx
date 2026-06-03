@@ -176,17 +176,17 @@ export function ScheduleEditorModal({ schedule, onSave, onClose }: Props) {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(13,13,11,0.45)]" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] max-h-[85vh] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[14px] shadow-[0_16px_40px_rgba(13,13,11,0.18)] flex flex-col overflow-hidden">
-          <header className="flex items-center justify-between px-[22px] py-[18px] border-b border-[--color-border-subtle] flex-shrink-0">
+          <header className="flex items-start justify-between px-[22px] py-[18px] border-b border-[--color-border-subtle] flex-shrink-0">
             <div>
               <Dialog.Title asChild>
-                <h2 className="text-[15px] font-semibold text-[--color-text-primary] m-0">
+                <h2 className="text-[16px] font-semibold tracking-[-0.005em] text-[--color-text-primary] m-0">
                   {editing
                     ? t("morning_briefing.schedule_editor.edit_title")
                     : t("morning_briefing.schedule_editor.add_title")}
                 </h2>
               </Dialog.Title>
               <Dialog.Description asChild>
-                <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-[--color-text-tertiary] m-0">
+                <p className="mt-1 font-mono text-[10px] tracking-[0.1em] uppercase text-[--color-text-tertiary] m-0">
                   {t("morning_briefing.schedule_editor.subtitle")}
                 </p>
               </Dialog.Description>
