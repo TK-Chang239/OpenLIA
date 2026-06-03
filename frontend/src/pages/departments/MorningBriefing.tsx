@@ -443,7 +443,6 @@ export default function MorningBriefing() {
 
       <MbRunNowModal
         open={runNowOpen}
-        schedules={schedules}
         onClose={() => setRunNowOpen(false)}
         onStarted={(reportId) => setLiveReportId(reportId)}
       />

@@ -1080,9 +1080,8 @@
     },
     "run_now_modal": {
       "title": "立即執行簡報",
-      "description": "立即產生晨間簡報。",
-      "schedule_label": "使用排程的設定",
-      "schedule_adhoc": "臨時（資料庫預設）",
+      "description": "在下方設定選項，然後立即產生簡報。系統會記住您的選擇供下次使用。",
+      "empty_error": "產生前請先選擇範本或指示。",
       "failed": "啟動簡報失敗",
       "cancel": "取消",
       "starting": "啟動中…",
