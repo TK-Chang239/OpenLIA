@@ -117,6 +117,27 @@ def _render_briefing_block(briefing: BriefingContext | None) -> str:
         "and pre-market moves, the day's scheduled catalysts, and what they "
         "mean for the day ahead."
     )
+    ms = briefing.macro_snapshot
+    if ms is not None and ms.has_data():
+        facts: list[str] = []
+        if ms.debt_cycle_phase:
+            facts.append(f"the long-term debt cycle is in the {ms.debt_cycle_phase} phase")
+        if ms.economic_season:
+            facts.append(f"the economic season reads {ms.economic_season}")
+        if ms.active_force_count is not None:
+            facts.append(f"{ms.active_force_count} of the five major forces are currently active")
+        prefix = "Current macro regime from the Macro Research dashboards"
+        if ms.as_of:
+            prefix += f" (as of {ms.as_of}{', possibly stale' if ms.is_stale else ''})"
+        elif ms.is_stale:
+            prefix += " (possibly stale)"
+        lines.append("")
+        lines.append(
+            prefix
+            + ": "
+            + "; ".join(facts)
+            + ". Frame the day against this backdrop where it is relevant."
+        )
     return "\n".join(lines) + "\n\n"
 
 

@@ -51,6 +51,7 @@ from openlia.llm.runtime.report_mb import (
     EventBroker,
     Language,
     LLMSession,
+    MacroSnapshotContext,
     MbDataTransports,
     NullEmitter,
     ReportLength,
@@ -167,6 +168,28 @@ def _today_str() -> str:
     return date.today().isoformat()
 
 
+def _resolve_macro_snapshot(user_id: str) -> MacroSnapshotContext | None:
+    """Pull the Macro Research cross-department snapshot for the briefing.
+
+    Returns None when the department is unavailable or has no data (so the
+    prompt block is simply omitted).
+    """
+    from openlia.departments import get_department
+
+    dept = get_department("macro_research")
+    if dept is None:
+        return None
+    snap = dept.get_current_snapshot(user_id)
+    ctx = MacroSnapshotContext(
+        debt_cycle_phase=snap.debt_cycle_phase,
+        economic_season=snap.economic_season,
+        active_force_count=snap.active_force_count,
+        as_of=snap.generated_at.date().isoformat() if snap.generated_at else None,
+        is_stale=snap.is_stale,
+    )
+    return ctx if ctx.has_data() else None
+
+
 def build_run_request(
     db: DBSession,
     *,
@@ -236,6 +259,7 @@ def build_run_request(
         schedule_label=schedule_label,
         time_label=time_label,
         timezone=timezone,
+        macro_snapshot=_resolve_macro_snapshot(user_id),
     )
     subject = _build_subject(resolved_run_date, schedule_label)
 
