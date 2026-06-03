@@ -1080,6 +1080,8 @@
       "sun": "Sun"
     },
     "schedules": {
+      "eyebrow": "Schedules",
+      "enabled_badge": "Enabled",
       "title": "Schedules",
       "back": "← Back to briefings",
       "add": "New schedule",

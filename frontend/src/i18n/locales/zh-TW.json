@@ -1080,6 +1080,8 @@
       "sun": "日"
     },
     "schedules": {
+      "eyebrow": "排程",
+      "enabled_badge": "已啟用",
       "title": "排程",
       "back": "← 返回簡報",
       "add": "新增排程",
