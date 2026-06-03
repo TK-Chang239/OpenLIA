@@ -277,7 +277,10 @@ export default function MorningBriefing() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap mb-[22px]">
+              <div
+                className="animate-feed-fade-up flex items-center gap-2 flex-wrap mb-[22px]"
+                style={{ animationDelay: "120ms" }}
+              >
                 <div className="inline-flex items-center gap-2 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-[--color-bg-elevated] flex-1 max-w-[320px]">
                   <Search size={13} className="text-[--color-text-tertiary]" />
                   <input
