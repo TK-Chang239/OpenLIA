@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 SeverityLevel = Literal["green", "amber", "red", "neutral"]
+
+
+@dataclass(frozen=True)
+class SnapshotEntry:
+    """One dashboard's contribution to the cross-department MRSnapshot:
+    the already-derived value (debt-cycle phase, economic season, or active-
+    force count) plus when that dashboard payload was generated."""
+
+    value: str | int
+    generated_at: datetime
 
 
 class MRSnapshot(BaseModel):

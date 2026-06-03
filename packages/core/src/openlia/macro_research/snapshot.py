@@ -3,9 +3,15 @@ payloads. Preserves the contract Morning Briefing reads."""
 
 from __future__ import annotations
 
+import logging
 import re
+from typing import Any
+
+from pydantic import ValidationError
 
 from openlia.macro_research.payloads import DebtCycleData, FiveForcesData, FourSeasonsData
+
+_log = logging.getLogger(__name__)
 
 _LEADING_INT = re.compile(r"^\s*(\d+)")
 
@@ -52,3 +58,28 @@ def economic_season_from_payload(payload: FourSeasonsData) -> str:
     else:
         cell = seasons.bl if left else seasons.br
     return cell.name
+
+
+_DERIVERS = {
+    "debt_cycle": (DebtCycleData, debt_cycle_phase_from_payload),
+    "four_seasons": (FourSeasonsData, economic_season_from_payload),
+    "five_forces": (FiveForcesData, active_force_count_from_payload),
+}
+
+
+def snapshot_value_for(dashboard: str, payload: dict[str, Any]) -> str | int | None:
+    """Derive the cross-department snapshot value for one cached dashboard
+    payload. Returns None for dashboards that contribute no snapshot field, or
+    when a cached payload cannot be validated/derived. The latter is a
+    DELIBERATE degrade-not-crash: this feeds a read-only cross-department view,
+    and a stale/legacy-schema cached payload must not break the consumer. The
+    failure is logged (warning + exc_info) so it is never silent."""
+    entry = _DERIVERS.get(dashboard)
+    if entry is None:
+        return None
+    model_cls, helper = entry
+    try:
+        return helper(model_cls.model_validate(payload))
+    except (ValidationError, ValueError, KeyError, TypeError):
+        _log.warning("snapshot derivation failed for dashboard %r", dashboard, exc_info=True)
+        return None
