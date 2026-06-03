@@ -3,21 +3,11 @@ export interface DashboardSummary {
   display_name: string;
 }
 
-export interface DashboardTier {
-  tier: "T1" | "T2" | "T3" | "T4" | "T5";
-  data: Record<string, unknown>;
-  errors: string[];
+export interface DashboardResponse<T = unknown> {
+  payload: T | null;
   generated_at: string | null;
-}
-
-export interface DashboardResult {
-  slug: string;
-  display_name: string;
-  severity: "green" | "amber" | "red" | "neutral";
-  tiers: DashboardTier[];
-  headline: string | null;
-  generated_at: string;
-  smart_mode_active: boolean;
+  is_stale: boolean;
+  provenance: string | null;
 }
 
 export interface DashboardConfig {
@@ -44,12 +34,10 @@ export function listDashboards(): Promise<{ dashboards: DashboardSummary[] }> {
   return _fetch(`${base}/dashboards`) as Promise<{ dashboards: DashboardSummary[] }>;
 }
 
-export function getDashboard(
+export function getDashboard<T = unknown>(
   slug: string,
-  smartMode = false,
-): Promise<DashboardResult> {
-  const qs = smartMode ? "?smart_mode=true" : "";
-  return _fetch(`${base}/dashboards/${slug}${qs}`) as Promise<DashboardResult>;
+): Promise<DashboardResponse<T>> {
+  return _fetch(`${base}/dashboards/${slug}`) as Promise<DashboardResponse<T>>;
 }
 
 export function getConfig(slug: string): Promise<DashboardConfig> {
@@ -81,10 +69,8 @@ export function putThresholdOverrides(
 export function runAssessment(
   slug: string,
 ): Promise<{ job_run_id: string; status: string }> {
-  return _fetch(`${base}/dashboards/${slug}/assessment/run`, {
+  return _fetch(`${base}/dashboards/${slug}/refresh`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
   }) as Promise<{ job_run_id: string; status: string }>;
 }
 

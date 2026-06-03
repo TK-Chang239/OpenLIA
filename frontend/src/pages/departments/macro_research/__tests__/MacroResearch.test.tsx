@@ -33,14 +33,12 @@ beforeEach(() => {
     ],
   });
   apiMocks.getDashboard.mockResolvedValue({
-    slug: "debt_cycle",
-    display_name: "Debt Cycle",
-    severity: "amber",
-    tiers: [],
-    headline: "Late stage",
-    generated_at: new Date().toISOString(),
-    smart_mode_active: false,
+    payload: null,
+    generated_at: null,
+    is_stale: false,
+    provenance: null,
   });
+  apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
   apiMocks.getConfig.mockResolvedValue({ view_config: {}, threshold_overrides: {} });
   apiMocks.getSchedule.mockResolvedValue({ cron_expression: null, last_assessment_at: null });
 });
