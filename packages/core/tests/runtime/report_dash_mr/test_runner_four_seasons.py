@@ -124,6 +124,27 @@ def _complete_four_seasons_payload() -> dict:
                 "title": "Key indicator to watch",
                 "body": "Next GDP advance estimate.",
             },
+            "probabilities": {
+                "currentSeason": "Autumn",
+                "nextQuarter": [
+                    {"season": "Spring", "prob": 0.05},
+                    {"season": "Summer", "prob": 0.08},
+                    {"season": "Autumn", "prob": 0.57},
+                    {"season": "Winter", "prob": 0.30},
+                ],
+                "persistence": 0.57,
+                "mostLikelyNext": "Autumn",
+                "adverseSeason": "Autumn",
+                "adverseProb": 0.57,
+                "expectedDwellQuarters": 2.33,
+                "horizonQuarters": 4,
+                "horizon": [
+                    {"season": "Spring", "prob": 0.20},
+                    {"season": "Summer", "prob": 0.18},
+                    {"season": "Autumn", "prob": 0.32},
+                    {"season": "Winter", "prob": 0.30},
+                ],
+            },
         },
         "assetPlaybook": {
             "cards": [
@@ -183,6 +204,17 @@ async def test_runner_classify_then_emit_four_seasons():
                 },
             )
         ),
+        script_tool_calls(
+            (
+                "markov_four_seasons",
+                {
+                    "pmi": 47.0,
+                    "gdp_yoy": 0.2,
+                    "cpi_yoy": 4.0,
+                    "credit_spread": 0.04,
+                },
+            )
+        ),
         script_tool_calls(("emit_dashboard", {"payload": payload})),
     ]
     session = LLMSession.create(provider_kind="stub", model="stub")
@@ -200,3 +232,5 @@ async def test_runner_classify_then_emit_four_seasons():
     assert validated.quadrant.markers[0].variant == "now"
     assert validated.quadrant.seasons.tl.tone == "red"
     assert validated.header.pills[1].tone == "purple"
+    assert validated.transitionRisk.probabilities.currentSeason == "Autumn"
+    assert validated.transitionRisk.probabilities.adverseProb == 0.57
