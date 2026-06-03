@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -71,21 +71,104 @@ describe("DebtCycleView", () => {
     expect(screen.queryByText(/125\.2%/)).not.toBeInTheDocument();
   });
 
-  it("invokes runAssessment then reloads when Generate now is clicked", async () => {
-    apiMocks.getDashboard.mockResolvedValueOnce({
-      payload: null,
-      generated_at: null,
-      is_stale: false,
-      provenance: null,
-    });
-    render(inRouter(<DebtCycleView />));
-    const btn = await screen.findByTestId("mr-dash-empty-generate");
-    btn.click();
-    await waitFor(() => expect(apiMocks.runAssessment).toHaveBeenCalledWith("debt_cycle"));
-    // After refresh the default (live) payload resolves and content appears.
-    expect(
-      await screen.findByText(/T1 · US debt cycle position report/i),
-    ).toBeInTheDocument();
+  it("polls until the payload lands and shows live content (poll-to-live)", async () => {
+    vi.useFakeTimers();
+    const POLL_INTERVAL_MS = 6000;
+    try {
+      // Initial load → empty; all subsequent calls → live payload.
+      apiMocks.getDashboard
+        .mockResolvedValueOnce({
+          payload: null,
+          generated_at: null,
+          is_stale: false,
+          provenance: null,
+        })
+        .mockResolvedValue({
+          payload: DEBT_CYCLE_FALLBACK,
+          generated_at: "2026-06-01T00:00:00Z",
+          is_stale: false,
+          provenance: "live",
+        });
+      apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
+
+      render(inRouter(<DebtCycleView />));
+
+      // Flush the initial getDashboard microtask so the component settles to empty state.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      const btn = screen.getByTestId("mr-dash-empty-generate");
+
+      // Click; button should immediately show "Generating…" and be disabled.
+      act(() => {
+        btn.click();
+      });
+
+      // Flush the runAssessment promise.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Still in generating state — live content must NOT be shown yet.
+      expect(screen.getByTestId("mr-dash-empty-generate")).toBeDisabled();
+      expect(screen.queryByText(/T1 · US debt cycle position report/i)).not.toBeInTheDocument();
+
+      // Advance one poll interval — getDashboard resolves with live payload.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      });
+
+      // Live content now rendered.
+      expect(screen.getByText(/T1 · US debt cycle position report/i)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows scheduler-unavailable note when runAssessment returns cancelled", async () => {
+    vi.useFakeTimers();
+    try {
+      apiMocks.getDashboard.mockResolvedValue({
+        payload: null,
+        generated_at: null,
+        is_stale: false,
+        provenance: null,
+      });
+      apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "cancelled" });
+
+      render(inRouter(<DebtCycleView />));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      const btn = screen.getByTestId("mr-dash-empty-generate");
+
+      act(() => {
+        btn.click();
+      });
+
+      // Flush the runAssessment promise.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Scheduler unavailable note shown, still on empty state.
+      expect(screen.getByTestId("mr-dash-empty-note")).toBeInTheDocument();
+      expect(screen.getByTestId("mr-dash-empty-note").textContent).toMatch(
+        /scheduler unavailable/i,
+      );
+      expect(screen.queryByText(/T1 · US debt cycle position report/i)).not.toBeInTheDocument();
+
+      // No further polling — advance well past the poll interval; content stays null.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+      expect(screen.queryByText(/T1 · US debt cycle position report/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
