@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getDashboard, runAssessment } from "../../../api/macro_research";
 import type {
@@ -19,6 +19,9 @@ import {
   Verdict,
 } from "../../../components/macro_research/_shared/widgets";
 
+const POLL_INTERVAL_MS = 6000;
+const POLL_MAX_ATTEMPTS = 70; // ~7 min; a real macro run takes a few minutes
+
 function toneToStatus(tone: T1Tone): Status {
   switch (tone) {
     case "red": return "bad";
@@ -33,6 +36,15 @@ export default function DebtCycleView(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -44,20 +56,57 @@ export default function DebtCycleView(): JSX.Element {
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   };
-  useEffect(load, []);
+
+  useEffect(() => {
+    load();
+    return stopPolling;
+  }, []);
+
+  const startPolling = () => {
+    stopPolling();
+    let attempts = 0;
+    pollRef.current = setInterval(() => {
+      attempts += 1;
+      getDashboard<DebtCycleData>("debt_cycle")
+        .then((r) => {
+          if (r.payload) {
+            stopPolling();
+            setData(r.payload);
+            setGeneratedAt(r.generated_at);
+            setGenerating(false);
+            setNote(null);
+          } else if (attempts >= POLL_MAX_ATTEMPTS) {
+            stopPolling();
+            setGenerating(false);
+            setNote("Still generating. Reload in a moment to see the result.");
+          }
+        })
+        .catch(() => undefined);
+    }, POLL_INTERVAL_MS);
+  };
 
   const onGenerate = () => {
+    setNote(
+      "Generating a live reading from current data — this can take a few minutes. Keep this tab open.",
+    );
     setGenerating(true);
     runAssessment("debt_cycle")
-      .catch(() => undefined)
-      .finally(() => {
+      .then((r) => {
+        if (r.status === "queued") {
+          startPolling();
+        } else {
+          setGenerating(false);
+          setNote("Generation could not start (background scheduler unavailable).");
+        }
+      })
+      .catch(() => {
         setGenerating(false);
-        load();
+        setNote("Could not start generation. Please try again.");
       });
   };
 
   if (loading) return <DashLoading />;
-  if (!data) return <DashEmpty onGenerate={onGenerate} generating={generating} />;
+  if (!data) return <DashEmpty onGenerate={onGenerate} generating={generating} note={note} />;
 
   const generatedLabel = generatedAt
     ? new Date(generatedAt).toLocaleDateString()

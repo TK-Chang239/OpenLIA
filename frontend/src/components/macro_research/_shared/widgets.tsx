@@ -324,10 +324,12 @@ export function DashLoading({ testid }: { testid?: string }): JSX.Element {
 export function DashEmpty({
   onGenerate,
   generating,
+  note,
   testid,
 }: {
   onGenerate: () => void;
   generating?: boolean;
+  note?: ReactNode;
   testid?: string;
 }): JSX.Element {
   return (
@@ -346,6 +348,11 @@ export function DashEmpty({
         >
           {generating ? "Generating…" : "Generate now"}
         </button>
+        {note ? (
+          <div className="mr-card-body-text mr-dash-empty-note" data-testid="mr-dash-empty-note">
+            {note}
+          </div>
+        ) : null}
       </div>
     </article>
   );
