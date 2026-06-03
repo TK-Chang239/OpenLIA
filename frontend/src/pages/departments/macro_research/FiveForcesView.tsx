@@ -1,7 +1,6 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { getDashboard } from "../../../api/macro_research";
-import { FIVE_FORCES_FALLBACK } from "../../../lib/macro_research/dalio_copy/five_forces";
+import { getDashboard, runAssessment } from "../../../api/macro_research";
 import type {
   FiveForcesData,
   Status,
@@ -14,13 +13,18 @@ import type {
 } from "../../../lib/macro_research/dalio_copy/types";
 import {
   AllocBar,
+  DashEmpty,
   DashHero,
+  DashLoading,
   ScenarioDuo,
   SectionLabel,
   Spill,
   SrcFoot,
   Verdict,
 } from "../../../components/macro_research/_shared/widgets";
+
+const POLL_INTERVAL_MS = 6000;
+const POLL_MAX_ATTEMPTS = 70; // ~7 min; a real macro run takes a few minutes
 
 function toneToStatus(tone: T5Tone): Status {
   switch (tone) {
@@ -53,14 +57,85 @@ function renderRich(text: string): ReactNode {
 }
 
 export default function FiveForcesView(): JSX.Element {
-  const [, setLive] = useState<FiveForcesData | null>(null);
+  const [data, setData] = useState<FiveForcesData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [, setGeneratedAt] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const load = () => {
+    setLoading(true);
+    getDashboard<FiveForcesData>("five_forces")
+      .then((r) => {
+        setData(r.payload);
+        setGeneratedAt(r.generated_at);
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    getDashboard("five_forces").catch(() => undefined);
+    load();
+    return stopPolling;
   }, []);
 
-  void setLive;
-  const data: FiveForcesData = FIVE_FORCES_FALLBACK;
+  const startPolling = () => {
+    stopPolling();
+    let attempts = 0;
+    pollRef.current = setInterval(() => {
+      attempts += 1;
+      getDashboard<FiveForcesData>("five_forces")
+        .then((r) => {
+          if (r.payload) {
+            stopPolling();
+            setData(r.payload);
+            setGeneratedAt(r.generated_at);
+            setGenerating(false);
+            setNote(null);
+          } else if (attempts >= POLL_MAX_ATTEMPTS) {
+            stopPolling();
+            setGenerating(false);
+            setNote("Still generating. Reload in a moment to see the result.");
+          }
+        })
+        .catch(() => undefined);
+    }, POLL_INTERVAL_MS);
+  };
+
+  const onGenerate = () => {
+    setNote(
+      "Generating a live reading from current data — this can take a few minutes. Keep this tab open.",
+    );
+    setGenerating(true);
+    runAssessment("five_forces")
+      .then((r) => {
+        if (r.status === "queued") {
+          startPolling();
+        } else if (r.status === "already_running") {
+          // A run is already in flight (e.g. another tab) — watch for it.
+          setNote("A reading is already being generated — watching for the result.");
+          startPolling();
+        } else {
+          setGenerating(false);
+          setNote("Generation could not start (background scheduler unavailable).");
+        }
+      })
+      .catch(() => {
+        setGenerating(false);
+        setNote("Could not start generation. Please try again.");
+      });
+  };
+
+  if (loading) return <DashLoading />;
+  if (!data) return <DashEmpty onGenerate={onGenerate} generating={generating} note={note} />;
 
   const critical = data.scorecard.rows.filter((r) => r.scorePct >= 70).length;
   const aggregate = data.scorecard.rows.length > 0

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ALL_WEATHER_FALLBACK } from "../../../../lib/macro_research/dalio_copy/all_weather";
 import { DEBT_CYCLE_FALLBACK } from "../../../../lib/macro_research/dalio_copy/debt_cycle";
+import { FIVE_FORCES_FALLBACK } from "../../../../lib/macro_research/dalio_copy/five_forces";
 import { FOUR_SEASONS_FALLBACK } from "../../../../lib/macro_research/dalio_copy/four_seasons";
 import { WORLD_ORDER_FALLBACK } from "../../../../lib/macro_research/dalio_copy/world_order";
 
@@ -455,9 +456,17 @@ describe("WorldOrderView", () => {
 });
 
 describe("FiveForcesView", () => {
-  it("renders the force scorecard, reinforcement loops, market signals, gold allocation, scenarios, and verdict", () => {
+  it("renders live cache content: force scorecard, reinforcement loops, market signals, gold allocation, scenarios, and verdict", async () => {
+    apiMocks.getDashboard.mockResolvedValue({
+      payload: FIVE_FORCES_FALLBACK,
+      generated_at: "2026-06-01T00:00:00Z",
+      is_stale: false,
+      provenance: "live",
+    });
     render(inRouter(<FiveForcesView />));
-    expect(screen.getByText(/Five interlocking forces — April 2026/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Five interlocking forces — April 2026/i),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("t5-scorecard")).toBeInTheDocument();
     expect(screen.getByText(/Debt & money cycle/i)).toBeInTheDocument();
     expect(screen.getByText(/Geopolitical cycle/i)).toBeInTheDocument();
@@ -468,6 +477,73 @@ describe("FiveForcesView", () => {
     expect(screen.getByTestId("t5-gold-allocation")).toBeInTheDocument();
     expect(screen.getByTestId("t5-scenarios")).toBeInTheDocument();
     expect(screen.getByTestId("t5-verdict")).toBeInTheDocument();
+  });
+
+  it("renders the empty state when payload is null", async () => {
+    apiMocks.getDashboard.mockResolvedValueOnce({
+      payload: null,
+      generated_at: null,
+      is_stale: false,
+      provenance: null,
+    });
+    render(inRouter(<FiveForcesView />));
+    expect(
+      await screen.findByText(/hasn.t been generated yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("mr-dash-empty-generate")).toBeInTheDocument();
+    expect(screen.queryByTestId("t5-scorecard")).not.toBeInTheDocument();
+  });
+
+  it("polls until the payload lands and shows live content (poll-to-live)", async () => {
+    vi.useFakeTimers();
+    const POLL_INTERVAL_MS = 6000;
+    try {
+      apiMocks.getDashboard
+        .mockResolvedValueOnce({
+          payload: null,
+          generated_at: null,
+          is_stale: false,
+          provenance: null,
+        })
+        .mockResolvedValue({
+          payload: FIVE_FORCES_FALLBACK,
+          generated_at: "2026-06-01T00:00:00Z",
+          is_stale: false,
+          provenance: "live",
+        });
+      apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
+
+      render(inRouter(<FiveForcesView />));
+
+      // Flush the initial getDashboard microtask so the component settles to empty state.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      const btn = screen.getByTestId("mr-dash-empty-generate");
+
+      act(() => {
+        btn.click();
+      });
+
+      // Flush the runAssessment promise.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Still generating — live content must NOT be shown yet.
+      expect(screen.getByTestId("mr-dash-empty-generate")).toBeDisabled();
+      expect(screen.queryByTestId("t5-scorecard")).not.toBeInTheDocument();
+
+      // Advance one poll interval — getDashboard resolves with live payload.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      });
+
+      expect(screen.getByTestId("t5-scorecard")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
