@@ -116,6 +116,26 @@ export const FIVE_FORCES_FALLBACK: FiveForcesData = {
       title: "All forces simultaneously active — historical turning point zone",
       body: "Dalio's key insight: individual forces are manageable in isolation. Co-activation of all five is historically rare and has preceded major monetary system restructurings (1930s, 1971–80).",
     },
+    network: {
+      label: "Influence network (current)",
+      edges: [
+        { fromLabel: "Debt / money", toLabel: "Internal politics", strength: 0.54 },
+        { fromLabel: "Geopolitical", toLabel: "Debt / money", strength: 0.45 },
+        { fromLabel: "Internal politics", toLabel: "Geopolitical", strength: 0.45 },
+        { fromLabel: "Nature", toLabel: "Debt / money", strength: 0.36 },
+      ],
+      projections: [
+        { force: "Debt / money", current: 9, projected: 8.6, delta: -0.4 },
+        { force: "Internal politics", current: 8, projected: 8.3, delta: 0.3 },
+        { force: "Geopolitical", current: 9, projected: 8.7, delta: -0.3 },
+        { force: "Technology", current: 6, projected: 6, delta: 0 },
+        { force: "Nature", current: 5, projected: 5.2, delta: 0.2 },
+      ],
+      amplifier: "Debt / money",
+      absorber: "Internal politics",
+      contagion: 0.45,
+      contagionLabel: "Spreading",
+    },
   },
   signals: {
     label: "Section C — current market data",
