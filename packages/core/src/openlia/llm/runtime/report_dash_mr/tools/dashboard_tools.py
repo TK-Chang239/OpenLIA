@@ -24,6 +24,7 @@ from openlia.macro_research.quant.classification import (
     classify_debt_cycle,
 )
 from openlia.macro_research.quant.forces import ForceScores, classify_five_forces
+from openlia.macro_research.quant.markov import markov_outlook, resolve_quadrant
 from openlia.macro_research.quant.monte_carlo import simulate_all_weather_stress
 from openlia.macro_research.quant.seasons import (
     SeasonsInputs,
@@ -292,6 +293,84 @@ def build_classify_four_seasons_tool() -> ResearchTool:
     )
 
 
+def build_markov_four_seasons_tool() -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            classification = classify_four_seasons(
+                SeasonsInputs(
+                    pmi=float(args["pmi"]),
+                    gdp_yoy=float(args["gdp_yoy"]),
+                    cpi_yoy=float(args["cpi_yoy"]),
+                    credit_spread=float(args["credit_spread"]),
+                )
+            )
+            out = markov_outlook(resolve_quadrant(classification))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ToolExecutionError(
+                f"markov_four_seasons requires numeric pmi, gdp_yoy, cpi_yoy, credit_spread. {exc}"
+            ) from exc
+        return ToolResult(
+            payload={
+                "current_season": out.current_season,
+                "next_quarter": out.distribution,
+                "persistence": out.persistence,
+                "most_likely_next": out.most_likely_next,
+                "adverse_season": out.adverse_season,
+                "adverse_prob": out.adverse_prob,
+                "expected_dwell_quarters": out.expected_dwell_quarters,
+                "horizon_quarters": out.horizon_quarters,
+                "horizon": out.horizon_distribution,
+            },
+            provenance=ComputedSource(method="markov_four_seasons", derived_from=["(inputs)"]),
+            summary=(
+                f"current={out.current_season} P(stay)={out.persistence:.2f} "
+                f"P(Autumn)={out.adverse_prob:.2f}"
+            ),
+        )
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="markov_four_seasons",
+            description=(
+                "Deterministic Markov transition outlook for the four-seasons regime, from "
+                "the same four indicators as classify_four_seasons. Returns the current "
+                "season, the next-quarter transition-probability distribution "
+                "(`next_quarter`, a season->decimal-probability dict; render as a {season, prob} "
+                "array), `persistence` (P stay), `most_likely_next`, "
+                "`adverse_season`/`adverse_prob` (P of moving to Autumn), "
+                "`expected_dwell_quarters`, and the `horizon_quarters`-ahead distribution "
+                "(`horizon`, same season->decimal-probability dict shape; render as a {season, "
+                "prob} array). Use the returned numbers verbatim to fill "
+                "transitionRisk.probabilities."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pmi": {
+                        "type": "number",
+                        "description": "Manufacturing PMI (ISM / S&P Global) level",
+                    },
+                    "gdp_yoy": {
+                        "type": "number",
+                        "description": "Real GDP growth, percent year-over-year",
+                    },
+                    "cpi_yoy": {
+                        "type": "number",
+                        "description": "Headline CPI, percent year-over-year",
+                    },
+                    "credit_spread": {
+                        "type": "number",
+                        "description": "IG vs HY credit-spread proxy (decimal, e.g. 0.04)",
+                    },
+                },
+                "required": ["pmi", "gdp_yoy", "cpi_yoy", "credit_spread"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
 def build_classify_all_weather_tool() -> ResearchTool:
     def _execute(args: dict[str, Any]) -> ToolResult:
         try:
@@ -474,7 +553,7 @@ def build_classify_five_forces_tool() -> ResearchTool:
 CLASSIFY_TOOL_BY_SLUG: dict[str, list[Callable[[], ResearchTool]]] = {
     "debt_cycle": [build_classify_debt_cycle_tool],
     "world_order": [build_classify_world_order_tool],
-    "four_seasons": [build_classify_four_seasons_tool],
+    "four_seasons": [build_classify_four_seasons_tool, build_markov_four_seasons_tool],
     "all_weather": [build_classify_all_weather_tool, build_simulate_all_weather_stress_tool],
     "five_forces": [build_classify_five_forces_tool],
 }

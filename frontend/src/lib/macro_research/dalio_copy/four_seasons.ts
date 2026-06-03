@@ -180,6 +180,27 @@ export const FOUR_SEASONS_FALLBACK: FourSeasonsData = {
       title: "Key indicator to watch",
       body: "BEA Q1 2026 GDP advance estimate (Apr 30) is the single highest-impact data release for season reclassification. A reading below 1.0% would confirm the growth axis as firmly negative. ISM April PMI (May 1) is the second trigger — particularly new orders sub-index.",
     },
+    probabilities: {
+      currentSeason: "Summer",
+      nextQuarter: [
+        { season: "Spring", prob: 0.08 },
+        { season: "Summer", prob: 0.6 },
+        { season: "Autumn", prob: 0.27 },
+        { season: "Winter", prob: 0.05 },
+      ],
+      persistence: 0.6,
+      mostLikelyNext: "Summer",
+      adverseSeason: "Autumn",
+      adverseProb: 0.27,
+      expectedDwellQuarters: 2.5,
+      horizonQuarters: 4,
+      horizon: [
+        { season: "Spring", prob: 0.18 },
+        { season: "Summer", prob: 0.3 },
+        { season: "Autumn", prob: 0.27 },
+        { season: "Winter", prob: 0.25 },
+      ],
+    },
   },
   assetPlaybook: {
     cards: [

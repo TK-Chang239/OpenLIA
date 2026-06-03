@@ -150,6 +150,27 @@ def _four_seasons_fixture() -> dict:
                 "title": "Key indicator to watch",
                 "body": "BEA Q1 2026 GDP advance estimate (Apr 30).",
             },
+            "probabilities": {
+                "currentSeason": "Summer",
+                "nextQuarter": [
+                    {"season": "Spring", "prob": 0.08},
+                    {"season": "Summer", "prob": 0.60},
+                    {"season": "Autumn", "prob": 0.27},
+                    {"season": "Winter", "prob": 0.05},
+                ],
+                "persistence": 0.60,
+                "mostLikelyNext": "Summer",
+                "adverseSeason": "Autumn",
+                "adverseProb": 0.27,
+                "expectedDwellQuarters": 2.5,
+                "horizonQuarters": 4,
+                "horizon": [
+                    {"season": "Spring", "prob": 0.18},
+                    {"season": "Summer", "prob": 0.30},
+                    {"season": "Autumn", "prob": 0.27},
+                    {"season": "Winter", "prob": 0.25},
+                ],
+            },
         },
         "assetPlaybook": {
             "cards": [
@@ -216,6 +237,19 @@ def test_four_seasons_invalid_marker_variant_rejected():
 
     with pytest.raises(ValidationError):
         FourSeasonsData.model_validate(fixture)
+
+
+def test_four_seasons_transition_probabilities_validates() -> None:
+    data = FourSeasonsData.model_validate(_four_seasons_fixture())
+    probs = data.transitionRisk.probabilities
+    assert probs.currentSeason == "Summer"
+    assert probs.persistence == 0.60
+    assert probs.adverseSeason == "Autumn"
+    assert probs.adverseProb == 0.27
+    assert probs.nextQuarter[1].season == "Summer"
+    assert probs.nextQuarter[1].prob == 0.60
+    assert probs.horizonQuarters == 4
+    assert len(probs.horizon) == 4
 
 
 def test_four_seasons_invalid_direction_rejected():

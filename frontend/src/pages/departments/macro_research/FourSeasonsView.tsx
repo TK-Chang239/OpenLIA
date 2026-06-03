@@ -10,6 +10,7 @@ import type {
   T2QuadrantSeason,
   T2ScorecardRow,
   T2Tone,
+  T2TransitionProb,
 } from "../../../lib/macro_research/dalio_copy/types";
 import {
   DashEmpty,
@@ -22,6 +23,10 @@ import {
   SrcFoot,
   Verdict,
 } from "../../../components/macro_research/_shared/widgets";
+
+function fmtProb(p: number): string {
+  return `${(p * 100).toFixed(0)}%`;
+}
 
 const POLL_INTERVAL_MS = 6000;
 const POLL_MAX_ATTEMPTS = 70; // ~7 min; a real macro run takes a few minutes
@@ -208,6 +213,75 @@ export default function FourSeasonsView(): JSX.Element {
           bull={{ label: "Bull case", title: data.transitionRisk.bull.title, body: data.transitionRisk.bull.body }}
           bear={{ label: "Bear case", title: data.transitionRisk.bear.title, body: data.transitionRisk.bear.body }}
         />
+        <div
+          className="mr-card-sm"
+          data-testid="t2-transition-probabilities"
+          style={{ marginTop: 14 }}
+        >
+          <div className="mr-card-title">
+            Regime transition probabilities (from {data.transitionRisk.probabilities.currentSeason})
+          </div>
+          <div className="mr-bar-section" style={{ marginTop: 8 }}>
+            <div className="mr-bar-section-title">Next quarter</div>
+            {data.transitionRisk.probabilities.nextQuarter.map((p: T2TransitionProb) => (
+              <div key={p.season} className="mr-bar-row">
+                <div className="mr-bar-label">{p.season}</div>
+                <div className="mr-bar-track">
+                  <div
+                    className={`mr-bar-fill ${
+                      p.season === data.transitionRisk.probabilities.adverseSeason ? "mr-fill-bad" : "mr-fill-ok"
+                    }`}
+                    style={{ width: `${p.prob * 100}%` }}
+                  />
+                </div>
+                <div className="mr-bar-val">{fmtProb(p.prob)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mr-grid3" style={{ marginTop: 12 }}>
+            <div>
+              <div className="mr-card-title">Persistence</div>
+              <div className="mr-card-body-text">
+                {fmtProb(data.transitionRisk.probabilities.persistence)} stay in{" "}
+                {data.transitionRisk.probabilities.currentSeason} · ~
+                {data.transitionRisk.probabilities.expectedDwellQuarters.toFixed(1)}q dwell
+              </div>
+            </div>
+            <div>
+              <div className="mr-card-title">Most likely next</div>
+              <div className="mr-card-body-text">
+                {data.transitionRisk.probabilities.mostLikelyNext}
+              </div>
+            </div>
+            <div>
+              <div className="mr-card-title">
+                P(&rarr; {data.transitionRisk.probabilities.adverseSeason})
+              </div>
+              <div className="mr-card-body-text">
+                {fmtProb(data.transitionRisk.probabilities.adverseProb)} next quarter
+              </div>
+            </div>
+          </div>
+          <div className="mr-bar-section">
+            <div className="mr-bar-section-title">
+              {data.transitionRisk.probabilities.horizonQuarters} quarters ahead
+            </div>
+            {data.transitionRisk.probabilities.horizon.map((p: T2TransitionProb) => (
+              <div key={p.season} className="mr-bar-row">
+                <div className="mr-bar-label">{p.season}</div>
+                <div className="mr-bar-track">
+                  <div
+                    className={`mr-bar-fill ${
+                      p.season === data.transitionRisk.probabilities.adverseSeason ? "mr-fill-bad" : "mr-fill-ok"
+                    }`}
+                    style={{ width: `${p.prob * 100}%` }}
+                  />
+                </div>
+                <div className="mr-bar-val">{fmtProb(p.prob)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="mr-card-sm" style={{ marginTop: 14 }}>
           <div className="mr-card-title">{data.transitionRisk.keyIndicator.title}</div>
           <div className="mr-card-body-text">{data.transitionRisk.keyIndicator.body}</div>

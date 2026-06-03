@@ -198,6 +198,7 @@ describe("FourSeasonsView", () => {
     expect(screen.getByTestId("t2-quadrant-marker-prev")).toBeInTheDocument();
     expect(screen.getByTestId("t2-verdict")).toBeInTheDocument();
     expect(screen.getByTestId("t2-transition-risk")).toBeInTheDocument();
+    expect(screen.getByTestId("t2-transition-probabilities")).toBeInTheDocument();
     expect(screen.getByTestId("t2-asset-playbook")).toBeInTheDocument();
     expect(screen.getByText(/Section D — asset playbook/i)).toBeInTheDocument();
   });
