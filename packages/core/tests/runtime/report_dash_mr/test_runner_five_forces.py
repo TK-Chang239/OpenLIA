@@ -1,8 +1,7 @@
 """End-to-end five_forces dashboard run through the real tool-use loop.
 
-Mirrors test_runner_all_weather.py: a fake adapter scripts two turns —
-classify_five_forces (with F1/F3 seeded via the injected data_context and the
-remaining three forces scored by the model), then emit_dashboard with a
+Mirrors test_runner_all_weather.py: a fake adapter scripts three turns —
+classify_five_forces, analyze_five_forces_network, then emit_dashboard with a
 complete FiveForcesData payload. The runner is exercised for real (no mocking
 of the loop); the assertions confirm the typed payload round-trips into
 ``RunResult`` and validates as FiveForcesData.
@@ -81,7 +80,7 @@ def _complete_five_forces_payload() -> dict:
                 ],
                 "amplifier": "Debt / money",
                 "absorber": "Internal politics",
-                "contagion": 0.42,
+                "contagion": 0.48,
                 "contagionLabel": "Spreading",
             },
         },
