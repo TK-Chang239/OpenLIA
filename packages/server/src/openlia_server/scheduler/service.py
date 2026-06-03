@@ -248,7 +248,7 @@ class SchedulerService:
 
         for jt in (
             JobType.EU_SCAN,
-            JobType.MR_ASSESSMENT,
+            JobType.MR_DASH,
             JobType.RS_SNAPSHOT,
         ):
             try:
@@ -498,7 +498,7 @@ class SchedulerService:
         if isinstance(schedule, RsSchedule):
             return JobType.RS_SNAPSHOT
         if isinstance(schedule, MrDashboardState):
-            return JobType.MR_ASSESSMENT
+            return JobType.MR_DASH
         raise TypeError(f"unknown schedule type: {type(schedule).__name__}")
 
     @staticmethod

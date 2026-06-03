@@ -191,6 +191,71 @@
 }
 .mr-card-body-text strong { color: var(--color-text-primary); font-weight: 500; }
 
+/* ===== Loading skeleton ===== */
+
+.mr-dash-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mr-skel {
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-elevated) 0%,
+    color-mix(in srgb, var(--color-border-subtle) 40%, var(--color-bg-elevated)) 50%,
+    var(--color-bg-elevated) 100%
+  );
+  background-size: 200% 100%;
+  animation: mr-skel-shimmer 1.4s var(--ease-in-out) infinite;
+}
+.mr-skel-hero { height: 120px; }
+.mr-skel-line { height: 18px; width: 40%; }
+.mr-skel-block { height: 96px; }
+
+@keyframes mr-skel-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===== Empty state ===== */
+
+.mr-dash-empty {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+.mr-dash-empty-card {
+  max-width: 420px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 22px 24px;
+}
+.mr-dash-empty-btn {
+  margin-top: 4px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--color-accent-primary-rgb), 0.4);
+  background: rgba(var(--color-accent-primary-rgb), 0.12);
+  color: var(--color-accent-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mr-dash-empty-btn:hover:not(:disabled) {
+  background: rgba(var(--color-accent-primary-rgb), 0.2);
+}
+.mr-dash-empty-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.mr-dash-empty-note {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
 /* ===== Status pill (single vocabulary across all tabs) ===== */
 
 .mr-spill {

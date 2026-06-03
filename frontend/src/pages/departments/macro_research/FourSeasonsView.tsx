@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { getDashboard } from "../../../api/macro_research";
-import { FOUR_SEASONS_FALLBACK } from "../../../lib/macro_research/dalio_copy/four_seasons";
+import { getDashboard, runAssessment } from "../../../api/macro_research";
 import type {
   FourSeasonsData,
   Status,
@@ -13,7 +12,9 @@ import type {
   T2Tone,
 } from "../../../lib/macro_research/dalio_copy/types";
 import {
+  DashEmpty,
   DashHero,
+  DashLoading,
   ProseCard,
   ScenarioDuo,
   SectionLabel,
@@ -21,6 +22,9 @@ import {
   SrcFoot,
   Verdict,
 } from "../../../components/macro_research/_shared/widgets";
+
+const POLL_INTERVAL_MS = 6000;
+const POLL_MAX_ATTEMPTS = 70; // ~7 min; a real macro run takes a few minutes
 
 function toneToStatus(tone: T2Tone): Status {
   switch (tone) {
@@ -44,14 +48,85 @@ function fillClassFromStatus(s: Status): string {
 }
 
 export default function FourSeasonsView(): JSX.Element {
-  const [, setLive] = useState<FourSeasonsData | null>(null);
+  const [data, setData] = useState<FourSeasonsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [, setGeneratedAt] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const load = () => {
+    setLoading(true);
+    getDashboard<FourSeasonsData>("four_seasons")
+      .then((r) => {
+        setData(r.payload);
+        setGeneratedAt(r.generated_at);
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    getDashboard("four_seasons").catch(() => undefined);
+    load();
+    return stopPolling;
   }, []);
 
-  void setLive;
-  const data: FourSeasonsData = FOUR_SEASONS_FALLBACK;
+  const startPolling = () => {
+    stopPolling();
+    let attempts = 0;
+    pollRef.current = setInterval(() => {
+      attempts += 1;
+      getDashboard<FourSeasonsData>("four_seasons")
+        .then((r) => {
+          if (r.payload) {
+            stopPolling();
+            setData(r.payload);
+            setGeneratedAt(r.generated_at);
+            setGenerating(false);
+            setNote(null);
+          } else if (attempts >= POLL_MAX_ATTEMPTS) {
+            stopPolling();
+            setGenerating(false);
+            setNote("Still generating. Reload in a moment to see the result.");
+          }
+        })
+        .catch(() => undefined);
+    }, POLL_INTERVAL_MS);
+  };
+
+  const onGenerate = () => {
+    setNote(
+      "Generating a live reading from current data — this can take a few minutes. Keep this tab open.",
+    );
+    setGenerating(true);
+    runAssessment("four_seasons")
+      .then((r) => {
+        if (r.status === "queued") {
+          startPolling();
+        } else if (r.status === "already_running") {
+          // A run is already in flight (e.g. another tab) — watch for it.
+          setNote("A reading is already being generated — watching for the result.");
+          startPolling();
+        } else {
+          setGenerating(false);
+          setNote("Generation could not start (background scheduler unavailable).");
+        }
+      })
+      .catch(() => {
+        setGenerating(false);
+        setNote("Could not start generation. Please try again.");
+      });
+  };
+
+  if (loading) return <DashLoading />;
+  if (!data) return <DashEmpty onGenerate={onGenerate} generating={generating} note={note} />;
 
   const heroStats = data.scorecard.rows
     .slice(0, 4)

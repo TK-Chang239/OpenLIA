@@ -881,11 +881,21 @@ def create_app(
     app.state.mr_cache_store = mr_cache_store
     app.state.mr_schedule_service = mr_schedule_svc
 
+    # Wire the cross-department snapshot reader into the registered department
+    # so MacroResearchDepartment.get_current_snapshot reads the new
+    # MrDashboardCache table (mirrors the scheduler's wire_mr pattern).
+    from openlia.departments import get_department
+
+    from openlia_server.services.mr_snapshot_reader import MrDashboardSnapshotReader
+
+    mr_department = get_department("macro_research")
+    if mr_department is not None:
+        mr_department.set_snapshot_reader(MrDashboardSnapshotReader(session_factory=factory))
+
     app.include_router(
         build_macro_research_router(
             db_session_factory=factory,
             mode=mode,
-            mr_runner=mr_runner,
             dashboard_service=mr_dashboard_svc,
         )
     )
