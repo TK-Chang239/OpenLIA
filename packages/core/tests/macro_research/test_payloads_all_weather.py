@@ -122,6 +122,29 @@ def _all_weather_fixture() -> dict:
                 },
             ],
         },
+        "stressTest": {
+            "label": "Section E — Monte-Carlo stress test",
+            "intro": "10,000-path 1-year simulation under baked reference parameters.",
+            "distribution": {
+                "title": "Base-case 1-year return distribution (user vs reference)",
+                "bars": [
+                    {"label": "5th pct", "userPct": -0.18, "refPct": -0.09},
+                    {"label": "Median", "userPct": 0.06, "refPct": 0.05},
+                    {"label": "95th pct", "userPct": 0.31, "refPct": 0.20},
+                ],
+            },
+            "scenarios": [
+                {
+                    "name": "Equity crash / deleveraging",
+                    "userMedianPct": -0.22,
+                    "userP5Pct": -0.41,
+                    "refMedianPct": -0.08,
+                    "refP5Pct": -0.19,
+                    "tone": "red",
+                }
+            ],
+            "note": "Stress carried by scenario overlays; Gaussian draws.",
+        },
         "verdict": {
             "title": "Synthesis verdict",
             "body": "The 60/40 concentrates ~87% of risk in the equity sleeve.",
@@ -157,3 +180,12 @@ def test_all_weather_rejects_invalid_slice_tone() -> None:
     fixture["comparison"]["benchmark"]["slices"][0]["tone"] = "magenta"
     with pytest.raises(ValidationError):
         AllWeatherData.model_validate(fixture)
+
+
+def test_all_weather_stress_test_validates() -> None:
+    data = AllWeatherData.model_validate(_all_weather_fixture())
+    assert data.stressTest.distribution.bars[0].userPct == -0.18
+    row = data.stressTest.scenarios[0]
+    assert row.name == "Equity crash / deleveraging"
+    assert row.tone == "red"
+    assert row.userP5Pct == -0.41

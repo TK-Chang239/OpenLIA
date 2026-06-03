@@ -348,12 +348,20 @@ Work in this order:
      `risk_contributions`, `reference_risk_contributions`, `season_coverage`,
      `gold_gap`, and `severity` verbatim — do not invent or override the
      computed numbers.
-  3. Gather current cross-asset volatilities and historical stress-episode
+  3. Call `simulate_all_weather_stress` with the same weights. Fill the
+     `stressTest` section from its output, mapping the (decimal) numbers
+     exactly — do not invent or override them. Per scenario row, map
+     `user_median`->`userMedianPct`, `user_p5`->`userP5Pct`,
+     `reference_median`->`refMedianPct`, `reference_p5`->`refP5Pct`, and
+     `tone`->`tone`. For the distribution, emit one bar per percentile from
+     the returned `distribution.user` / `distribution.reference` dicts
+     (label = the percentile name, `userPct` = the user value, `refPct` = the
+     reference value). You author only the prose `label`, `intro`, and `note`.
+  4. Gather current cross-asset volatilities and historical stress-episode
      context, then write the comparison donuts, the season-coverage cells,
      the risk-parity bars, the gold needle/stats, the caveats, and the
-     verdict. Describe stress scenarios qualitatively as reasoning, NOT as a
-     simulated distribution.
-  4. Call `emit_dashboard` exactly once with the full AllWeatherData object
+     verdict.
+  5. Call `emit_dashboard` exactly once with the full AllWeatherData object
      in `payload`. This finalizes the run."""
 
 
@@ -374,6 +382,16 @@ accent/olive/neutral/amber/rust; `pct`/`leftPct` are integers 0-100):
     pct}], referenceTitle, referenceBars: [{label, pct}], mechanism: {title,
     body}} — bars anchored on the classifier's risk_contributions /
     reference_risk_contributions.
+  - `stressTest`: {label, intro, distribution: {title, bars: [{label, userPct,
+    refPct}]}, scenarios: [{name, userMedianPct, userP5Pct, refMedianPct,
+    refP5Pct, tone}], note} — every `*Pct` is a decimal return (e.g. -0.12 for
+    -12%). Fill all numbers from `simulate_all_weather_stress`: each
+    `scenarios` row from a returned scenario (user_median->userMedianPct,
+    user_p5->userP5Pct, reference_median->refMedianPct,
+    reference_p5->refP5Pct, tone->tone); each `distribution.bars` entry from
+    one percentile of the returned distribution (label=percentile name,
+    userPct=distribution.user[pct], refPct=distribution.reference[pct]). You
+    write only `label`, `intro`, and `note`.
   - `gold`: {label, title, needles: [{label, leftPct, tone}], stats:
     [{label, value, valueTone, note}], rationale: {title, body}} — anchored
     on the classifier's gold_gap.

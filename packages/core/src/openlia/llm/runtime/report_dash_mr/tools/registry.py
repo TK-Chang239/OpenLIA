@@ -104,8 +104,7 @@ def build_catalog(
             f"Known dashboards: {sorted(PAYLOAD_MODEL_BY_SLUG)}."
         )
     core: list[ResearchTool] = [build_emit_dashboard_tool(workspace, payload_model)]
-    classify_builder = CLASSIFY_TOOL_BY_SLUG.get(dashboard_slug)
-    if classify_builder is not None:
+    for classify_builder in CLASSIFY_TOOL_BY_SLUG.get(dashboard_slug, []):
         core.append(classify_builder())
 
     if enabled_connectors.eodhd:

@@ -300,6 +300,34 @@ export interface T3CaveatCard {
   body: string;
 }
 
+export interface T3StressBar {
+  label: string;
+  userPct: number;
+  refPct: number;
+}
+
+export interface T3StressScenarioRow {
+  name: string;
+  userMedianPct: number;
+  userP5Pct: number;
+  refMedianPct: number;
+  refP5Pct: number;
+  tone: T3Tone;
+}
+
+export interface T3StressDistribution {
+  title: string;
+  bars: T3StressBar[];
+}
+
+export interface T3StressTest {
+  label: string;
+  intro: string;
+  distribution: T3StressDistribution;
+  scenarios: T3StressScenarioRow[];
+  note: string;
+}
+
 export interface AllWeatherData {
   header: {
     title: string;
@@ -325,6 +353,7 @@ export interface AllWeatherData {
     referenceBars: T3RiskBar[];
     mechanism: { title: string; body: string };
   };
+  stressTest: T3StressTest;
   gold: {
     label: string;
     title: string;
