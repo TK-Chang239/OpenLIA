@@ -105,6 +105,7 @@ class Runner:
             template=request.template,
             ledger=ledger,
             subject=request.subject,
+            dashboard_slug=request.dashboard_slug,
         )
 
         catalog = build_catalog(
@@ -112,6 +113,7 @@ class Runner:
             workspace=workspace,
             transports=self.transports,
             enabled_connectors=request.enabled_connectors,
+            dashboard_slug=request.dashboard_slug,
             dispatcher=self.dispatcher,
         )
 
@@ -119,7 +121,11 @@ class Runner:
             "run.started",
             {
                 "subject": request.subject,
-                "template_id": request.template.template_id,
+                "template_id": (
+                    request.template.template_id
+                    if request.template is not None
+                    else request.dashboard_slug
+                ),
                 "language": request.language.value,
                 "provider_kind": request.provider_kind,
                 "model": request.model,
@@ -293,10 +299,11 @@ def _initial_user_turn(request: RunRequest) -> Message:
     return Message(
         role="user",
         content=(
-            f"Produce the market briefing for {request.subject!r}. Follow "
-            f"the template described in the system prompt. Use the enabled "
-            f"tools to research, chart, and write. Call `finalize` only "
-            f"after every required section is written."
+            f"Produce the {request.dashboard_slug} Macro Research dashboard. "
+            f"Gather the required inputs with the enabled tools, call "
+            f"`classify_debt_cycle` with the latest indicator values, then "
+            f"call `emit_dashboard` once with the complete payload matching "
+            f"the schema in the system prompt."
         ),
     )
 

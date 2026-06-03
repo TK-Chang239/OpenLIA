@@ -174,8 +174,9 @@ class RunRequest(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    dashboard_slug: str = Field(..., min_length=1)
     subject: str = Field(..., min_length=1)
-    template: TemplateSpec
+    template: TemplateSpec | None = None
     language: Language = Language.EN
     length: ReportLength = ReportLength.NORMAL
     provider_kind: str = Field(..., min_length=1)
@@ -240,3 +241,7 @@ class RunResult(BaseModel):
     charts: list[ChartSpec] = Field(default_factory=list)
     citations: list[CitationLogEntry] = Field(default_factory=list)
     cover: CoverSpec | None = None
+    # JSON-ready serialized dashboard payload (e.g. DebtCycleData). None
+    # until the model calls emit_dashboard; set when the run finalizes
+    # via a dashboard emit.
+    payload: dict[str, Any] | None = None

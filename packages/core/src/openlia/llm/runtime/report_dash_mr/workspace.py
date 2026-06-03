@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from pydantic import BaseModel
+
 from .ledger import CitationLedger
 from .schemas import ChartSpec, CoverSpec, RunResult, TemplateSpec
 
@@ -36,9 +38,12 @@ class WrittenSection:
 class RunWorkspace:
     """Mutable run state shared between the runner and the output tools."""
 
-    template: TemplateSpec
+    template: TemplateSpec | None
     ledger: CitationLedger
     subject: str
+    # Identifies the dashboard this run produces (e.g. "debt_cycle"). Used
+    # as the template_id surrogate in to_result when there is no template.
+    dashboard_slug: str | None = None
     sections: dict[str, WrittenSection] = field(default_factory=dict)
     charts: dict[str, ChartSpec] = field(default_factory=dict)
     finalized: bool = False
@@ -61,12 +66,18 @@ class RunWorkspace:
     # v1 ReportCover via the detail adapter.
     cover: CoverSpec | None = None
     cover_written_this_run: bool = False
+    # The typed dashboard payload emitted via ``emit_dashboard`` (e.g.
+    # ``DebtCycleData``). None until the model emits one. Setting it
+    # finalizes the run.
+    payload: BaseModel | None = None
 
     def __post_init__(self) -> None:
-        if not self.section_order:
+        if not self.section_order and self.template is not None:
             self.section_order = [s.id for s in self.template.sections]
 
     def required_section_ids(self) -> list[str]:
+        if self.template is None:
+            return []
         return [section.id for section in self.template.sections]
 
     def missing_section_ids(self) -> list[str]:
@@ -95,6 +106,12 @@ class RunWorkspace:
         self.cover = cover
         self.cover_written_this_run = True
 
+    def set_payload(self, payload: BaseModel) -> None:
+        """Record the typed dashboard payload from ``emit_dashboard`` and
+        finalize the run so the runner exits its loop."""
+        self.payload = payload
+        self.finalized = True
+
     def to_result(self, *, status: str, message: str = "") -> RunResult:
         ordered_sections = []
         for sid in self.section_order:
@@ -108,13 +125,17 @@ class RunWorkspace:
                     "markdown": section.markdown,
                 }
             )
+        template_id = (
+            self.template.template_id if self.template is not None else (self.dashboard_slug or "")
+        )
         return RunResult(
             status=status,  # type: ignore[arg-type]
             subject=self.subject,
-            template_id=self.template.template_id,
+            template_id=template_id,
             message=message,
             sections=ordered_sections,
             charts=list(self.charts.values()),
             citations=self.ledger.all(),
             cover=self.cover,
+            payload=self.payload.model_dump(mode="json") if self.payload is not None else None,
         )
