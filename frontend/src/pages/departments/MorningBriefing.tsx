@@ -8,7 +8,9 @@ import {
   type MbSchedule,
 } from "../../api/morning-briefing";
 import { MbBigCard } from "../../components/morning-briefing/feed/MbBigCard";
+import { MbEmptyPage } from "../../components/morning-briefing/feed/MbEmptyPage";
 import { MbGeneratingCard } from "../../components/morning-briefing/feed/MbGeneratingCard";
+import { MbHero } from "../../components/morning-briefing/feed/MbHero";
 import {
   MbFeedSection,
   MbSectionEmpty,
@@ -18,6 +20,7 @@ import {
   groupReports,
   searchReports,
 } from "../../components/morning-briefing/feed/mbFeedHelpers";
+import { pickEarliestNextBriefing } from "../../lib/morning-briefing/next-briefing";
 import { MbCabinetView } from "../../components/morning-briefing/MbCabinetView";
 import { MbRunNowModal } from "../../components/morning-briefing/MbRunNowModal";
 import { MbSchedulesView } from "../../components/morning-briefing/MbSchedulesView";
@@ -138,6 +141,15 @@ export default function MorningBriefing() {
     return running + (liveReportId ? 1 : 0);
   }, [runs, liveReportId]);
 
+  const heroStats = useMemo(() => {
+    const all = groupReports(runs);
+    return {
+      briefingsThisWeek: all.today.length + all.thisWeek.length,
+      activeSchedules: schedules.filter((s) => s.is_enabled).length,
+      nextRun: pickEarliestNextBriefing(schedules)?.display ?? null,
+    };
+  }, [runs, schedules]);
+
   const hasError = Boolean(runsError);
   const initialLoading = runsLoading && runs.length === 0;
   const allEmpty =
@@ -248,32 +260,25 @@ export default function MorningBriefing() {
               <Skeleton className="h-20" />
             </div>
           ) : allEmpty ? (
-            <div
-              data-testid="mb-empty-page"
-              className="flex flex-col items-center justify-center text-center py-24"
-            >
-              <h2 className="text-[20px] font-semibold text-[--color-text-primary] mb-2">
-                {t("morning_briefing.empty_title")}
-              </h2>
-              <p className="text-[14px] text-[--color-text-secondary] max-w-[420px] mb-6 leading-[1.6]">
-                {t("morning_briefing.empty_sub")}
-              </p>
-              <button
-                type="button"
-                onClick={() => setCabinetOpen(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover]"
-              >
-                <Library size={14} /> {t("morning_briefing.open_library")}
-              </button>
-            </div>
+            <MbEmptyPage
+              onRunNow={() => setRunNowOpen(true)}
+              onOpenLibrary={() => setCabinetOpen(true)}
+            />
           ) : (
             <>
               <div
-                className="flex items-center gap-2 flex-wrap mb-[22px]"
+                className="animate-feed-fade-up"
                 style={{ animationDelay: "80ms" }}
               >
-                <div className="flex-1" />
-                <div className="inline-flex items-center gap-2 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-[--color-bg-elevated] min-w-[220px]">
+                <MbHero
+                  briefingsThisWeek={heroStats.briefingsThisWeek}
+                  activeSchedules={heroStats.activeSchedules}
+                  nextRun={heroStats.nextRun}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap mb-[22px]">
+                <div className="inline-flex items-center gap-2 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-[--color-bg-elevated] flex-1 max-w-[320px]">
                   <Search size={13} className="text-[--color-text-tertiary]" />
                   <input
                     value={search}
