@@ -1093,6 +1093,7 @@
       "remove_confirm": "Delete"
     },
     "run_now_modal": {
+      "eyebrow": "Morning Briefing",
       "title": "Run a briefing now",
       "description": "Configure the settings below, then generate a briefing immediately. Your choices are remembered for next time.",
       "empty_error": "Pick a template or instructions before generating.",

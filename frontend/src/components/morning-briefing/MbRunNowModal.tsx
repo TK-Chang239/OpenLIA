@@ -75,17 +75,22 @@ export function MbRunNowModal({ open, onClose, onStarted }: Props) {
   return (
     <Dialog.Root open={open} onOpenChange={(v) => (!v ? onClose() : null)}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] max-h-[85vh] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[12px] shadow-lg flex flex-col overflow-hidden">
-          <header className="flex items-center justify-between px-5 h-12 border-b border-[--color-border-subtle] flex-shrink-0">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-[rgba(13,13,11,0.45)]" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] max-h-[85vh] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[14px] shadow-[0_16px_40px_rgba(13,13,11,0.18)] flex flex-col overflow-hidden">
+          <header className="flex items-start justify-between px-[22px] py-[18px] border-b border-[--color-border-subtle] flex-shrink-0">
             <div>
-              <Dialog.Title asChild>
-                <h2 className="text-[15px] font-semibold text-[--color-text-primary] m-0">
-                  {t("morning_briefing.run_now_modal.title")}
-                </h2>
-              </Dialog.Title>
+              <div className="flex items-center gap-3">
+                <Dialog.Title asChild>
+                  <h2 className="text-[16px] font-semibold tracking-[-0.005em] text-[--color-text-primary] m-0">
+                    {t("morning_briefing.run_now_modal.title")}
+                  </h2>
+                </Dialog.Title>
+                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                  {t("morning_briefing.run_now_modal.eyebrow")}
+                </span>
+              </div>
               <Dialog.Description asChild>
-                <p className="text-[12px] text-[--color-text-tertiary] m-0">
+                <p className="mt-1 text-[12px] text-[--color-text-tertiary] m-0">
                   {t("morning_briefing.run_now_modal.description")}
                 </p>
               </Dialog.Description>
@@ -94,9 +99,9 @@ export function MbRunNowModal({ open, onClose, onStarted }: Props) {
               <button
                 type="button"
                 aria-label={t("morning_briefing.run_now_modal.cancel")}
-                className="text-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
+                className="ml-3 inline-flex h-7 w-7 items-center justify-center rounded-md text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] transition-colors"
               >
-                <X size={16} />
+                <X size={14} strokeWidth={2} />
               </button>
             </Dialog.Close>
           </header>
@@ -108,7 +113,7 @@ export function MbRunNowModal({ open, onClose, onStarted }: Props) {
             />
           </div>
 
-          <footer className="flex items-center justify-end gap-3 px-5 h-14 border-t border-[--color-border-subtle] flex-shrink-0">
+          <footer className="flex items-center justify-end gap-3 px-[22px] py-[14px] rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] flex-shrink-0">
             {empty ? (
               <p
                 data-testid="mb-run-now-empty-error"

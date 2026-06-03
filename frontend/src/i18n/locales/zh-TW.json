@@ -1093,6 +1093,7 @@
       "remove_confirm": "刪除"
     },
     "run_now_modal": {
+      "eyebrow": "晨間簡報",
       "title": "立即執行簡報",
       "description": "在下方設定選項，然後立即產生簡報。系統會記住您的選擇供下次使用。",
       "empty_error": "產生前請先選擇範本或指示。",
