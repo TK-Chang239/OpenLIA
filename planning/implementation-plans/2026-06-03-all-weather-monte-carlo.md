@@ -1119,3 +1119,27 @@ git commit -m "chore(macro-research): lint/format fixups for All-Weather MC" || 
 - **Percentages are decimals** in both the Python payload and `types.ts`; only the view multiplies by 100.
 - **No server `mr_dash_run_service` change** — `_build_data_context` already supplies the user's portfolio weights for `all_weather`.
 - If `npx vitest`/`tsc` is run from the repo root it will fail; run from `frontend/`.
+
+## Post-implementation amendments (review-driven)
+
+Three small changes were made during code review and are reflected in the
+final code (this plan's code blocks above were synced for #1; #2 and #3 are
+documented here):
+
+1. **Task 2 — per-scenario RNG + base-case guard.** Each scenario draws from
+   its own `np.random.default_rng([seed, i])` (not one shared RNG consumed
+   sequentially), so reordering/extending `SCENARIOS` can't silently change
+   another scenario's cached output; and a `RuntimeError` guards a missing
+   "Base case". (Code blocks above already reflect this.)
+2. **Task 5 — explicit prompt key-mapping.** `_ALL_WEATHER_WORKFLOW` step 3 and
+   the `_ALL_WEATHER_PAYLOAD_SHAPE` `stressTest` bullet spell out the
+   snake_case-tool-key → camelCase-payload-key mapping
+   (`user_median`→`userMedianPct`, etc.) and the one-bar-per-percentile
+   distribution mapping, instead of saying "use … verbatim" (which was
+   ambiguous because the tool returns snake_case but the payload is camelCase).
+3. **Field order.** `stressTest` is declared immediately after `riskParity`
+   (before `gold`) in `AllWeatherData` (`payloads.py` + `types.ts`) and in the
+   prompt payload-shape, matching the view's render order
+   (`riskParity → stressTest → gold → caveats → verdict`) — not "after
+   caveats" as the per-task steps above describe. Validation is name-based, so
+   this is purely for source-consistency.
