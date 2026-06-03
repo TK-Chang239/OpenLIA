@@ -210,6 +210,23 @@ export interface T2Note {
   body: string;
 }
 
+export interface T2TransitionProb {
+  season: string;
+  prob: number;
+}
+
+export interface T2TransitionProbabilities {
+  currentSeason: string;
+  nextQuarter: T2TransitionProb[];
+  persistence: number;
+  mostLikelyNext: string;
+  adverseSeason: string;
+  adverseProb: number;
+  expectedDwellQuarters: number;
+  horizonQuarters: number;
+  horizon: T2TransitionProb[];
+}
+
 export interface FourSeasonsData {
   header: {
     title: string;
@@ -237,6 +254,7 @@ export interface FourSeasonsData {
     bull: T2ProseCard;
     bear: T2ProseCard;
     keyIndicator: { title: string; body: string };
+    probabilities: T2TransitionProbabilities;
   };
   assetPlaybook: {
     cards: T2AssetCard[];
