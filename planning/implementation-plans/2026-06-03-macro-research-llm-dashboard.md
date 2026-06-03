@@ -70,7 +70,7 @@ from openlia.macro_research.quant.classification import (
 
 def test_two_red_indicators_yields_deleveraging():
     out = classify_debt_cycle(
-        DebtCycleInputs(debt_gdp=125.2, interest_revenue=18.6, tips_real_yield=1.94, dxy=104.0)
+        DebtCycleInputs(debt_gdp=125.2, interest_revenue=20.1, tips_real_yield=1.94, dxy=104.0)
     )
     assert isinstance(out, DebtCycleClassification)
     assert out.indicator_statuses["debt_gdp"] == "red"
