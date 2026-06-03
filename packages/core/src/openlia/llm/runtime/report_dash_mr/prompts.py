@@ -47,6 +47,16 @@ class ConnectorPromptInfo:
     tools: tuple[tuple[str, str], ...]
 
 
+@dataclass(frozen=True)
+class DashboardPromptSpec:
+    """Per-dashboard prompt content: the numbered workflow, the payload-shape
+    description block, and the indicator-sourcing hint for the connectors block."""
+
+    workflow: str
+    payload_shape: str
+    indicator_hint: str
+
+
 def build_system_prompt(
     request: RunRequest,
     *,
@@ -59,6 +69,10 @@ def build_system_prompt(
     classifying, and emitting one typed payload. The vestigial template is
     not used to shape the prompt.
     """
+    spec = DASHBOARD_PROMPT_SPECS.get(request.dashboard_slug)
+    if spec is None:
+        raise ValueError(f"no prompt spec for dashboard {request.dashboard_slug!r}")
+
     language_label = _LANGUAGE_LABELS.get(request.language, request.language.value)
     length_target = _LENGTH_TARGETS.get(request.length, "balanced length")
 
@@ -68,7 +82,13 @@ def build_system_prompt(
         language=language_label,
         length_target=length_target,
         instructions_block=_render_instructions_block(request.instructions),
-        connectors_block=_render_connectors_block(request.enabled_connectors, connector_tools),
+        workflow=spec.workflow,
+        payload_shape=spec.payload_shape,
+        connectors_block=_render_connectors_block(
+            request.enabled_connectors,
+            connector_tools,
+            indicator_hint=spec.indicator_hint,
+        ),
     )
 
 
@@ -91,20 +111,22 @@ def _render_instructions_block(instructions: str | None) -> str:
 def _render_connectors_block(
     connectors: EnabledConnectors,
     connector_tools: Sequence[ConnectorPromptInfo] = (),
+    *,
+    indicator_hint: str,
 ) -> str:
     """List the tool groups available this run.
 
     When all data connectors are off, state explicitly that the model
     should gather the indicators from its own knowledge of the latest
-    official figures rather than wait on a disabled tool.
+    official figures rather than wait on a disabled tool. ``indicator_hint``
+    names the specific levels this dashboard reads from market data.
     """
     available: list[str] = []
     if connectors.eodhd:
         available.append(
             "  - Market data (EODHD): `get_quotes`, `get_historical_prices`, "
             "`get_news`, `get_economic_calendar`, `get_macro_indicators`. Read "
-            "the latest levels for the US dollar index and TIPS real yields, and "
-            "any macro series the indicators rely on."
+            f"the latest levels for {indicator_hint}"
         )
     for info in connector_tools:
         tool_lines = "\n".join(f"    - {name}: {description}" for name, description in info.tools)
@@ -114,15 +136,15 @@ def _render_connectors_block(
     if connectors.web_search:
         available.append(
             "  - Web search: the provider's first-class web search. Favor "
-            "official sources (FRED, IMF, US Treasury, CBO, BEA) for the four "
+            "official sources (FRED, IMF, US Treasury, CBO, BEA) for the "
             "indicators and any figure you cite."
         )
     if not available:
         return (
-            "No data tools are enabled this run. Gather the four indicators from "
-            "your knowledge of the most recent official figures (FRED, IMF, US "
-            "Treasury, CBO, BEA), state the value and as-of date for each, then "
-            "classify and emit."
+            "No data tools are enabled this run. Gather the indicators this "
+            "dashboard needs from your knowledge of the most recent official "
+            "figures (FRED, IMF, US Treasury, CBO, BEA), state the value and "
+            "as-of date for each, then classify and emit."
         )
     return "These tool groups are enabled this run:\n\n" + "\n".join(available)
 
@@ -144,6 +166,22 @@ dashboard payload that the front end renders verbatim.
 
 {instructions_block}# Workflow
 
+{workflow}
+
+# Available tools
+{connectors_block}
+
+{payload_shape}
+
+# Citation discipline
+
+Ground every numeric field in a tool result or a classifier output. Name
+your sources in the `sources` field and state the as-of date for each
+indicator inside the scorecard rows so the read is traceable to the
+official figures it rests on."""
+
+
+_DEBT_CYCLE_WORKFLOW = """\
 Work in this order:
   1. Gather the four debt-cycle indicators, each with a value and an
      as-of date:
@@ -158,36 +196,42 @@ Work in this order:
      verbatim — do not invent or override the computed numbers.
   3. Write each narrative field from the data and citations you gathered.
   4. Call `emit_dashboard` exactly once with the full DebtCycleData
-     object in `payload`. This finalizes the run.
+     object in `payload`. This finalizes the run."""
 
-# Available tools
-{connectors_block}
 
+_DEBT_CYCLE_PAYLOAD_SHAPE = """\
 # DebtCycleData payload shape
 
 `emit_dashboard`'s `payload` is one JSON object with these keys:
-  - `header`: {{title, subtitle, pills: [{{tone, label}}]}} — tone is one
+  - `header`: {title, subtitle, pills: [{tone, label}]} — tone is one
     of red/amber/green/blue.
   - `cardSummary`: one-paragraph string summarizing the read.
-  - `scorecard`: {{rows: [{{name, sub, current, currentTone, currentMeta,
-    threshold, status, statusTone, fillPct, fillTone}}]}} — one row per
+  - `scorecard`: {rows: [{name, sub, current, currentTone, currentMeta,
+    threshold, status, statusTone, fillPct, fillTone}]} — one row per
     indicator; the *Tone fields are red/amber/green/blue, `fillPct` is an
     integer 0-100.
-  - `phaseBox`: {{title, body, tone}} — the cycle phase from the
+  - `phaseBox`: {title, body, tone} — the cycle phase from the
     classifier (use its `phase` and `severity`).
-  - `analogPair`: {{analog: {{title, body}}, timeToConstraint: {{title,
-    body}}}}.
-  - `policySpace`: {{cards: [{{label, value, valueTone, unit, note}}]}} —
+  - `analogPair`: {analog: {title, body}, timeToConstraint: {title,
+    body}}.
+  - `policySpace`: {cards: [{label, value, valueTone, unit, note}]} —
     grounded in the classifier's `monetary_space`.
-  - `assetThesis`: {{gold: {{title, body}}, longBond: {{title, body}}}}.
-  - `watchlist`: {{rows: [{{tone, name, body}}]}}.
-  - `verdict`: {{title, body, tone}} — the synthesis.
+  - `assetThesis`: {gold: {title, body}, longBond: {title, body}}.
+  - `watchlist`: {rows: [{tone, name, body}]}.
+  - `verdict`: {title, body, tone} — the synthesis.
   - `sources`: a short string naming the sources you used.
-  - `generated_at`: an ISO-8601 timestamp for the run.
+  - `generated_at`: an ISO-8601 timestamp for the run."""
 
-# Citation discipline
 
-Ground every numeric field in a tool result or `classify_debt_cycle`
-output. Name your sources in the `sources` field and state the as-of
-date for each indicator inside the scorecard rows so the read is
-traceable to the official figures it rests on."""
+# Per-dashboard prompt content. ``build_system_prompt`` looks the slug up
+# here and fails loud when a dashboard has no spec. New dashboards register
+# their workflow, payload-shape block, and indicator-sourcing hint here.
+DASHBOARD_PROMPT_SPECS: dict[str, DashboardPromptSpec] = {
+    "debt_cycle": DashboardPromptSpec(
+        workflow=_DEBT_CYCLE_WORKFLOW,
+        payload_shape=_DEBT_CYCLE_PAYLOAD_SHAPE,
+        indicator_hint=(
+            "the US dollar index and TIPS real yields, and any macro series the indicators rely on."
+        ),
+    ),
+}
