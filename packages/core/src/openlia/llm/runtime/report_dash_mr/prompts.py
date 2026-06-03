@@ -382,10 +382,6 @@ accent/olive/neutral/amber/rust; `pct`/`leftPct` are integers 0-100):
     pct}], referenceTitle, referenceBars: [{label, pct}], mechanism: {title,
     body}} — bars anchored on the classifier's risk_contributions /
     reference_risk_contributions.
-  - `gold`: {label, title, needles: [{label, leftPct, tone}], stats:
-    [{label, value, valueTone, note}], rationale: {title, body}} — anchored
-    on the classifier's gold_gap.
-  - `caveats`: {label, cards: [{title, body}]}.
   - `stressTest`: {label, intro, distribution: {title, bars: [{label, userPct,
     refPct}]}, scenarios: [{name, userMedianPct, userP5Pct, refMedianPct,
     refP5Pct, tone}], note} — every `*Pct` is a decimal return (e.g. -0.12 for
@@ -396,6 +392,10 @@ accent/olive/neutral/amber/rust; `pct`/`leftPct` are integers 0-100):
     one percentile of the returned distribution (label=percentile name,
     userPct=distribution.user[pct], refPct=distribution.reference[pct]). You
     write only `label`, `intro`, and `note`.
+  - `gold`: {label, title, needles: [{label, leftPct, tone}], stats:
+    [{label, value, valueTone, note}], rationale: {title, body}} — anchored
+    on the classifier's gold_gap.
+  - `caveats`: {label, cards: [{title, body}]}.
   - `verdict`: {title, body} — the synthesis.
   - `sources`: a short string naming the sources you used.
   - `generated_at`: an ISO-8601 timestamp for the run."""

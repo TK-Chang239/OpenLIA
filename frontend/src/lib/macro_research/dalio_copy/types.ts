@@ -353,6 +353,7 @@ export interface AllWeatherData {
     referenceBars: T3RiskBar[];
     mechanism: { title: string; body: string };
   };
+  stressTest: T3StressTest;
   gold: {
     label: string;
     title: string;
@@ -364,7 +365,6 @@ export interface AllWeatherData {
     label: string;
     cards: T3CaveatCard[];
   };
-  stressTest: T3StressTest;
   verdict: { title: string; body: string };
   sources: string;
 }

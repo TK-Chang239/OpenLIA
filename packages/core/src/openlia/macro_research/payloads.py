@@ -517,9 +517,9 @@ class AllWeatherData(BaseModel):
     comparison: T3Comparison
     coverage: T3Coverage
     riskParity: T3RiskParity
+    stressTest: T3StressTest
     gold: T3Gold
     caveats: T3Caveats
-    stressTest: T3StressTest
     verdict: Prose
     sources: str
     # Redesign additions (not in types.ts): provenance + freshness.
