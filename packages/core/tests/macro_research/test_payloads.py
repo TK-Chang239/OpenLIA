@@ -55,8 +55,46 @@ def test_minimal_debt_cycle_payload_validates():
         provenance=Provenance.LIVE,
         generated_at="2026-06-03T00:00:00Z",
     )
-    assert data.scorecard["rows"][0].fillPct == 93
+    assert data.scorecard.rows[0].fillPct == 93
     assert data.provenance == Provenance.LIVE
+
+
+def test_invalid_nested_scorecard_row_rejected():
+    with pytest.raises(ValidationError):
+        DebtCycleData(
+            header={"title": "T1", "subtitle": "s", "pills": []},
+            cardSummary="x",
+            scorecard={
+                "rows": [
+                    {
+                        "name": "n",
+                        "sub": "s",
+                        "current": "1",
+                        "currentTone": "purple",
+                        "currentMeta": "m",
+                        "threshold": "t",
+                        "status": "s",
+                        "statusTone": "red",
+                        "fillPct": 1,
+                        "fillTone": "red",
+                    }
+                ]
+            },
+            phaseBox={"title": "t", "body": "b", "tone": "amber"},
+            analogPair={
+                "analog": {"title": "a", "body": "b"},
+                "timeToConstraint": {"title": "t", "body": "b"},
+            },
+            policySpace={"cards": []},
+            assetThesis={
+                "gold": {"title": "g", "body": "b"},
+                "longBond": {"title": "l", "body": "b"},
+            },
+            watchlist={"rows": []},
+            verdict={"title": "v", "body": "b", "tone": "amber"},
+            sources="s",
+            generated_at="2026-06-03T00:00:00Z",
+        )
 
 
 def test_invalid_tone_rejected():

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -68,15 +68,37 @@ class WatchRow(BaseModel):
     body: str
 
 
+class Scorecard(BaseModel):
+    rows: list[ScoreRow]
+
+
+class PolicySpace(BaseModel):
+    cards: list[PolicyCard]
+
+
+class Watchlist(BaseModel):
+    rows: list[WatchRow]
+
+
+class AnalogPair(BaseModel):
+    analog: Prose
+    timeToConstraint: Prose
+
+
+class AssetThesis(BaseModel):
+    gold: Prose
+    longBond: Prose
+
+
 class DebtCycleData(BaseModel):
     header: DashHeader
     cardSummary: str
-    scorecard: dict[str, Any]
+    scorecard: Scorecard
     phaseBox: TonedProse
-    analogPair: dict[str, Prose]
-    policySpace: dict[str, Any]
-    assetThesis: dict[str, Prose]
-    watchlist: dict[str, Any]
+    analogPair: AnalogPair
+    policySpace: PolicySpace
+    assetThesis: AssetThesis
+    watchlist: Watchlist
     verdict: TonedProse
     sources: str
     # Redesign additions (not in types.ts): provenance + freshness.
