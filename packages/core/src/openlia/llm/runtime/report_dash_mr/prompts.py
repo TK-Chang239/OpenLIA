@@ -348,11 +348,15 @@ Work in this order:
      `risk_contributions`, `reference_risk_contributions`, `season_coverage`,
      `gold_gap`, and `severity` verbatim — do not invent or override the
      computed numbers.
-  3. Call `simulate_all_weather_stress` with the same weights. Use the
-     returned Base-case `distribution` percentiles and per-scenario
-     `user_median`/`user_p5`/`reference_median`/`reference_p5`/`tone` verbatim
-     to fill the `stressTest` section — do not invent or override the
-     simulated numbers. You author only the prose `intro` and `note`.
+  3. Call `simulate_all_weather_stress` with the same weights. Fill the
+     `stressTest` section from its output, mapping the (decimal) numbers
+     exactly — do not invent or override them. Per scenario row, map
+     `user_median`->`userMedianPct`, `user_p5`->`userP5Pct`,
+     `reference_median`->`refMedianPct`, `reference_p5`->`refP5Pct`, and
+     `tone`->`tone`. For the distribution, emit one bar per percentile from
+     the returned `distribution.user` / `distribution.reference` dicts
+     (label = the percentile name, `userPct` = the user value, `refPct` = the
+     reference value). You author only the prose `label`, `intro`, and `note`.
   4. Gather current cross-asset volatilities and historical stress-episode
      context, then write the comparison donuts, the season-coverage cells,
      the risk-parity bars, the gold needle/stats, the caveats, and the
@@ -381,13 +385,17 @@ accent/olive/neutral/amber/rust; `pct`/`leftPct` are integers 0-100):
   - `gold`: {label, title, needles: [{label, leftPct, tone}], stats:
     [{label, value, valueTone, note}], rationale: {title, body}} — anchored
     on the classifier's gold_gap.
+  - `caveats`: {label, cards: [{title, body}]}.
   - `stressTest`: {label, intro, distribution: {title, bars: [{label, userPct,
     refPct}]}, scenarios: [{name, userMedianPct, userP5Pct, refMedianPct,
-    refP5Pct, tone}], note} — `userPct`/`*Pct` are decimal returns (e.g. -0.12
-    for -12%); fill every number from `simulate_all_weather_stress`'s output
-    (the distribution `bars` from its `distribution`, the `scenarios` rows from
-    its `scenarios`). You write only `label`, `intro`, and `note`.
-  - `caveats`: {label, cards: [{title, body}]}.
+    refP5Pct, tone}], note} — every `*Pct` is a decimal return (e.g. -0.12 for
+    -12%). Fill all numbers from `simulate_all_weather_stress`: each
+    `scenarios` row from a returned scenario (user_median->userMedianPct,
+    user_p5->userP5Pct, reference_median->refMedianPct,
+    reference_p5->refP5Pct, tone->tone); each `distribution.bars` entry from
+    one percentile of the returned distribution (label=percentile name,
+    userPct=distribution.user[pct], refPct=distribution.reference[pct]). You
+    write only `label`, `intro`, and `note`.
   - `verdict`: {title, body} — the synthesis.
   - `sources`: a short string naming the sources you used.
   - `generated_at`: an ISO-8601 timestamp for the run."""
