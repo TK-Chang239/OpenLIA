@@ -306,10 +306,21 @@ Work in this order:
      `marker_x_pct`, `marker_y_pct`, `best_assets`, and `worst_assets`
      verbatim — do not invent or override the computed season. Place the
      quadrant `now` marker at `marker_x_pct`/`marker_y_pct`.
-  3. Write the scorecard trend reads, the parallels, the transition-risk
-     bull/bear cards, the asset playbook, and the synthesis verdict from
-     the cited data you gathered.
-  4. Call `emit_dashboard` exactly once with the full FourSeasonsData
+  3. Call `markov_four_seasons` with the same four indicators. Fill
+     `transitionRisk.probabilities` from its output, mapping the (decimal)
+     numbers exactly — do not invent or override them: `current_season`->
+     `currentSeason`, `persistence`->`persistence`, `most_likely_next`->
+     `mostLikelyNext`, `adverse_season`->`adverseSeason`, `adverse_prob`->
+     `adverseProb`, `expected_dwell_quarters`->`expectedDwellQuarters`,
+     `horizon_quarters`->`horizonQuarters`, `next_quarter`->`nextQuarter`,
+     `horizon`->`horizon`. The returned `next_quarter` and `horizon` are each
+     a dict (season->decimal probability); convert each into an ARRAY of
+     `{season, prob}` objects, one per season (do NOT emit the dict verbatim).
+  4. Write the scorecard trend reads, the parallels, the transition-risk
+     bull/bear/keyIndicator prose (now grounded by those probabilities), the
+     asset playbook, and the synthesis verdict from the cited data you
+     gathered.
+  5. Call `emit_dashboard` exactly once with the full FourSeasonsData
      object in `payload`. This finalizes the run."""
 
 
@@ -331,7 +342,12 @@ red/amber/green/blue/purple; `fillPct`/`xPct`/`yPct` are integers 0-100):
   - `verdict`: {title, body, sideCards: [{label, value, valueTone, note}]}.
   - `parallels`: {cards: [{title, body}]}.
   - `transitionRisk`: {intro, bull: {title, body}, bear: {title, body},
-    keyIndicator: {title, body}}.
+    keyIndicator: {title, body}, probabilities: {currentSeason, nextQuarter:
+    [{season, prob}], persistence, mostLikelyNext, adverseSeason, adverseProb,
+    expectedDwellQuarters, horizonQuarters, horizon: [{season, prob}]}} — every
+    `prob`/`persistence`/`adverseProb` is a decimal 0-1. Fill `probabilities`
+    entirely from `markov_four_seasons` (you write only the intro/bull/bear/
+    keyIndicator prose).
   - `assetPlaybook`: {cards: [{tone, label, posture, body}]} — anchor on the
     classifier's best_assets/worst_assets.
   - `notes`: [{title, body}].
