@@ -3,7 +3,6 @@
 from openlia.macro_research.quant.forces_network import (
     FORCE_LABELS,
     FORCE_ORDER,
-    INFLUENCE,  # noqa: F401 — used by Task 2 tests
     PERSISTENCE,
     coupling,
 )

@@ -10,8 +10,6 @@ invents the force-network numbers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 # Canonical force order for the matrix.
 FORCE_ORDER: tuple[str, ...] = (
     "debt_money",
@@ -52,36 +50,3 @@ INFLUENCE: dict[str, dict[str, float]] = {
 def coupling(driver: str, driven: str) -> float:
     """Directed coupling strength from `driver` to `driven` (0.0 if unspecified)."""
     return INFLUENCE.get(driver, {}).get(driven, 0.0)
-
-
-@dataclass(frozen=True)
-class NetworkEdge:
-    from_label: str
-    to_label: str
-    strength: float  # decimal 0-1
-
-
-@dataclass(frozen=True)
-class ForceProjection:
-    force: str  # display label
-    current: float  # 0-10
-    projected: float  # 0-10
-    delta: float
-
-
-@dataclass(frozen=True)
-class ForceNetwork:
-    edges: tuple[NetworkEdge, ...]
-    projections: tuple[ForceProjection, ...]
-    amplifier: str  # display label
-    absorber: str  # display label
-    contagion: float  # 0-1
-    contagion_label: str
-
-
-def _contagion_label(value: float) -> str:
-    if value < 0.25:
-        return "Contained"
-    if value < 0.5:
-        return "Spreading"
-    return "Self-reinforcing"
