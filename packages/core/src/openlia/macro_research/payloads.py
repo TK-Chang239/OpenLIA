@@ -496,3 +496,116 @@ class AllWeatherData(BaseModel):
     # Redesign additions (not in types.ts): provenance + freshness.
     provenance: Provenance = Provenance.LIVE
     generated_at: datetime
+
+
+# ---------- T5 — Five Forces. Mirrors types.ts:484-582 verbatim. ----------
+
+# T5 reuses the shared RAG Tone (red/amber/green/blue).
+
+
+class T5HeaderBadge(BaseModel):
+    tone: Tone
+    label: str
+
+
+class T5ForceRow(BaseModel):
+    forceLabel: str
+    forceSub: str
+    pillTone: Tone
+    pillLabel: str
+    scorePct: int
+    scoreTone: Tone
+    scoreValue: str
+    body: str
+
+
+class T5LoopArrow(BaseModel):
+    fromLabel: str
+    toLabel: str
+
+
+class T5LoopBlock(BaseModel):
+    title: str
+    arrows: list[T5LoopArrow]
+    body: str
+
+
+class T5ActiveCount(BaseModel):
+    countText: str
+    countTone: Tone
+    title: str
+    body: str
+
+
+class T5SignalCard(BaseModel):
+    label: str
+    value: str
+    unit: str
+    note: str
+
+
+class T5AllocStat(BaseModel):
+    label: str
+    value: str
+    note: str
+    highlight: bool
+
+
+class T5GoldAllocation(BaseModel):
+    title: str
+    ticks: list[str]
+    stats: list[T5AllocStat]
+    body: str
+
+
+class T5Scenario(BaseModel):
+    variant: Literal["bull", "bear"]
+    title: str
+    body: str
+
+
+class T5Header(BaseModel):
+    title: str
+    subtitle: str
+    badges: list[T5HeaderBadge] = []
+
+
+class T5Scorecard(BaseModel):
+    label: str
+    rows: list[T5ForceRow]
+
+
+class T5Loops(BaseModel):
+    label: str
+    blocks: list[T5LoopBlock]
+    active: T5ActiveCount
+
+
+class T5Signals(BaseModel):
+    label: str
+    cards: list[T5SignalCard]
+
+
+class T5GoldAllocationGroup(BaseModel):
+    label: str
+    block: T5GoldAllocation
+
+
+class T5Scenarios(BaseModel):
+    label: str
+    cards: list[T5Scenario]
+
+
+class FiveForcesData(BaseModel):
+    header: T5Header
+    cardSummary: str
+    scorecard: T5Scorecard
+    loops: T5Loops
+    signals: T5Signals
+    goldAllocation: T5GoldAllocationGroup
+    scenarios: T5Scenarios
+    verdict: Prose
+    sources: str
+    # Redesign additions (not in types.ts): provenance + freshness.
+    provenance: Provenance = Provenance.LIVE
+    generated_at: datetime
