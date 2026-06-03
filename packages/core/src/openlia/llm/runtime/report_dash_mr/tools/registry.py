@@ -27,8 +27,8 @@ from ....types import ToolSchema
 from ...report_v2_3.research import ResearchTool
 from ..schemas import EnabledConnectors
 from .dashboard_tools import (
+    CLASSIFY_TOOL_BY_SLUG,
     PAYLOAD_MODEL_BY_SLUG,
-    build_classify_debt_cycle_tool,
     build_emit_dashboard_tool,
 )
 from .data_tools import build_data_tools
@@ -103,10 +103,10 @@ def build_catalog(
             f"Unknown dashboard_slug {dashboard_slug!r}. "
             f"Known dashboards: {sorted(PAYLOAD_MODEL_BY_SLUG)}."
         )
-    core: list[ResearchTool] = [
-        build_emit_dashboard_tool(workspace, payload_model),
-        build_classify_debt_cycle_tool(),
-    ]
+    core: list[ResearchTool] = [build_emit_dashboard_tool(workspace, payload_model)]
+    classify_builder = CLASSIFY_TOOL_BY_SLUG.get(dashboard_slug)
+    if classify_builder is not None:
+        core.append(classify_builder())
 
     if enabled_connectors.eodhd:
         core.extend(

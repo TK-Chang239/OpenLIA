@@ -5,6 +5,7 @@ invents the computed numbers."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
@@ -129,3 +130,11 @@ def build_classify_debt_cycle_tool() -> ResearchTool:
         ),
         execute=_execute,
     )
+
+
+# Per-slug deterministic classify-tool builders. A slug present here gets its
+# classifier tool added to the catalog alongside emit_dashboard. New dashboards
+# register their builder here.
+CLASSIFY_TOOL_BY_SLUG: dict[str, Callable[[], ResearchTool]] = {
+    "debt_cycle": build_classify_debt_cycle_tool,
+}
