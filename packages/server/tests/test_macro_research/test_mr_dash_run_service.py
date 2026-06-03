@@ -28,7 +28,10 @@ from openlia.llm.types import (
 )
 from openlia.llm.types import TestResult as ConnTestResult
 from openlia_server.db.models.dashboard import MrDashboardCache
-from openlia_server.services.mr_dash_run_service import run_to_cache
+from openlia_server.services.mr_dash_run_service import (
+    _build_data_context,
+    run_to_cache,
+)
 
 
 @dataclass
@@ -250,3 +253,70 @@ def test_run_to_cache_fails_loud_without_emit(db_session, make_user):
         db_session.query(MrDashboardCache).filter_by(user_id=user.id, dashboard="debt_cycle").all()
     )
     assert rows == []
+
+
+def _seed_cache(db_session, *, user_id: str, dashboard: str, payload: dict) -> None:
+    import json
+    from datetime import UTC, datetime
+
+    db_session.add(
+        MrDashboardCache(
+            user_id=user_id,
+            dashboard=dashboard,
+            payload_json=json.dumps(payload),
+            provenance="live",
+            model_ref="m",
+            generated_at=datetime.now(UTC),
+        )
+    )
+    db_session.flush()
+
+
+def test_five_forces_data_context_seeds_from_cached_dashboards(db_session, make_user):
+    user = make_user()
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="debt_cycle",
+        payload={"phaseBox": {"tone": "red", "title": "Late Plateau"}},
+    )
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="world_order",
+        payload={"verdict": {"tone": "amber", "title": "Mid stage"}},
+    )
+
+    ctx = _build_data_context(db_session, user_id=user.id, dashboard_slug="five_forces")
+
+    assert ctx is not None
+    # F1 from debt_cycle red -> 8, with source title.
+    assert "F1" in ctx
+    assert "8" in ctx
+    assert "Late Plateau" in ctx
+    # F3 from world_order amber -> 5, with source title.
+    assert "F3" in ctx
+    assert "5" in ctx
+    assert "Mid stage" in ctx
+
+
+def test_five_forces_data_context_notes_missing_source(db_session, make_user):
+    user = make_user()
+    # Only world_order cached; debt_cycle absent.
+    _seed_cache(
+        db_session,
+        user_id=user.id,
+        dashboard="world_order",
+        payload={"verdict": {"tone": "green", "title": "Early stage"}},
+    )
+
+    ctx = _build_data_context(db_session, user_id=user.id, dashboard_slug="five_forces")
+
+    assert ctx is not None
+    assert "Debt Cycle not yet generated" in ctx
+    assert "Early stage" in ctx
+
+
+def test_other_slug_data_context_is_none(db_session, make_user):
+    user = make_user()
+    assert _build_data_context(db_session, user_id=user.id, dashboard_slug="debt_cycle") is None

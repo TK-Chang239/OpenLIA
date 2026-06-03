@@ -13,6 +13,7 @@ from pydantic import BaseModel, ValidationError
 from openlia.macro_research.payloads import (
     AllWeatherData,
     DebtCycleData,
+    FiveForcesData,
     FourSeasonsData,
     WorldOrderData,
 )
@@ -21,6 +22,7 @@ from openlia.macro_research.quant.classification import (
     DebtCycleInputs,
     classify_debt_cycle,
 )
+from openlia.macro_research.quant.forces import ForceScores, classify_five_forces
 from openlia.macro_research.quant.seasons import (
     SeasonsInputs,
     classify_four_seasons,
@@ -43,6 +45,7 @@ PAYLOAD_MODEL_BY_SLUG: dict[str, type[BaseModel]] = {
     "world_order": WorldOrderData,
     "four_seasons": FourSeasonsData,
     "all_weather": AllWeatherData,
+    "five_forces": FiveForcesData,
 }
 
 
@@ -338,6 +341,62 @@ def build_classify_all_weather_tool() -> ResearchTool:
     )
 
 
+def build_classify_five_forces_tool() -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            out = classify_five_forces(
+                ForceScores(
+                    debt_money=float(args["debt_money"]),
+                    political=float(args["political"]),
+                    geopolitical=float(args["geopolitical"]),
+                    technology=float(args["technology"]),
+                    natural=float(args["natural"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ToolExecutionError(
+                "classify_five_forces requires numeric debt_money, political, "
+                f"geopolitical, technology, natural (each 0-10). {exc}"
+            ) from exc
+        return ToolResult(
+            payload={
+                "force_scores": out.force_scores,
+                "active_force_count": out.active_force_count,
+                "bucket": out.bucket,
+                "severity": out.severity,
+            },
+            provenance=ComputedSource(method="classify_five_forces", derived_from=["(scores)"]),
+            summary=f"{out.bucket} active={out.active_force_count}",
+        )
+
+    _score = {"type": "number", "minimum": 0, "maximum": 10}
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="classify_five_forces",
+            description=(
+                "Deterministic Dalio five-forces classification from the five 0-10 "
+                "force-intensity scores. F1 (debt/money) and F3 (geopolitical) are seeded for "
+                "you in the provided inputs; score F2 (political), F4 (technology), and F5 "
+                "(natural) yourself. Use the returned active_force_count, bucket, and severity "
+                "verbatim in the payload."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "debt_money": {**_score, "description": "F1 debt/money cycle intensity, 0-10"},
+                    "political": {**_score, "description": "F2 internal order/political, 0-10"},
+                    "geopolitical": {**_score, "description": "F3 geopolitical cycle, 0-10"},
+                    "technology": {**_score, "description": "F4 technology wave, 0-10"},
+                    "natural": {**_score, "description": "F5 acts of nature, 0-10"},
+                },
+                "required": ["debt_money", "political", "geopolitical", "technology", "natural"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
 # Per-slug deterministic classify-tool builders. A slug present here gets its
 # classifier tool added to the catalog alongside emit_dashboard. New dashboards
 # register their builder here.
@@ -346,4 +405,5 @@ CLASSIFY_TOOL_BY_SLUG: dict[str, Callable[[], ResearchTool]] = {
     "world_order": build_classify_world_order_tool,
     "four_seasons": build_classify_four_seasons_tool,
     "all_weather": build_classify_all_weather_tool,
+    "five_forces": build_classify_five_forces_tool,
 }

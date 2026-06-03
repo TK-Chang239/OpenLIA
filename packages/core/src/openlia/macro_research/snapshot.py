@@ -3,11 +3,30 @@ payloads. Preserves the contract Morning Briefing reads."""
 
 from __future__ import annotations
 
-from openlia.macro_research.payloads import DebtCycleData, FourSeasonsData
+import re
+
+from openlia.macro_research.payloads import DebtCycleData, FiveForcesData, FourSeasonsData
+
+_LEADING_INT = re.compile(r"^\s*(\d+)")
 
 
 def debt_cycle_phase_from_payload(payload: DebtCycleData) -> str:
     return payload.phaseBox.title
+
+
+def active_force_count_from_payload(payload: FiveForcesData) -> int:
+    """Return the active-force count the FiveForcesView renders.
+
+    The view shows ``loops.active.countText`` (e.g. ``"3 / 5"`` or
+    ``"3 active"``); the active count is its leading integer. A countText with
+    no leading integer is invalid and raises ValueError.
+    """
+    match = _LEADING_INT.match(payload.loops.active.countText)
+    if match is None:
+        raise ValueError(
+            f"FiveForcesData countText has no leading integer: {payload.loops.active.countText!r}"
+        )
+    return int(match.group(1))
 
 
 def economic_season_from_payload(payload: FourSeasonsData) -> str:

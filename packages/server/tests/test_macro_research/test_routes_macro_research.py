@@ -239,8 +239,20 @@ def test_refresh_404_for_unknown(client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_refresh_409_for_unimplemented(client: TestClient, session_factory, fake_scheduler) -> None:
-    # five_forces is a known dashboard but the engine cannot generate it yet.
+def test_refresh_409_for_unimplemented(
+    client: TestClient, session_factory, fake_scheduler, monkeypatch
+) -> None:
+    # All five dashboards now have engine support, so simulate an
+    # unimplemented-but-known dashboard by trimming the implemented set the
+    # route gates against. five_forces stays a known DASHBOARDS slug (passes
+    # the 404 gate) but is reported as not-yet-generatable (hits the 409 gate).
+    import openlia_server.routes.departments.macro_research as mr_route
+
+    monkeypatch.setattr(
+        mr_route,
+        "implemented_dashboard_slugs",
+        lambda: frozenset({"debt_cycle", "world_order", "four_seasons", "all_weather"}),
+    )
     r = client.post("/departments/macro_research/dashboards/five_forces/refresh")
     assert r.status_code == 409
     assert "not yet available" in r.json()["detail"]
