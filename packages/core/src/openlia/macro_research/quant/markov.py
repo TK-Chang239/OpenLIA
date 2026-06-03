@@ -19,7 +19,7 @@ SEASON_ORDER: tuple[str, ...] = ("Spring", "Summer", "Autumn", "Winter")
 _SEASON_SET = frozenset(SEASON_ORDER)
 
 # The adverse (stagflation) season — the headline transition-risk target.
-ADVERSE_SEASON = "Autumn"
+ADVERSE_SEASON: str = "Autumn"
 
 # Baked quarterly transition probabilities (rows = from, cols = to). Reference
 # assumptions (adjustable): diagonal-dominant (seasons persist) with the
