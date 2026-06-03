@@ -312,9 +312,10 @@ Work in this order:
      `currentSeason`, `persistence`->`persistence`, `most_likely_next`->
      `mostLikelyNext`, `adverse_season`->`adverseSeason`, `adverse_prob`->
      `adverseProb`, `expected_dwell_quarters`->`expectedDwellQuarters`,
-     `horizon_quarters`->`horizonQuarters`. Turn the returned `next_quarter`
-     and `horizon` dicts (season->probability) into the `nextQuarter` and
-     `horizon` arrays, one `{season, prob}` object per season.
+     `horizon_quarters`->`horizonQuarters`, `next_quarter`->`nextQuarter`,
+     `horizon`->`horizon`. The returned `next_quarter` and `horizon` are each
+     a dict (season->decimal probability); convert each into an ARRAY of
+     `{season, prob}` objects, one per season (do NOT emit the dict verbatim).
   4. Write the scorecard trend reads, the parallels, the transition-risk
      bull/bear/keyIndicator prose (now grounded by those probabilities), the
      asset playbook, and the synthesis verdict from the cited data you

@@ -335,10 +335,12 @@ def build_markov_four_seasons_tool() -> ResearchTool:
                 "Deterministic Markov transition outlook for the four-seasons regime, from "
                 "the same four indicators as classify_four_seasons. Returns the current "
                 "season, the next-quarter transition-probability distribution "
-                "(`next_quarter`, season->decimal probability), `persistence` (P stay), "
-                "`most_likely_next`, `adverse_season`/`adverse_prob` (P of moving to Autumn), "
+                "(`next_quarter`, a season->decimal-probability dict; render as a {season, prob} "
+                "array), `persistence` (P stay), `most_likely_next`, "
+                "`adverse_season`/`adverse_prob` (P of moving to Autumn), "
                 "`expected_dwell_quarters`, and the `horizon_quarters`-ahead distribution "
-                "(`horizon`). Use the returned numbers verbatim to fill "
+                "(`horizon`, same season->decimal-probability dict shape; render as a {season, "
+                "prob} array). Use the returned numbers verbatim to fill "
                 "transitionRisk.probabilities."
             ),
             parameters={
