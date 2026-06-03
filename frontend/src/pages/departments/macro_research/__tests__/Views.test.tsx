@@ -476,6 +476,7 @@ describe("FiveForcesView", () => {
     expect(screen.getByText(/Technology wave/i)).toBeInTheDocument();
     expect(screen.getByTestId("t5-loops")).toBeInTheDocument();
     expect(screen.getByTestId("t5-active-count")).toBeInTheDocument();
+    expect(screen.getByTestId("t5-force-network")).toBeInTheDocument();
     expect(screen.getByTestId("t5-signals")).toBeInTheDocument();
     expect(screen.getByTestId("t5-gold-allocation")).toBeInTheDocument();
     expect(screen.getByTestId("t5-scenarios")).toBeInTheDocument();

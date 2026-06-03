@@ -5,9 +5,11 @@ import type {
   FiveForcesData,
   Status,
   T5ActiveCount,
+  T5ForceProjection,
   T5ForceRow,
   T5GoldAllocation,
   T5LoopBlock,
+  T5NetworkEdge,
   T5SignalCard,
   T5Tone,
 } from "../../../lib/macro_research/dalio_copy/types";
@@ -54,6 +56,10 @@ function renderRich(text: string): ReactNode {
     }
     return <span key={i}>{p}</span>;
   });
+}
+
+function fmtPct(d: number): string {
+  return `${Math.round(d * 100)}%`;
 }
 
 export default function FiveForcesView(): JSX.Element {
@@ -185,6 +191,61 @@ export default function FiveForcesView(): JSX.Element {
         ))}
       </div>
       <ActiveCount active={data.loops.active} />
+
+      <div
+        className="mr-card"
+        data-testid="t5-force-network"
+        style={{ padding: "16px 18px", marginBottom: 14 }}
+      >
+        <div className="mr-card-title">{data.loops.network.label}</div>
+        <div className="mr-bar-section" style={{ marginTop: 8 }}>
+          <div className="mr-bar-section-title">Active causal edges</div>
+          {data.loops.network.edges.length === 0 ? (
+            <p className="mr-card-body-text">No forces are intense enough to transmit.</p>
+          ) : (
+            data.loops.network.edges.map((e: T5NetworkEdge) => (
+              <div key={`${e.fromLabel}->${e.toLabel}`} className="mr-bar-row">
+                <div className="mr-bar-label">
+                  {e.fromLabel} &rarr; {e.toLabel}
+                </div>
+                <div className="mr-bar-track">
+                  <div className="mr-bar-fill mr-fill-bad" style={{ width: `${e.strength * 100}%` }} />
+                </div>
+                <div className="mr-bar-val">{fmtPct(e.strength)}</div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="mr-bar-section" style={{ marginTop: 12 }}>
+          <div className="mr-bar-section-title">Projected next-period intensity</div>
+          {data.loops.network.projections.map((p: T5ForceProjection) => (
+            <div key={p.force} className="mr-bar-row">
+              <div className="mr-bar-label">{p.force}</div>
+              <div className="mr-bar-val" style={{ minWidth: 150 }}>
+                {p.current.toFixed(1)} &rarr; {p.projected.toFixed(1)} (
+                {p.delta >= 0 ? "+" : ""}
+                {p.delta.toFixed(1)})
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mr-grid3" style={{ marginTop: 12 }}>
+          <div>
+            <div className="mr-card-title">Amplifier</div>
+            <div className="mr-card-body-text">{data.loops.network.amplifier}</div>
+          </div>
+          <div>
+            <div className="mr-card-title">Absorber</div>
+            <div className="mr-card-body-text">{data.loops.network.absorber}</div>
+          </div>
+          <div>
+            <div className="mr-card-title">Contagion</div>
+            <div className="mr-card-body-text">
+              {data.loops.network.contagionLabel} ({fmtPct(data.loops.network.contagion)})
+            </div>
+          </div>
+        </div>
+      </div>
 
       <SectionLabel count={data.signals.label}>Section C — market signals</SectionLabel>
       <div className="mr-grid3" data-testid="t5-signals" style={{ marginBottom: 14 }}>
