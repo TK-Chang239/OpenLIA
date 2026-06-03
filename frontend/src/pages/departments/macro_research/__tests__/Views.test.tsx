@@ -2,6 +2,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ALL_WEATHER_FALLBACK } from "../../../../lib/macro_research/dalio_copy/all_weather";
 import { DEBT_CYCLE_FALLBACK } from "../../../../lib/macro_research/dalio_copy/debt_cycle";
 import { FOUR_SEASONS_FALLBACK } from "../../../../lib/macro_research/dalio_copy/four_seasons";
 import { WORLD_ORDER_FALLBACK } from "../../../../lib/macro_research/dalio_copy/world_order";
@@ -268,9 +269,17 @@ describe("FourSeasonsView", () => {
 });
 
 describe("AllWeatherView", () => {
-  it("renders the comparison donuts, coverage map, risk parity audit, gold check, and caveats", () => {
+  it("renders live cache content: comparison donuts, coverage map, risk parity audit, gold check, and caveats", async () => {
+    apiMocks.getDashboard.mockResolvedValue({
+      payload: ALL_WEATHER_FALLBACK,
+      generated_at: "2026-06-01T00:00:00Z",
+      is_stale: false,
+      provenance: "live",
+    });
     render(inRouter(<AllWeatherView />));
-    expect(screen.getByText(/T3 · All-Weather allocation audit/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/T3 · All-Weather allocation audit/i),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("t3-comparison")).toBeInTheDocument();
     expect(screen.getByText(/Section A — season coverage map/i)).toBeInTheDocument();
     expect(screen.getByTestId("t3-coverage-map")).toBeInTheDocument();
@@ -281,6 +290,73 @@ describe("AllWeatherView", () => {
     expect(screen.getByTestId("t3-gold-check")).toBeInTheDocument();
     expect(screen.getByTestId("t3-caveats")).toBeInTheDocument();
     expect(screen.getByTestId("t3-verdict")).toBeInTheDocument();
+  });
+
+  it("renders the empty state when payload is null", async () => {
+    apiMocks.getDashboard.mockResolvedValueOnce({
+      payload: null,
+      generated_at: null,
+      is_stale: false,
+      provenance: null,
+    });
+    render(inRouter(<AllWeatherView />));
+    expect(
+      await screen.findByText(/hasn.t been generated yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("mr-dash-empty-generate")).toBeInTheDocument();
+    expect(screen.queryByTestId("t3-comparison")).not.toBeInTheDocument();
+  });
+
+  it("polls until the payload lands and shows live content (poll-to-live)", async () => {
+    vi.useFakeTimers();
+    const POLL_INTERVAL_MS = 6000;
+    try {
+      apiMocks.getDashboard
+        .mockResolvedValueOnce({
+          payload: null,
+          generated_at: null,
+          is_stale: false,
+          provenance: null,
+        })
+        .mockResolvedValue({
+          payload: ALL_WEATHER_FALLBACK,
+          generated_at: "2026-06-01T00:00:00Z",
+          is_stale: false,
+          provenance: "live",
+        });
+      apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
+
+      render(inRouter(<AllWeatherView />));
+
+      // Flush the initial getDashboard microtask so the component settles to empty state.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      const btn = screen.getByTestId("mr-dash-empty-generate");
+
+      act(() => {
+        btn.click();
+      });
+
+      // Flush the runAssessment promise.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Still generating — live content must NOT be shown yet.
+      expect(screen.getByTestId("mr-dash-empty-generate")).toBeDisabled();
+      expect(screen.queryByTestId("t3-comparison")).not.toBeInTheDocument();
+
+      // Advance one poll interval — getDashboard resolves with live payload.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      });
+
+      expect(screen.getByTestId("t3-comparison")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
