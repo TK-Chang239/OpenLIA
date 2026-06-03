@@ -219,13 +219,16 @@ export default function FiveForcesView(): JSX.Element {
         <div className="mr-bar-section" style={{ marginTop: 12 }}>
           <div className="mr-bar-section-title">Projected next-period intensity</div>
           {data.loops.network.projections.map((p: T5ForceProjection) => (
-            <div key={p.force} className="mr-bar-row">
-              <div className="mr-bar-label">{p.force}</div>
-              <div className="mr-bar-val" style={{ minWidth: 150 }}>
+            <div
+              key={p.force}
+              style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "2px 0" }}
+            >
+              <span className="mr-bar-label">{p.force}</span>
+              <span className="mr-bar-val" style={{ minWidth: 150, textAlign: "right" }}>
                 {p.current.toFixed(1)} &rarr; {p.projected.toFixed(1)} (
                 {p.delta >= 0 ? "+" : ""}
                 {p.delta.toFixed(1)})
-              </div>
+              </span>
             </div>
           ))}
         </div>
