@@ -23,6 +23,7 @@ from openlia_server.scheduler.executors.graph_extraction import (
 from openlia_server.scheduler.executors.maintenance import MaintenanceExecutor
 from openlia_server.scheduler.executors.mb import MBBriefingExecutor
 from openlia_server.scheduler.executors.mr import MRAssessmentExecutor
+from openlia_server.scheduler.executors.mr_dash import MrDashExecutor
 from openlia_server.scheduler.executors.portfolio_prices import (
     production_executor as portfolio_executor_factory,
 )
@@ -80,6 +81,7 @@ def build_scheduler_service(
             report_runner=report_runner,
             mr_cache_store=mr_cache_store,
         ),
+        JobType.MR_DASH: MrDashExecutor(session_factory=session_factory),
         JobType.SYSTEM_MAINTENANCE: MaintenanceExecutor(
             session_factory=session_factory,
         ),

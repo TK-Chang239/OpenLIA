@@ -17,6 +17,7 @@ def test_job_types_match_spec() -> None:
         "mb_briefing",
         "eu_scan",
         "mr_assessment",
+        "mr_dash",
         "rs_snapshot",
         "graph_extraction",
         "system_maintenance",
