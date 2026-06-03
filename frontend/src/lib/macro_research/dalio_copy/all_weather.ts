@@ -156,6 +156,56 @@ export const ALL_WEATHER_FALLBACK: AllWeatherData = {
       },
     ],
   },
+  stressTest: {
+    label: "Section E — Monte-Carlo stress test",
+    intro:
+      "10,000-path 1-year Monte-Carlo simulation under baked reference parameters (long-run expected returns, volatilities, and cross-asset correlations). Stress regimes are parameter overlays, not a fat-tail model.",
+    distribution: {
+      title: "Base-case 1-year return distribution — 60/40 vs All-Weather reference",
+      bars: [
+        { label: "5th pct (VaR-95)", userPct: -0.18, refPct: -0.09 },
+        { label: "25th pct", userPct: -0.04, refPct: -0.01 },
+        { label: "Median", userPct: 0.06, refPct: 0.05 },
+        { label: "75th pct", userPct: 0.17, refPct: 0.12 },
+        { label: "95th pct", userPct: 0.31, refPct: 0.2 },
+      ],
+    },
+    scenarios: [
+      {
+        name: "Base case",
+        userMedianPct: 0.06,
+        userP5Pct: -0.18,
+        refMedianPct: 0.05,
+        refP5Pct: -0.09,
+        tone: "amber",
+      },
+      {
+        name: "Stagflation",
+        userMedianPct: -0.05,
+        userP5Pct: -0.27,
+        refMedianPct: -0.01,
+        refP5Pct: -0.14,
+        tone: "red",
+      },
+      {
+        name: "Rate shock",
+        userMedianPct: -0.03,
+        userP5Pct: -0.24,
+        refMedianPct: -0.04,
+        refP5Pct: -0.17,
+        tone: "red",
+      },
+      {
+        name: "Equity crash / deleveraging",
+        userMedianPct: -0.22,
+        userP5Pct: -0.41,
+        refMedianPct: -0.08,
+        refP5Pct: -0.19,
+        tone: "red",
+      },
+    ],
+    note: "Reference assumptions; not investment advice. Gaussian draws — tails are conservative relative to historical crashes.",
+  },
   verdict: {
     title: "Synthesis verdict — bottom line for the 60/40 benchmark in April 2026",
     body: "The 60/40 portfolio concentrates approximately 87% of its effective risk in the equity sleeve, covers only two of four economic seasons (spring and partially winter), holds zero gold against a T1+T2+T5 signal that unanimously supports ~15% allocation, and relies on a negative equity-bond correlation that is structurally compromised in inflationary regimes. The current macro environment — transitioning summer→autumn, all five forces co-active, interest/revenue at record highs — is precisely the regime where 60/40's vulnerabilities are maximally exposed. The 2022 episode (-17.5%) was a clear precedent. The risk of a repeat or worse is elevated given the structural debt cycle context is now more severe than it was going into 2022.",
