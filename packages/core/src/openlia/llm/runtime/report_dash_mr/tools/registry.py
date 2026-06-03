@@ -25,7 +25,6 @@ from ....types import ToolSchema
 from ...report_v2_3.research import ResearchTool
 from ..schemas import EnabledConnectors
 from .data_tools import build_data_tools
-from .output_tools import build_output_tools
 from .web_search import WEB_SEARCH_TOOL_NAME, build_web_search_descriptor
 
 if TYPE_CHECKING:
@@ -77,19 +76,30 @@ def build_catalog(
     workspace: RunWorkspace,
     transports: MbDataTransports,
     enabled_connectors: EnabledConnectors,
+    dashboard_slug: str,
     dispatcher: object | None = None,
 ) -> ToolCatalog:
-    """Assemble the Morning Briefing hybrid catalog from connector toggles.
+    """Assemble the dashboard engine's hybrid catalog from connector toggles.
 
-    Output tools (write_section, set_cover, emit_chart, finalize) are
-    always present. The curated market data tools (quotes, historical
+    The output path is the dashboard pair (``emit_dashboard`` +
+    ``classify_debt_cycle``) — no write_section / emit_chart / finalize.
+    ``emit_dashboard`` is bound to the typed payload model for
+    ``dashboard_slug``. The curated market data tools (quotes, historical
     prices, news, economic calendar, macro indicators) are gated by
     ``enabled_connectors.eodhd``. Every other enabled connector is routed
     through ``dispatcher`` (when provided) as dispatcher-backed tools.
     Native web search is gated by ``enabled_connectors.web_search``.
     """
-    output = build_output_tools(workspace=workspace)
-    core: list[ResearchTool] = [*output]
+    from .dashboard_tools import (
+        PAYLOAD_MODEL_BY_SLUG,
+        build_classify_debt_cycle_tool,
+        build_emit_dashboard_tool,
+    )
+
+    core: list[ResearchTool] = [
+        build_emit_dashboard_tool(workspace, PAYLOAD_MODEL_BY_SLUG[dashboard_slug]),
+        build_classify_debt_cycle_tool(),
+    ]
 
     if enabled_connectors.eodhd:
         core.extend(
