@@ -57,3 +57,13 @@ def test_four_seasons_exposes_both_classify_and_markov_tools() -> None:
     builders = CLASSIFY_TOOL_BY_SLUG["four_seasons"]
     names = {b().descriptor.name for b in builders}
     assert names == {"classify_four_seasons", "markov_four_seasons"}
+
+
+def test_five_forces_exposes_both_classify_and_network_tools() -> None:
+    from openlia.llm.runtime.report_dash_mr.tools.dashboard_tools import (
+        CLASSIFY_TOOL_BY_SLUG,
+    )
+
+    builders = CLASSIFY_TOOL_BY_SLUG["five_forces"]
+    names = {b().descriptor.name for b in builders}
+    assert names == {"classify_five_forces", "analyze_five_forces_network"}

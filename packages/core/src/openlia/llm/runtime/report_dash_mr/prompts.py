@@ -431,11 +431,20 @@ Work in this order:
   3. Call `classify_five_forces` with all five scores. Use the returned
      `active_force_count`, `bucket`, and `severity` verbatim — do not invent
      or override them.
-  4. Write the force scorecard rows, the interlocking-loop blocks plus the
+  4. Call `analyze_five_forces_network` with the same five scores. Fill
+     `loops.network` from its output, mapping the numbers exactly — do not
+     invent or override them: `amplifier`->`amplifier`, `absorber`->`absorber`,
+     `contagion`->`contagion`, `contagion_label`->`contagionLabel`,
+     `edges`->`edges`, `projections`->`projections`. The returned `edges` is a
+     list of {from_label, to_label, strength}; render each as
+     {fromLabel, toLabel, strength}. The returned `projections` is a list of
+     {force, current, projected, delta}; render each verbatim. You author only
+     the short `label` header.
+  5. Write the force scorecard rows, the interlocking-loop blocks plus the
      active-count block, the signal cards, the gold-allocation block, the
      bull/bear scenarios, and the synthesis verdict from the cited data you
      gathered.
-  5. Call `emit_dashboard` exactly once with the full FiveForcesData object
+  6. Call `emit_dashboard` exactly once with the full FiveForcesData object
      in `payload`. This finalizes the run."""
 
 
@@ -449,9 +458,13 @@ red/amber/green/blue; `scorePct` is an integer 0-100):
   - `scorecard`: {label, rows: [{forceLabel, forceSub, pillTone, pillLabel,
     scorePct, scoreTone, scoreValue, body}]} — one row per force.
   - `loops`: {label, blocks: [{title, arrows: [{fromLabel, toLabel}], body}],
-    active: {countText, countTone, title, body}} — anchor `active.countText`
-    on the classifier's active_force_count (e.g. "3 / 5") and `active.title`
-    on its bucket.
+    active: {countText, countTone, title, body}, network: {label, edges:
+    [{fromLabel, toLabel, strength}], projections: [{force, current, projected,
+    delta}], amplifier, absorber, contagion, contagionLabel}} — anchor
+    `active.countText` on the classifier's active_force_count (e.g. "3 / 5") and
+    `active.title` on its bucket. Fill `network` entirely from
+    `analyze_five_forces_network` (strength/contagion are decimals 0-1;
+    current/projected/delta are 0-10); you author only `network.label`.
   - `signals`: {label, cards: [{label, value, unit, note}]}.
   - `goldAllocation`: {label, block: {title, ticks: [string], stats: [{label,
     value, note, highlight}], body}}.
