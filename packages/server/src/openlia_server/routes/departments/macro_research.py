@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from openlia.macro_research.dashboards import DASHBOARDS
 from pydantic import BaseModel
 
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.dashboard import MrDashboardCache
 from openlia_server.db.models.scheduler import JobRun
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.routes.dept_health import gate_dept_or_409
@@ -27,15 +29,19 @@ class ThresholdOverridesUpdate(BaseModel):
     threshold_overrides: dict[str, Any]
 
 
-class RunAssessmentRequest(BaseModel):
-    force: bool = False
+_STALE_TTL_SECONDS: dict[str, int] = {"debt_cycle": 24 * 3600}
+_DEFAULT_TTL_SECONDS = 24 * 3600
+
+
+def _is_stale(slug: str, generated_at: datetime) -> bool:
+    ttl = _STALE_TTL_SECONDS.get(slug, _DEFAULT_TTL_SECONDS)
+    return (datetime.now(UTC) - generated_at).total_seconds() > ttl
 
 
 def build_macro_research_router(
     *,
     db_session_factory: Callable[[], Any],
     mode: str,
-    mr_runner: Any,
     dashboard_service: Any,
     require_auth_override: Callable[..., Any] | None = None,
 ) -> APIRouter:
@@ -54,17 +60,26 @@ def build_macro_research_router(
         }
 
     @router.get("/dashboards/{slug}")
-    async def get_dashboard(
-        slug: str,
-        smart_mode: bool = Query(False),
-        user: User = require_auth,
-    ) -> dict[str, Any]:
+    def get_dashboard(slug: str, user: User = require_auth) -> dict[str, Any]:
         if slug not in DASHBOARDS:
             raise HTTPException(status_code=404, detail=f"dashboard {slug!r} not found")
-        result = await mr_runner.run(
-            user_id=user.id, dashboard_slug=slug, portfolio=None, smart_mode=smart_mode
-        )
-        return result.model_dump(mode="json")
+        with db_session_factory() as session:
+            row = (
+                session.query(MrDashboardCache)
+                .filter_by(user_id=user.id, dashboard=slug)
+                .one_or_none()
+            )
+        if row is None:
+            return {"payload": None, "generated_at": None, "is_stale": True, "provenance": None}
+        generated_at = row.generated_at
+        if generated_at.tzinfo is None:
+            generated_at = generated_at.replace(tzinfo=UTC)
+        return {
+            "payload": json.loads(row.payload_json),
+            "generated_at": generated_at.isoformat(),
+            "is_stale": _is_stale(slug, generated_at),
+            "provenance": row.provenance,
+        }
 
     @router.get("/dashboards/{slug}/config")
     def get_config(slug: str, user: User = require_auth) -> dict[str, Any]:
@@ -114,10 +129,9 @@ def build_macro_research_router(
             "threshold_overrides": row.threshold_overrides,
         }
 
-    @router.post("/dashboards/{slug}/assessment/run", status_code=202)
-    async def run_assessment(
+    @router.post("/dashboards/{slug}/refresh", status_code=202)
+    async def refresh_dashboard(
         slug: str,
-        body: RunAssessmentRequest,
         request: Request,
         user: User = require_auth,
     ) -> dict[str, Any]:
@@ -133,7 +147,7 @@ def build_macro_research_router(
                 JobRun(
                     id=run_id,
                     user_id=user.id,
-                    job_type=JobType.MR_ASSESSMENT.value,
+                    job_type=JobType.MR_DASH.value,
                     schedule_id=slug,
                     status=JobStatus.RUNNING.value,
                     started_at=datetime.now(UTC),
@@ -156,7 +170,7 @@ def build_macro_research_router(
             return {"job_run_id": run_id, "status": "cancelled"}
 
         await scheduler.run_now(
-            job_type=JobType.MR_ASSESSMENT,
+            job_type=JobType.MR_DASH,
             user_id=user.id,
             schedule_id=slug,
             run_id=run_id,
