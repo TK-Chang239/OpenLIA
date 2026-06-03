@@ -37,7 +37,7 @@ from openlia.llm.runtime.report_dash_mr import (
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.dashboard import MrDashboardCache
-from openlia_server.services import connectors_service
+from openlia_server.services import connectors_service, portfolio
 from openlia_server.services.mb_v2_run_service import build_mb_dispatcher
 from openlia_server.services.mb_v2_wiring import (
     build_mb_transports,
@@ -45,6 +45,75 @@ from openlia_server.services.mb_v2_wiring import (
 )
 
 log = logging.getLogger(__name__)
+
+# Map common ETF tickers to the All-Weather asset classes risk_math expects.
+# Unmapped tickers fall back to "equities" (the dominant retail default).
+_TICKER_ASSET_CLASS: dict[str, str] = {
+    "SPY": "equities",
+    "VOO": "equities",
+    "VTI": "equities",
+    "QQQ": "equities",
+    "IVV": "equities",
+    "TLT": "long_bonds",
+    "EDV": "long_bonds",
+    "VGLT": "long_bonds",
+    "IEF": "intermediate_bonds",
+    "BND": "intermediate_bonds",
+    "AGG": "intermediate_bonds",
+    "IEI": "intermediate_bonds",
+    "GLD": "gold",
+    "IAU": "gold",
+    "SGOL": "gold",
+    "DBC": "commodities",
+    "GSG": "commodities",
+    "PDBC": "commodities",
+    "COMT": "commodities",
+}
+
+
+def _portfolio_weights(db: DBSession, user_id: str) -> dict[str, float]:
+    """Resolve the user's holdings into normalized asset-class weights.
+
+    Each holding maps to an asset class via ``_TICKER_ASSET_CLASS`` (default
+    ``equities``). A position's value is ``shares * cost_basis`` when both are
+    present, else ``1.0`` (an equal-weight fallback so weight-less holdings
+    still contribute). Returns weights summing to 1.0, or ``{}`` when the user
+    has no holdings.
+    """
+    holdings = portfolio.list_holdings(db, user_id=user_id)
+    if not holdings:
+        return {}
+    by_class: dict[str, float] = {}
+    for h in holdings:
+        asset = _TICKER_ASSET_CLASS.get(h.ticker.upper(), "equities")
+        if h.shares is not None and h.cost_basis is not None:
+            value = float(h.shares) * float(h.cost_basis)
+        else:
+            value = 1.0
+        by_class[asset] = by_class.get(asset, 0.0) + value
+    total = sum(by_class.values())
+    if total <= 0:
+        return {}
+    return {asset: value / total for asset, value in by_class.items()}
+
+
+def _build_data_context(db: DBSession, *, user_id: str, dashboard_slug: str) -> str | None:
+    """Server-injected authoritative inputs for this run.
+
+    For ``all_weather`` returns a formatted summary of the user's portfolio
+    asset-class weights (or a proxy instruction when no holdings exist). Other
+    dashboards have no server-side inputs yet, so this returns ``None``.
+    """
+    if dashboard_slug != "all_weather":
+        return None
+    weights = _portfolio_weights(db, user_id)
+    if not weights:
+        return (
+            "No portfolio holdings on file; audit the Dalio reference allocation "
+            "as a proxy and say so."
+        )
+    parts = ", ".join(f"{asset} {weight:.2f}" for asset, weight in sorted(weights.items()))
+    return f"Portfolio weights: {parts}"
 
 
 def _resolve_enabled_connectors(
@@ -78,6 +147,7 @@ def _resolve_enabled_connectors(
 def build_run_request(
     db: DBSession,
     *,
+    user_id: str,
     dashboard_slug: str,
     provider_kind: str,
     model: str,
@@ -86,6 +156,8 @@ def build_run_request(
 
     The dashboard engine is driven by ``dashboard_slug`` (which output
     schema to emit), not a section template, so ``template`` stays None.
+    Server-side authoritative inputs (e.g. the user's portfolio weights for
+    the All-Weather audit) are injected via ``data_context``.
     """
     return RunRequest(
         dashboard_slug=dashboard_slug,
@@ -96,6 +168,7 @@ def build_run_request(
         enabled_connectors=_resolve_enabled_connectors(
             db, provider_kind=provider_kind, model=model
         ),
+        data_context=_build_data_context(db, user_id=user_id, dashboard_slug=dashboard_slug),
     )
 
 
@@ -137,6 +210,7 @@ async def run_to_cache(
     """
     request = build_run_request(
         db,
+        user_id=user_id,
         dashboard_slug=dashboard_slug,
         provider_kind=provider_kind,
         model=model,

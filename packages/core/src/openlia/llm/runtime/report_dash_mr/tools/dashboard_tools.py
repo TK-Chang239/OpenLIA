@@ -10,7 +10,13 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from openlia.macro_research.payloads import DebtCycleData, FourSeasonsData, WorldOrderData
+from openlia.macro_research.payloads import (
+    AllWeatherData,
+    DebtCycleData,
+    FourSeasonsData,
+    WorldOrderData,
+)
+from openlia.macro_research.quant.all_weather import classify_all_weather
 from openlia.macro_research.quant.classification import (
     DebtCycleInputs,
     classify_debt_cycle,
@@ -36,6 +42,7 @@ PAYLOAD_MODEL_BY_SLUG: dict[str, type[BaseModel]] = {
     "debt_cycle": DebtCycleData,
     "world_order": WorldOrderData,
     "four_seasons": FourSeasonsData,
+    "all_weather": AllWeatherData,
 }
 
 
@@ -277,6 +284,60 @@ def build_classify_four_seasons_tool() -> ResearchTool:
     )
 
 
+def build_classify_all_weather_tool() -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            raw = args["weights"]
+            weights = {str(k): float(v) for k, v in raw.items()}
+            out = classify_all_weather(weights)
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise ToolExecutionError(
+                "classify_all_weather requires a `weights` object mapping asset-class "
+                f"names to numeric portfolio weights. {exc}"
+            ) from exc
+        return ToolResult(
+            payload={
+                "severity": out.severity,
+                "overall_coverage_label": out.overall_coverage_label,
+                "risk_contributions": out.risk_contributions,
+                "reference_risk_contributions": out.reference_risk_contributions,
+                "season_coverage": out.season_coverage,
+                "gold_gap": out.gold_gap,
+            },
+            provenance=ComputedSource(method="classify_all_weather", derived_from=["(weights)"]),
+            summary=f"severity={out.severity} {out.overall_coverage_label}",
+        )
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="classify_all_weather",
+            description=(
+                "Deterministic All-Weather portfolio audit from the portfolio's asset-class "
+                "weights. Pass the weights from the provided inputs block; use the returned "
+                "severity, overall_coverage_label, risk_contributions, "
+                "reference_risk_contributions, season_coverage, and gold_gap verbatim in the "
+                "payload."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "weights": {
+                        "type": "object",
+                        "description": (
+                            "Asset-class name to portfolio weight (e.g. "
+                            '{"equities": 0.6, "long_bonds": 0.4}).'
+                        ),
+                        "additionalProperties": {"type": "number"},
+                    },
+                },
+                "required": ["weights"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
 # Per-slug deterministic classify-tool builders. A slug present here gets its
 # classifier tool added to the catalog alongside emit_dashboard. New dashboards
 # register their builder here.
@@ -284,4 +345,5 @@ CLASSIFY_TOOL_BY_SLUG: dict[str, Callable[[], ResearchTool]] = {
     "debt_cycle": build_classify_debt_cycle_tool,
     "world_order": build_classify_world_order_tool,
     "four_seasons": build_classify_four_seasons_tool,
+    "all_weather": build_classify_all_weather_tool,
 }
