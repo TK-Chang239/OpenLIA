@@ -29,6 +29,15 @@ function ok204() {
   } as unknown as Response;
 }
 
+function errJson(body: unknown, status: number) {
+  return {
+    ok: false,
+    status,
+    headers: { get: () => "application/json" },
+    json: async () => body,
+  } as unknown as Response;
+}
+
 describe("macro_research api client", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -93,6 +102,22 @@ describe("macro_research api client", () => {
       "/api/departments/macro_research/dashboards/world_order/refresh",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("runAssessment maps a 409 to already_running instead of throwing", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      errJson(
+        { detail: "a 'debt_cycle' dashboard run is already in progress" },
+        409,
+      ),
+    );
+    const result = await runAssessment("debt_cycle");
+    expect(result).toEqual({ job_run_id: null, status: "already_running" });
+  });
+
+  it("runAssessment still throws on other non-ok statuses", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(errJson({ detail: "boom" }, 500));
+    await expect(runAssessment("debt_cycle")).rejects.toThrow();
   });
 
   it("getSchedule GETs /schedule", async () => {
