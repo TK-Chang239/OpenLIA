@@ -47,3 +47,13 @@ def test_all_weather_exposes_both_classify_and_stress_tools() -> None:
     builders = CLASSIFY_TOOL_BY_SLUG["all_weather"]
     names = {b().descriptor.name for b in builders}
     assert names == {"classify_all_weather", "simulate_all_weather_stress"}
+
+
+def test_four_seasons_exposes_both_classify_and_markov_tools() -> None:
+    from openlia.llm.runtime.report_dash_mr.tools.dashboard_tools import (
+        CLASSIFY_TOOL_BY_SLUG,
+    )
+
+    builders = CLASSIFY_TOOL_BY_SLUG["four_seasons"]
+    names = {b().descriptor.name for b in builders}
+    assert names == {"classify_four_seasons", "markov_four_seasons"}
