@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEBT_CYCLE_FALLBACK } from "../../../../lib/macro_research/dalio_copy/debt_cycle";
+import { WORLD_ORDER_FALLBACK } from "../../../../lib/macro_research/dalio_copy/world_order";
 
 const apiMocks = vi.hoisted(() => ({
   getDashboard: vi.fn(),
@@ -208,9 +209,17 @@ describe("AllWeatherView", () => {
 });
 
 describe("WorldOrderView", () => {
-  it("renders the reserve scorecard, empire cycle, analogs, wealth shift, and verdict", () => {
+  it("renders live cache content: reserve scorecard, empire cycle, analogs, wealth shift, and verdict", async () => {
+    apiMocks.getDashboard.mockResolvedValue({
+      payload: WORLD_ORDER_FALLBACK,
+      generated_at: "2026-06-01T00:00:00Z",
+      is_stale: false,
+      provenance: "live",
+    });
     render(inRouter(<WorldOrderView />));
-    expect(screen.getByText(/T4 · World order assessment/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/T4 · World order assessment/i),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("t4-scorecard")).toBeInTheDocument();
     expect(screen.getByText(/USD share of global FX reserves/i)).toBeInTheDocument();
     expect(screen.getByTestId("t4-reserve-chart")).toBeInTheDocument();
@@ -223,6 +232,73 @@ describe("WorldOrderView", () => {
     expect(screen.getByTestId("t4-currency-exposure")).toBeInTheDocument();
     expect(screen.getByTestId("t4-sovereign-bond")).toBeInTheDocument();
     expect(screen.getByTestId("t4-verdict")).toBeInTheDocument();
+  });
+
+  it("renders the empty state when payload is null", async () => {
+    apiMocks.getDashboard.mockResolvedValueOnce({
+      payload: null,
+      generated_at: null,
+      is_stale: false,
+      provenance: null,
+    });
+    render(inRouter(<WorldOrderView />));
+    expect(
+      await screen.findByText(/hasn.t been generated yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("mr-dash-empty-generate")).toBeInTheDocument();
+    expect(screen.queryByTestId("t4-scorecard")).not.toBeInTheDocument();
+  });
+
+  it("polls until the payload lands and shows live content (poll-to-live)", async () => {
+    vi.useFakeTimers();
+    const POLL_INTERVAL_MS = 6000;
+    try {
+      apiMocks.getDashboard
+        .mockResolvedValueOnce({
+          payload: null,
+          generated_at: null,
+          is_stale: false,
+          provenance: null,
+        })
+        .mockResolvedValue({
+          payload: WORLD_ORDER_FALLBACK,
+          generated_at: "2026-06-01T00:00:00Z",
+          is_stale: false,
+          provenance: "live",
+        });
+      apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
+
+      render(inRouter(<WorldOrderView />));
+
+      // Flush the initial getDashboard microtask so the component settles to empty state.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      const btn = screen.getByTestId("mr-dash-empty-generate");
+
+      act(() => {
+        btn.click();
+      });
+
+      // Flush the runAssessment promise.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Still generating — live content must NOT be shown yet.
+      expect(screen.getByTestId("mr-dash-empty-generate")).toBeDisabled();
+      expect(screen.queryByTestId("t4-scorecard")).not.toBeInTheDocument();
+
+      // Advance one poll interval — getDashboard resolves with live payload.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+      });
+
+      expect(screen.getByTestId("t4-scorecard")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
