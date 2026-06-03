@@ -83,7 +83,7 @@ class MRScheduleService:
         if row is None or row.assessment_schedule is None:
             return
         if self._scheduler is not None:
-            await self._scheduler.remove_schedule(job_type=JobType.MR_ASSESSMENT, user_id=user_id)
+            await self._scheduler.remove_schedule(job_type=JobType.MR_DASH, user_id=user_id)
         with self._session_factory() as s:
             fresh = s.scalars(
                 select(MrDashboardState).where(

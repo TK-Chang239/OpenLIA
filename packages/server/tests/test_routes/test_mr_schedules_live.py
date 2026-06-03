@@ -126,7 +126,7 @@ def test_upsert_registers_with_live_scheduler(live_app):
     )
     assert r.status_code == 200, r.text
     # Live scheduler received the registration.
-    assert job_key(JobType.MR_ASSESSMENT, "local") in fake_scheduler.jobs
+    assert job_key(JobType.MR_DASH, "local") in fake_scheduler.jobs
     # Factory-time stub was *not* called (route reads from app.state).
     factory_time_svc.upsert.assert_not_called()
 
@@ -139,8 +139,8 @@ def test_delete_unregisters_from_live_scheduler(live_app):
         json={"cron_expression": "0 0 * * 0"},
     )
     assert r.status_code == 200
-    assert job_key(JobType.MR_ASSESSMENT, "local") in fake_scheduler.jobs
+    assert job_key(JobType.MR_DASH, "local") in fake_scheduler.jobs
 
     r = client.delete("/departments/macro_research/schedule")
     assert r.status_code == 204
-    assert job_key(JobType.MR_ASSESSMENT, "local") not in fake_scheduler.jobs
+    assert job_key(JobType.MR_DASH, "local") not in fake_scheduler.jobs

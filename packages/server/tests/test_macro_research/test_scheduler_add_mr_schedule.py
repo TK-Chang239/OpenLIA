@@ -14,7 +14,7 @@ def _mk_service(executors=None):
     inner.add_schedule = AsyncMock()
     inner.remove_schedule = AsyncMock()
     svc.scheduler = inner
-    svc.executors = executors or {JobType.MR_ASSESSMENT: MagicMock()}
+    svc.executors = executors or {JobType.MR_DASH: MagicMock()}
     svc.settings = MagicMock(misfire_grace_seconds=21600)
     svc._active_tokens = {}
     return svc, inner
@@ -34,7 +34,7 @@ async def test_accepts_mr_dashboard_state_row() -> None:
     await svc.add_schedule(row)
     inner.add_schedule.assert_awaited_once()
     _args, kwargs = inner.add_schedule.call_args
-    assert kwargs.get("id", "").startswith("mr_assessment:u-1")
+    assert kwargs.get("id", "").startswith("mr_dash:u-1")
 
 
 @pytest.mark.asyncio
