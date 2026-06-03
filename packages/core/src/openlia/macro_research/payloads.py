@@ -259,3 +259,135 @@ class WorldOrderData(BaseModel):
     # Redesign additions (not in types.ts): provenance + freshness.
     provenance: Provenance = Provenance.LIVE
     generated_at: datetime
+
+
+# ---------- T2 — Four Seasons. Mirrors types.ts:129-246 verbatim. ----------
+
+# T2 carries its own tone scale with an extra "purple" value; do not widen the
+# shared Tone, which DashHeader and the other dashboards depend on.
+T2Tone = Literal["red", "amber", "green", "blue", "purple"]
+T2Direction = Literal["up", "down", "flat"]
+
+
+class T2Pill(BaseModel):
+    tone: T2Tone
+    label: str
+
+
+class T2Header(BaseModel):
+    title: str
+    subtitle: str
+    pills: list[T2Pill] = []
+
+
+class T2ScorecardRow(BaseModel):
+    name: str
+    sub: str
+    fillPct: int
+    fillTone: T2Tone
+    current: str
+    currentTone: T2Tone
+    currentMeta: str
+    trend: str
+    axisLabel: str
+    axisTone: T2Tone
+    direction: T2Direction
+    directionLabel: str
+    directionTone: T2Tone
+
+
+class T2QuadrantSeason(BaseModel):
+    name: str
+    sub: str
+    pillLabel: str
+    tone: T2Tone
+
+
+class T2QuadrantMarker(BaseModel):
+    label: str
+    xPct: int
+    yPct: int
+    variant: Literal["now", "prev"]
+    tone: T2Tone
+
+
+class T2VerdictSide(BaseModel):
+    label: str
+    value: str
+    valueTone: T2Tone
+    note: str
+
+
+class T2ProseCard(BaseModel):
+    title: str
+    body: str
+
+
+class T2AssetCard(BaseModel):
+    tone: T2Tone
+    label: str
+    posture: str
+    body: str
+
+
+class T2Note(BaseModel):
+    title: str
+    body: str
+
+
+class T2Scorecard(BaseModel):
+    rows: list[T2ScorecardRow]
+
+
+class T2QuadrantSeasons(BaseModel):
+    tl: T2QuadrantSeason
+    tr: T2QuadrantSeason
+    bl: T2QuadrantSeason
+    br: T2QuadrantSeason
+
+
+class T2Quadrant(BaseModel):
+    seasons: T2QuadrantSeasons
+    markers: list[T2QuadrantMarker]
+
+
+class T2Verdict(BaseModel):
+    title: str
+    body: str
+    sideCards: list[T2VerdictSide]
+
+
+class T2Parallels(BaseModel):
+    cards: list[T2ProseCard]
+
+
+class T2KeyIndicator(BaseModel):
+    title: str
+    body: str
+
+
+class T2TransitionRisk(BaseModel):
+    intro: str
+    bull: T2ProseCard
+    bear: T2ProseCard
+    keyIndicator: T2KeyIndicator
+
+
+class T2AssetPlaybook(BaseModel):
+    cards: list[T2AssetCard]
+
+
+class FourSeasonsData(BaseModel):
+    header: T2Header
+    cardSummary: str
+    scorecard: T2Scorecard
+    quadrant: T2Quadrant
+    verdict: T2Verdict
+    parallels: T2Parallels
+    transitionRisk: T2TransitionRisk
+    assetPlaybook: T2AssetPlaybook
+    notes: list[T2Note]
+    sources: str
+    # Redesign additions (not in types.ts): provenance + freshness.
+    provenance: Provenance = Provenance.LIVE
+    generated_at: datetime
