@@ -1,6 +1,6 @@
-"""Verifies the 7 dashboard tables in §7 of database-design.md:
+"""Verifies the dashboard tables in §7 of database-design.md:
   pt_user_configs, pt_presets, mr_dashboard_state, mr_dashboard_cache,
-  rs_user_config, rs_snapshots, fe_saved_formulas.
+  rs_user_config, rs_dashboard_cache, fe_saved_formulas.
 
 Exercised against a tmp SQLite file via Base.metadata.create_all.
 Alembic round-trip is tested in Task 4 of this plan.
@@ -274,31 +274,6 @@ def test_rs_user_config_one_per_user(create_tables, db_session: Session) -> None
         db_session.commit()
 
 
-# ---------- rs_snapshots ----------
-
-
-def test_rs_snapshots_columns(create_tables) -> None:
-    from openlia_server.db.models.dashboard import RsSnapshot
-
-    cols = {c.name: c for c in RsSnapshot.__table__.columns}
-    expected = {
-        "id",
-        "ticker",
-        "snapshot_data",
-        "source_breakdown",
-        "captured_at",
-    }
-    assert set(cols.keys()) == expected
-
-
-def test_rs_snapshots_has_ticker_captured_index(create_tables) -> None:
-    """ix_rs_snapshots_ticker_captured must exist on (ticker, captured_at)."""
-    from openlia_server.db.models.dashboard import RsSnapshot
-
-    names = {ix.name for ix in RsSnapshot.__table__.indexes}
-    assert "ix_rs_snapshots_ticker_captured" in names
-
-
 # ---------- fe_saved_formulas ----------
 
 
@@ -387,7 +362,7 @@ def test_dashboard_and_scheduler_registered_via_models_register_all() -> None:
         "mr_dashboard_state",
         "mr_dashboard_cache",
         "rs_user_config",
-        "rs_snapshots",
+        "rs_dashboard_cache",
         "fe_saved_formulas",
         # Scheduler + notifications
         "mb_schedules",

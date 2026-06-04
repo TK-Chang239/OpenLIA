@@ -1,12 +1,8 @@
-import type { ReliabilityTier } from "../../lib/retail-sentiment/metric-catalog";
-import { ReliabilityBadge } from "./ReliabilityBadge";
-
 interface Props {
   label: string;
   value: number | string | null;
   units?: string;
   digits?: number;
-  reliability?: ReliabilityTier;
   emphasis?: boolean;
   tooltip?: string;
   /** Sub-line shown below the value, e.g. "vs 30d avg" or a delta. */
@@ -15,6 +11,7 @@ interface Props {
   visual?: React.ReactNode;
   /** Disabled / cold-start state — gray out and append a hint. */
   disabledNote?: string;
+  [key: string]: unknown;
 }
 
 function format(value: number | string | null, digits = 2): string {
@@ -28,14 +25,16 @@ export function MetricCard({
   value,
   units,
   digits,
-  reliability,
   emphasis,
   tooltip,
   caption,
   visual,
   disabledNote,
+  ...rest
 }: Props) {
   const disabled = Boolean(disabledNote);
+  // Filter out non-DOM props before spreading
+  const { ...domRest } = rest;
   return (
     <div
       title={tooltip}
@@ -43,13 +42,12 @@ export function MetricCard({
         "rs-col-card",
         "p-4 flex flex-col gap-2 min-w-0",
         disabled ? "opacity-60" : "",
-        emphasis ? "" : "",
       ].join(" ")}
       style={{ borderRadius: "10px" }}
+      {...domRest}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="rs-mono-label truncate">{label}</span>
-        {reliability ? <ReliabilityBadge tier={reliability} /> : null}
       </div>
 
       <div className="flex items-baseline gap-1.5">

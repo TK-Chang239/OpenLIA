@@ -616,11 +616,12 @@ def select_runtime_mode(*, department_id: str, requested: RuntimeMode | None) ->
 
     Rules:
 
-      - `requires_runner=True` depts (Retail Sentiment) default to
-        deterministic.
+      - `requires_runner=True` depts default to deterministic. (No registered
+        department currently sets this — Macro Research and Retail Sentiment
+        both became web-search dashboards routed via their own routes/scheduler,
+        not this picker — but the branch is retained for future runner depts.)
       - Chat-only depts (Secretary, Equity Research, Earnings Update,
         Panic Thermometer, Morning Briefing) default to `chat`.
-        (Macro Research is a dashboard, routed via the scheduler, not this picker.)
       - Callers may force `scheduled_chat` (PT/MB cron) — that mode is
         always allowed for chat-only depts; rejected for runner depts.
 

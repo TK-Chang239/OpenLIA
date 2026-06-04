@@ -27,9 +27,7 @@ export const isDepartmentSlug = (value: string): value is DepartmentSlug =>
  * the Review page renders resolve panels for; chat-driven departments map
  * tools dynamically at runtime via the chat router.
  */
-export const RUNNER_BEARING_DEPARTMENTS: readonly DepartmentSlug[] = [
-  "retail_sentiment",
-] as const;
+export const RUNNER_BEARING_DEPARTMENTS: readonly DepartmentSlug[] = [] as const;
 
 export const RUNNER_DEPARTMENT_LABELS: Record<DepartmentSlug, string> = {
   secretary: "Secretary",

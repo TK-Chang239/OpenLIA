@@ -863,24 +863,6 @@ def create_app(
         )
     )
 
-    # Retail Sentiment — runner singleton (per-process). Data provider optional;
-    # when absent the runner produces empty-posts snapshots (useful for tests).
-    # Classifier resolves the configured LLM model per call and falls back to
-    # neutral when none is configured, so the runner is safe to install in
-    # environments where no provider is set up yet.
-    from openlia_server.services.rs_runner import RsRunner as _RsRunner
-    from openlia_server.services.rs_sync_classifier import RefreshingSyncLlmClassifier
-
-    rs_data_provider = getattr(app.state, "rs_data_provider", None)
-    rs_classifier = getattr(app.state, "rs_classifier", None) or RefreshingSyncLlmClassifier(
-        db_session_factory=factory,
-    )
-    app.state.rs_classifier = rs_classifier
-    app.state.rs_runner = _RsRunner(
-        session_factory=factory,
-        data_provider=rs_data_provider,
-        classifier=rs_classifier,
-    )
     app.include_router(build_retail_sentiment_router(db_session_factory=factory, mode=mode))
     # PT runner singleton (per-process) so the per-panel cache persists across
     # requests within a process. Dispatcher defaults to a no-op; a real

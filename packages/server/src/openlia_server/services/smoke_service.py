@@ -150,20 +150,6 @@ def _from_dict_check(spec: CallableSpec, items: list[dict[str, Any]]) -> str | N
     return None
 
 
-def _raw_social_post_from_dict(item: dict[str, Any]) -> Any:
-    """Adapter for retail_sentiment.social_posts."""
-    from openlia.retail_sentiment.schemas import RawSocialPost
-
-    return RawSocialPost(
-        id=item["id"],
-        ticker=item["ticker"],
-        source=item["source"],
-        text=item["text"],
-        engagement=item.get("engagement", {}) or {},
-        created_at=item["created_at"],
-    )
-
-
 def _geopolitical_news_from_dict(item: dict[str, Any]) -> dict[str, Any]:
     """Adapter for macro_research.geopolitical_news.
 
@@ -177,7 +163,6 @@ def _geopolitical_news_from_dict(item: dict[str, Any]) -> dict[str, Any]:
 
 
 _DEPT_ADAPTERS = {
-    "social_posts": _raw_social_post_from_dict,
     "geopolitical_news": _geopolitical_news_from_dict,
 }
 

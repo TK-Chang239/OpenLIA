@@ -96,42 +96,6 @@ def test_metadata_matches_alembic_head(tmp_path: Path) -> None:
     engine.dispose()
 
 
-def test_rs_classification_log_migration_step(tmp_path: Path) -> None:
-    """Step from its parent to head and back — catches regressions in the
-    catch-up migration's upgrade/downgrade bodies (NEW-1b-09)."""
-    db_file = tmp_path / "step.db"
-    db_url = f"sqlite:///{db_file}"
-
-    # Stop one revision before the target migration.
-    proc = _run_alembic(["upgrade", "20260424_0001_mr"], db_url)
-    assert proc.returncode == 0, proc.stderr
-
-    engine = create_engine(db_url)
-    insp = inspect(engine)
-    assert "rs_classification_log" not in insp.get_table_names()
-    engine.dispose()
-
-    proc = _run_alembic(["upgrade", "20260424_0100_rs"], db_url)
-    assert proc.returncode == 0, proc.stderr
-
-    engine = create_engine(db_url)
-    insp = inspect(engine)
-    assert "rs_classification_log" in insp.get_table_names()
-    index_names = {idx["name"] for idx in insp.get_indexes("rs_classification_log")}
-    assert {"ix_rs_classification_log_ticker_created", "ix_rs_classification_log_batch"}.issubset(
-        index_names
-    )
-    engine.dispose()
-
-    proc = _run_alembic(["downgrade", "20260424_0001_mr"], db_url)
-    assert proc.returncode == 0, proc.stderr
-
-    engine = create_engine(db_url)
-    insp = inspect(engine)
-    assert "rs_classification_log" not in insp.get_table_names()
-    engine.dispose()
-
-
 def test_mr_dashboard_state_schedule_cols_step(tmp_path: Path) -> None:
     """Catch-up migration adds the two schedule columns and cleanly reverses."""
     db_file = tmp_path / "step_mr.db"

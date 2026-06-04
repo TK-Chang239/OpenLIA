@@ -15,17 +15,20 @@ class RetailSentimentDepartment:
     prompt_name: str = "retail_sentiment"
     department_type: str = "dashboard"
 
-    # Connector dependencies (spec §10.1, §9.5).
-    # RS pulls social posts via the financial connectors' sentiment endpoints
-    # (EODHD, FMP), so `financial` is the required category, not `social`.
-    required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)
+    # Connector dependencies (spec §10.1, §9.5). WEB_SEARCH is the required
+    # backbone for the web-search-driven sentiment dashboard engine
+    # (report_dash_rs). FINANCIAL (live quotes + sentiment endpoints) and NEWS
+    # are optional enrichment. RS is dashboard-routed (report_dash_rs via the
+    # connector dispatcher), NOT a runner department.
+    required_categories: ClassVar[tuple[Category, ...]] = (Category.WEB_SEARCH,)
     optional_categories: ClassVar[tuple[Category, ...]] = (
+        Category.FINANCIAL,
         Category.NEWS,
-        Category.SOCIAL,
     )
+    required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = ()
 
-    # Runtime behavior (spec §5.2).
-    requires_runner: ClassVar[bool] = True
+    # Runtime behavior: dashboard engine, no deterministic runner / needs.
+    requires_runner: ClassVar[bool] = False
     disable_runtime_routing: ClassVar[bool] = False
 
     extra_tools: tuple[dict[str, Any], ...] = ()

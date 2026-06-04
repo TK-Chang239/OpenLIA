@@ -35,6 +35,7 @@ async def test_build_scheduler_service_wires_all_executors(
     assert JobType.MB_BRIEFING in svc.executors
     assert JobType.EU_SCAN in svc.executors
     assert JobType.MR_DASH in svc.executors
+    assert JobType.RS_SNAPSHOT in svc.executors
     assert JobType.SYSTEM_MAINTENANCE in svc.executors
     assert JobType.GRAPH_EXTRACTION in svc.executors
 
@@ -79,21 +80,15 @@ async def test_build_scheduler_service_with_real_report_runner(
 
 
 @pytest.mark.asyncio
-async def test_build_includes_rs_executor_when_runner_provided(
+async def test_build_includes_rs_executor(
     session_factory,
 ) -> None:
-    from collections.abc import Sequence
-
-    class _RsRunner:
-        def run_many(self, tickers: Sequence[str]) -> list[dict]:
-            return []
-
+    """RS_SNAPSHOT executor is always wired (no rs_runner dependency)."""
     svc = build_scheduler_service(
         session_factory=session_factory,
         settings=SchedulerSettings(enabled=True),
         scheduler=FakeAPScheduler(),
         report_runner=FakeReportRunner(events=[]),
-        rs_runner=_RsRunner(),
         **_builders(),
     )
 
