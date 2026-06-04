@@ -24,6 +24,7 @@ from openlia.macro_research.quant.classification import (
     classify_debt_cycle,
 )
 from openlia.macro_research.quant.forces import ForceScores, classify_five_forces
+from openlia.macro_research.quant.forces_network import analyze_force_network
 from openlia.macro_research.quant.markov import markov_outlook, resolve_quadrant
 from openlia.macro_research.quant.monte_carlo import simulate_all_weather_stress
 from openlia.macro_research.quant.seasons import (
@@ -547,6 +548,80 @@ def build_classify_five_forces_tool() -> ResearchTool:
     )
 
 
+def build_analyze_five_forces_network_tool() -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            out = analyze_force_network(
+                ForceScores(
+                    debt_money=float(args["debt_money"]),
+                    political=float(args["political"]),
+                    geopolitical=float(args["geopolitical"]),
+                    technology=float(args["technology"]),
+                    natural=float(args["natural"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ToolExecutionError(
+                "analyze_five_forces_network requires numeric debt_money, political, "
+                f"geopolitical, technology, natural (each 0-10). {exc}"
+            ) from exc
+        return ToolResult(
+            payload={
+                "edges": [
+                    {"from_label": e.from_label, "to_label": e.to_label, "strength": e.strength}
+                    for e in out.edges
+                ],
+                "projections": [
+                    {
+                        "force": p.force,
+                        "current": p.current,
+                        "projected": p.projected,
+                        "delta": p.delta,
+                    }
+                    for p in out.projections
+                ],
+                "amplifier": out.amplifier,
+                "absorber": out.absorber,
+                "contagion": out.contagion,
+                "contagion_label": out.contagion_label,
+            },
+            provenance=ComputedSource(
+                method="analyze_five_forces_network", derived_from=["(scores)"]
+            ),
+            summary=f"{out.contagion_label} contagion={out.contagion:.2f} edges={len(out.edges)}",
+        )
+
+    _score = {"type": "number", "minimum": 0, "maximum": 10}
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="analyze_five_forces_network",
+            description=(
+                "Deterministic Dalio force-influence network from the five 0-10 force "
+                "scores (same scores as classify_five_forces). Returns the active causal "
+                "`edges` (each a {from_label, to_label, strength} object; render as a "
+                "{fromLabel, toLabel, strength} array), the per-force `projections` (each a "
+                "{force, current, projected, delta} object; render as an array), the "
+                "`amplifier` and `absorber` force labels, and the aggregate `contagion` "
+                "(0-1) plus `contagion_label` (renders as `contagionLabel` in the payload). "
+                "Use the returned numbers verbatim to fill loops.network."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "debt_money": {**_score, "description": "F1 debt/money cycle intensity, 0-10"},
+                    "political": {**_score, "description": "F2 internal order/political, 0-10"},
+                    "geopolitical": {**_score, "description": "F3 geopolitical cycle, 0-10"},
+                    "technology": {**_score, "description": "F4 technology wave, 0-10"},
+                    "natural": {**_score, "description": "F5 acts of nature, 0-10"},
+                },
+                "required": ["debt_money", "political", "geopolitical", "technology", "natural"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
 # Per-slug deterministic tool builders. A slug present here gets each of its
 # tools added to the catalog alongside emit_dashboard. New dashboards register
 # their builder(s) here.
@@ -555,5 +630,5 @@ CLASSIFY_TOOL_BY_SLUG: dict[str, list[Callable[[], ResearchTool]]] = {
     "world_order": [build_classify_world_order_tool],
     "four_seasons": [build_classify_four_seasons_tool, build_markov_four_seasons_tool],
     "all_weather": [build_classify_all_weather_tool, build_simulate_all_weather_stress_tool],
-    "five_forces": [build_classify_five_forces_tool],
+    "five_forces": [build_classify_five_forces_tool, build_analyze_five_forces_network_tool],
 }

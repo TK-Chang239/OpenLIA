@@ -593,6 +593,29 @@ export interface T5Scenario {
   body: string;
 }
 
+export interface T5NetworkEdge {
+  fromLabel: string;
+  toLabel: string;
+  strength: number;
+}
+
+export interface T5ForceProjection {
+  force: string;
+  current: number;
+  projected: number;
+  delta: number;
+}
+
+export interface T5ForceNetwork {
+  label: string;
+  edges: T5NetworkEdge[];
+  projections: T5ForceProjection[];
+  amplifier: string;
+  absorber: string;
+  contagion: number;
+  contagionLabel: string;
+}
+
 export interface FiveForcesData {
   header: {
     title: string;
@@ -608,6 +631,7 @@ export interface FiveForcesData {
     label: string;
     blocks: T5LoopBlock[];
     active: T5ActiveCount;
+    network: T5ForceNetwork;
   };
   signals: {
     label: string;

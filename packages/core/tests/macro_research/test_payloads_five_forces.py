@@ -68,6 +68,24 @@ def _five_forces_fixture() -> dict:
                 "title": "All forces simultaneously active",
                 "body": "Co-activation of all five is historically rare.",
             },
+            "network": {
+                "label": "Influence network (current)",
+                "edges": [
+                    {"fromLabel": "Debt / money", "toLabel": "Internal politics", "strength": 0.54},
+                    {"fromLabel": "Geopolitical", "toLabel": "Debt / money", "strength": 0.45},
+                ],
+                "projections": [
+                    {"force": "Debt / money", "current": 9.0, "projected": 8.6, "delta": -0.4},
+                    {"force": "Internal politics", "current": 8.0, "projected": 8.3, "delta": 0.3},
+                    {"force": "Geopolitical", "current": 9.0, "projected": 8.7, "delta": -0.3},
+                    {"force": "Technology", "current": 6.0, "projected": 6.0, "delta": 0.0},
+                    {"force": "Nature", "current": 5.0, "projected": 5.2, "delta": 0.2},
+                ],
+                "amplifier": "Debt / money",
+                "absorber": "Internal politics",
+                "contagion": 0.45,
+                "contagionLabel": "Spreading",
+            },
         },
         "signals": {
             "label": "Section C - current market data",
@@ -164,3 +182,15 @@ def test_five_forces_rejects_invalid_scenario_variant() -> None:
     fixture["scenarios"]["cards"][0]["variant"] = "sideways"
     with pytest.raises(ValidationError):
         FiveForcesData.model_validate(fixture)
+
+
+def test_five_forces_network_validates() -> None:
+    data = FiveForcesData.model_validate(_five_forces_fixture())
+    net = data.loops.network
+    assert net.amplifier == "Debt / money"
+    assert net.absorber == "Internal politics"
+    assert net.contagionLabel == "Spreading"
+    assert net.edges[0].fromLabel == "Debt / money"
+    assert net.edges[0].strength == 0.54
+    assert len(net.projections) == 5
+    assert net.projections[1].delta == 0.3
