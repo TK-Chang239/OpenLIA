@@ -259,3 +259,14 @@ def test_macro_research_disabled_without_web_search_connector():
     health = check_dept_health(dept, validated_connectors=connectors, runner_specs=[])
     assert health.status == "disabled"
     assert Category.WEB_SEARCH in health.missing_categories
+
+
+def test_satisfied_categories_lists_validated_categories():
+    dept = MacroResearchDepartment()
+    connectors = [
+        _Conn(category=Category.WEB_SEARCH, status=ConnectorStatus.VALIDATED),
+        _Conn(category=Category.NEWS, status=ConnectorStatus.FAILED),
+    ]
+    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=[])
+    assert Category.WEB_SEARCH in health.satisfied_categories
+    assert Category.NEWS not in health.satisfied_categories

@@ -79,6 +79,8 @@ def test_serialize_shape():
         "required_categories": [],
         "required_any_of": [],
         "unsatisfied_any_of": [],
+        "optional_categories": [],
+        "satisfied_categories": [],
     }
 
 
@@ -112,8 +114,10 @@ def test_serialize_macro_research_shows_web_search_required():
         unresolved_needs=[],
     )
     blob = dept_health.serialize(h)
-    assert "financial" in blob["required_categories"]
-    assert "web_search" in blob["required_categories"]
+    assert blob["required_categories"] == ["web_search"]
+    assert "financial" in blob["optional_categories"]
+    assert "news" in blob["optional_categories"]
+    assert blob["satisfied_categories"] == []
 
 
 @pytest.mark.asyncio

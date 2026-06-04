@@ -59,6 +59,7 @@ class DepartmentHealth:
     missing_categories: list[Category]
     unresolved_needs: list[str]
     unsatisfied_any_of: list[tuple[Category, ...]] = field(default_factory=list)
+    satisfied_categories: list[Category] = field(default_factory=list)
 
 
 def _coerce_category(value: Any) -> Category | None:
@@ -105,6 +106,8 @@ def check_dept_health(
         cat for cat in dept.required_categories if cat not in validated_cats
     ]
 
+    satisfied_categories = sorted(validated_cats)
+
     any_of_groups: tuple[tuple[Category, ...], ...] = getattr(dept, "required_any_of", ()) or ()
     unsatisfied_any_of: list[tuple[Category, ...]] = [
         group for group in any_of_groups if not any(c in validated_cats for c in group)
@@ -128,6 +131,7 @@ def check_dept_health(
             missing_categories=[],
             unresolved_needs=[],
             unsatisfied_any_of=[],
+            satisfied_categories=satisfied_categories,
         )
 
     parts: list[str] = []
@@ -151,6 +155,7 @@ def check_dept_health(
         missing_categories=missing_categories,
         unresolved_needs=unresolved_needs,
         unsatisfied_any_of=unsatisfied_any_of,
+        satisfied_categories=satisfied_categories,
     )
 
 
