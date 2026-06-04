@@ -12,6 +12,8 @@ export interface DepartmentHealth {
   // `required_any_of`. Optional in the type because legacy responses
   // (and many test fixtures) predate these fields.
   required_categories?: string[];
+  optional_categories?: string[];
+  satisfied_categories?: string[];
   required_any_of?: string[][];
   unsatisfied_any_of?: string[][];
 }
