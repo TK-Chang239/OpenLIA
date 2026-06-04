@@ -32,7 +32,6 @@ from openlia_server.scheduler.payloads import (
     EuV2CalendarSyncer,
     EuV2Dispatcher,
     ReportStore,
-    RSSnapshotRunner,
 )
 from openlia_server.scheduler.registry import JobType
 from openlia_server.scheduler.service import SchedulerService
@@ -47,7 +46,6 @@ def build_scheduler_service(
     report_runner: Any,
     eu_planner: EUScanPlanner,
     report_store: ReportStore,
-    rs_runner: RSSnapshotRunner | None = None,
     financial_adapter_provider: Callable[[], Any] | None = None,
     eu_v2_syncer: EuV2CalendarSyncer | None = None,
     eu_v2_dispatcher: EuV2Dispatcher | None = None,
@@ -66,6 +64,7 @@ def build_scheduler_service(
             report_store=report_store,
         ),
         JobType.MR_DASH: MrDashExecutor(session_factory=session_factory),
+        JobType.RS_SNAPSHOT: RSSnapshotExecutor(session_factory=session_factory),
         JobType.SYSTEM_MAINTENANCE: MaintenanceExecutor(
             session_factory=session_factory,
         ),
@@ -73,12 +72,6 @@ def build_scheduler_service(
             session_factory=session_factory,
         ),
     }
-
-    if rs_runner is not None:
-        executors[JobType.RS_SNAPSHOT] = RSSnapshotExecutor(
-            session_factory=session_factory,
-            rs_runner=rs_runner,
-        )
 
     if financial_adapter_provider is not None:
         executors[JobType.PORTFOLIO_PRICE_REFRESH] = portfolio_executor_factory(
