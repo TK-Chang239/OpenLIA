@@ -35,8 +35,8 @@ def test_correlation_matrix_is_symmetric_unit_diagonal() -> None:
 
 
 def test_correlation_matrix_is_positive_semidefinite() -> None:
-    # Hand-tuned reference correlations must form a valid (PSD) matrix so the
-    # Gaussian simulator can draw from it.
+    # Empirical correlations (computed from daily log returns) form a valid (PSD)
+    # matrix so the Gaussian simulator can draw from it.
     corr = correlation_matrix(CORRELATIONS)
     eigenvalues = np.linalg.eigvalsh(corr)
     assert eigenvalues.min() >= -1e-8

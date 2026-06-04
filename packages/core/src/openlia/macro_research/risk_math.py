@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import numpy as np
 
-# Long-run annualized volatility defaults (see design spec).
+# Annualized volatilities, computed as the stdev of daily log returns of the
+# proxy ETFs (x sqrt(252)) over the common window 2006-02-03..2025-12-31. See
+# planning/specs/systems/macro-research-reference-datasets-provenance.md.
 DEFAULT_VOLS: dict[str, float] = {
-    "equities": 0.165,
-    "long_bonds": 0.115,
-    "intermediate_bonds": 0.07,
-    "gold": 0.16,
-    "commodities": 0.18,
+    "equities": 0.194,
+    "long_bonds": 0.149,
+    "intermediate_bonds": 0.069,
+    "gold": 0.179,
+    "commodities": 0.192,
 }
 
 # Dalio reference All-Weather allocation.
@@ -40,29 +42,34 @@ ASSET_ORDER: tuple[str, ...] = (
     "commodities",
 )
 
-# Long-run annualized nominal expected return per asset class. Reference
-# assumptions (adjustable), used as the Monte-Carlo drift.
+# Long-run nominal expected returns -- CURATED forward capital-market
+# assumptions (long-run real return + a ~2.5% inflation assumption), used as the
+# Monte-Carlo drift. NOT the realized window CAGR (a poor proxy for forward
+# returns, recorded only as a sanity reference in the provenance doc). See
+# planning/specs/systems/macro-research-reference-datasets-provenance.md.
 EXPECTED_RETURNS: dict[str, float] = {
     "equities": 0.07,
-    "long_bonds": 0.03,
-    "intermediate_bonds": 0.025,
+    "long_bonds": 0.04,
+    "intermediate_bonds": 0.035,
     "gold": 0.03,
     "commodities": 0.04,
 }
 
-# Long-run cross-asset correlations (upper-triangle; symmetric, unit diagonal).
-# Reference assumptions (adjustable).
+# Cross-asset correlations (upper-triangle; symmetric, unit diagonal), computed
+# as Pearson correlation of daily log returns over the common window
+# 2006-02-03..2025-12-31. Empirical => positive-semi-definite. See the
+# provenance doc above.
 CORRELATIONS: dict[tuple[str, str], float] = {
-    ("equities", "long_bonds"): -0.15,
-    ("equities", "intermediate_bonds"): -0.05,
-    ("equities", "gold"): 0.05,
-    ("equities", "commodities"): 0.35,
-    ("long_bonds", "intermediate_bonds"): 0.85,
-    ("long_bonds", "gold"): 0.20,
-    ("long_bonds", "commodities"): -0.10,
-    ("intermediate_bonds", "gold"): 0.15,
-    ("intermediate_bonds", "commodities"): -0.05,
-    ("gold", "commodities"): 0.30,
+    ("equities", "long_bonds"): -0.31,
+    ("equities", "intermediate_bonds"): -0.30,
+    ("equities", "gold"): 0.06,
+    ("equities", "commodities"): 0.41,
+    ("long_bonds", "intermediate_bonds"): 0.91,
+    ("long_bonds", "gold"): 0.16,
+    ("long_bonds", "commodities"): -0.22,
+    ("intermediate_bonds", "gold"): 0.21,
+    ("intermediate_bonds", "commodities"): -0.19,
+    ("gold", "commodities"): 0.37,
 }
 
 
