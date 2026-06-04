@@ -79,19 +79,19 @@ def test_string_status_and_category_accepted():
 
 
 # ---------------------------------------------------------------------------
-# Runner-bearing dept (Macro Research) — requires_runner=True with declared needs
+# Runner-bearing dept (Retail Sentiment) — requires_runner=True with needs
 # ---------------------------------------------------------------------------
 
 
 def test_runner_dept_disabled_with_unresolved_need():
-    dept = MacroResearchDepartment()
+    dept = RetailSentimentDepartment()
     needs = load_needs(dept.name)
-    assert needs, "MacroResearch needs.yaml must declare at least one need"
+    assert needs, "RetailSentiment needs.yaml must declare at least one need"
 
     connectors = [
         _Conn(category=cat, status=ConnectorStatus.VALIDATED) for cat in dept.required_categories
     ]
-    # Resolve all but the first need
+    # Resolve all but the first need.
     specs = [_Spec(department_id=dept.name, need_id=n.id) for n in needs[1:]]
     health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)
     assert health.status == "disabled"
@@ -99,33 +99,21 @@ def test_runner_dept_disabled_with_unresolved_need():
     assert needs[0].id in health.reason
 
 
-def test_runner_dept_active_when_all_needs_resolved():
-    dept = MacroResearchDepartment()
-    needs = load_needs(dept.name)
-    connectors = [
-        _Conn(category=cat, status=ConnectorStatus.VALIDATED) for cat in dept.required_categories
-    ]
-    specs = [_Spec(department_id=dept.name, need_id=n.id) for n in needs]
-    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)
-    assert health.status == "active"
-    assert health.unresolved_needs == []
-
-
 def test_runner_dept_specs_for_other_dept_do_not_count():
-    dept = MacroResearchDepartment()
+    dept = RetailSentimentDepartment()
     needs = load_needs(dept.name)
     connectors = [
         _Conn(category=cat, status=ConnectorStatus.VALIDATED) for cat in dept.required_categories
     ]
-    # Specs reference a different dept — should not satisfy MR needs
-    specs = [_Spec(department_id="retail_sentiment", need_id=n.id) for n in needs]
+    # Specs reference a different dept — must not satisfy RS needs.
+    specs = [_Spec(department_id="macro_research", need_id=n.id) for n in needs]
     health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)
     assert health.status == "disabled"
     assert health.unresolved_needs == [n.id for n in needs]
 
 
 def test_runner_dept_disabled_lists_both_missing_categories_and_unresolved_needs():
-    dept = MacroResearchDepartment()
+    dept = RetailSentimentDepartment()
     needs = load_needs(dept.name)
     health = check_dept_health(dept, validated_connectors=[], runner_specs=[])
     assert health.status == "disabled"
@@ -214,10 +202,20 @@ def test_required_any_of_unrelated_category_does_not_satisfy():
     assert health.status == "disabled"
 
 
-def test_macro_research_requires_financial_and_web_search():
+def test_macro_research_requires_only_web_search():
     dept = MacroResearchDepartment()
-    assert Category.FINANCIAL in dept.required_categories
-    assert Category.WEB_SEARCH in dept.required_categories
+    assert dept.required_categories == (Category.WEB_SEARCH,)
+    assert Category.FINANCIAL in dept.optional_categories
+    assert Category.NEWS in dept.optional_categories
+    assert dept.requires_runner is False
+
+
+def test_macro_research_active_with_web_search_only():
+    dept = MacroResearchDepartment()
+    connectors = [_Conn(category=Category.WEB_SEARCH, status=ConnectorStatus.VALIDATED)]
+    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=[])
+    assert health.status == "active"
+    assert health.unresolved_needs == []
 
 
 def test_morning_briefing_active_with_financial_and_news():
@@ -256,9 +254,8 @@ def test_morning_briefing_disabled_without_news_or_web_search():
 
 def test_macro_research_disabled_without_web_search_connector():
     dept = MacroResearchDepartment()
-    needs = load_needs(dept.name)
+    # FINANCIAL alone is no longer enough — WEB_SEARCH is the one required category.
     connectors = [_Conn(category=Category.FINANCIAL, status=ConnectorStatus.VALIDATED)]
-    specs = [_Spec(department_id=dept.name, need_id=n.id) for n in needs]
-    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)
+    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=[])
     assert health.status == "disabled"
     assert Category.WEB_SEARCH in health.missing_categories

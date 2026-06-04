@@ -15,13 +15,7 @@ from openlia.departments.loader import _needs_path, load_needs
 
 
 def test_loader_parses_canonical_keys_for_list_dict_shapes() -> None:
-    mr_needs = {n.id: n for n in load_needs("macro_research")}
     rs_needs = {n.id: n for n in load_needs("retail_sentiment")}
-
-    geo = mr_needs["geopolitical_news"]
-    assert geo.shape == "list[dict]"
-    assert geo.canonical_keys is not None
-    assert set(geo.canonical_keys.keys()) >= {"title", "url", "published_at"}
 
     posts = rs_needs["social_posts"]
     assert posts.shape == "list[dict]"
@@ -33,11 +27,6 @@ def test_loader_parses_canonical_keys_for_list_dict_shapes() -> None:
         "text",
         "created_at",
     }
-
-    # Scalar needs have no canonical_keys.
-    debt_gdp = mr_needs["debt_gdp"]
-    assert debt_gdp.shape == "float"
-    assert debt_gdp.canonical_keys is None
 
 
 def test_loader_rejects_canonical_keys_on_scalar_shape(tmp_path: Path) -> None:

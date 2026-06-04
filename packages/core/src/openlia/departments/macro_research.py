@@ -23,20 +23,20 @@ class MacroResearchDepartment:
     is_dashboard: bool = True
     has_chat: bool = False
 
-    # Connector dependencies (spec §10.1).
-    # WEB_SEARCH is required because four MR needs (usd_fx_reserve_share,
-    # cb_gold_purchases, foreign_treasury_holdings, interest_revenue) are
-    # only resolvable through Firecrawl-style scraping templates; no
-    # FINANCIAL provider exposes them.
-    required_categories: ClassVar[tuple[Category, ...]] = (
+    # Connector dependencies (spec §9). WEB_SEARCH is the required macro
+    # backbone; the engine falls back to native web_search for any value a
+    # connector does not cover. FINANCIAL (live quotes + whatever indicators it
+    # exposes) and NEWS are optional. MR is dashboard-routed (report_dash_mr via
+    # the connector dispatcher), NOT a runner department.
+    required_categories: ClassVar[tuple[Category, ...]] = (Category.WEB_SEARCH,)
+    optional_categories: ClassVar[tuple[Category, ...]] = (
         Category.FINANCIAL,
-        Category.WEB_SEARCH,
+        Category.NEWS,
     )
-    optional_categories: ClassVar[tuple[Category, ...]] = (Category.NEWS,)
     required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = ()
 
-    # Runtime behavior (spec §5.2).
-    requires_runner: ClassVar[bool] = True
+    # Runtime behavior: dashboard engine, no deterministic runner / needs.
+    requires_runner: ClassVar[bool] = False
     disable_runtime_routing: ClassVar[bool] = False
 
     valid_modes: tuple[str, ...] = ()
