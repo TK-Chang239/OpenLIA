@@ -69,29 +69,29 @@ def test_outlook_distribution_is_the_matrix_row() -> None:
     out = markov_outlook("Summer")
     assert out.current_season == "Summer"
     assert out.distribution == {
-        "Spring": 0.08,
-        "Summer": 0.60,
-        "Autumn": 0.27,
-        "Winter": 0.05,
+        "Spring": 0.07,
+        "Summer": 0.65,
+        "Autumn": 0.25,
+        "Winter": 0.03,
     }
     assert abs(sum(out.distribution.values()) - 1.0) < 1e-9
 
 
 def test_outlook_persistence_is_diagonal() -> None:
     out = markov_outlook("Autumn")
-    assert out.persistence == 0.57
+    assert out.persistence == 0.60
 
 
 def test_outlook_most_likely_next_and_adverse() -> None:
     out = markov_outlook("Summer")
     assert out.most_likely_next == "Summer"  # persistence dominates
     assert out.adverse_season == "Autumn"
-    assert out.adverse_prob == 0.27
+    assert out.adverse_prob == 0.25
 
 
 def test_outlook_expected_dwell() -> None:
-    out = markov_outlook("Spring")  # persistence 0.60
-    assert abs(out.expected_dwell_quarters - 2.5) < 1e-9
+    out = markov_outlook("Spring")  # persistence 0.65
+    assert abs(out.expected_dwell_quarters - (1.0 / (1.0 - 0.65))) < 1e-9
 
 
 def test_outlook_horizon_is_matrix_power_and_stochastic() -> None:

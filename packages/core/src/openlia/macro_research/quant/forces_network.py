@@ -40,8 +40,12 @@ ACTIVE_THRESHOLD: float = 7.0
 PERSISTENCE: float = 0.7
 
 # Directed structural coupling A[driver][driven] in [0, 1], zero diagonal.
-# Reference assumptions (adjustable); Dalio's documented force linkages. Only
-# non-zero entries are listed; missing pairs are 0.0.
+# Reference assumptions (adjustable); Dalio's documented force linkages from
+# "Principles for Dealing with the Changing World Order". Structural, NOT fitted
+# from data (the inputs are soft 0-10 scores, not time series). Each non-zero
+# coupling's linkage rationale is documented in planning/specs/systems/
+# macro-research-reference-datasets-provenance.md. Only non-zero entries are
+# listed; missing pairs are 0.0.
 INFLUENCE: dict[str, dict[str, float]] = {
     "debt_money": {"political": 0.6, "geopolitical": 0.4},
     "political": {"geopolitical": 0.5, "debt_money": 0.4},

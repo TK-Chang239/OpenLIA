@@ -23,15 +23,19 @@ _SEASON_SET = frozenset(SEASON_ORDER)
 # The adverse (stagflation) season — the headline transition-risk target.
 ADVERSE_SEASON: str = "Autumn"
 
-# Baked quarterly transition probabilities (rows = from, cols = to). Reference
-# assumptions (adjustable): diagonal-dominant (seasons persist) with the
-# dominant off-diagonal following the clockwise cycle
-# Spring -> Summer -> Autumn -> Winter -> Spring. Each row sums to 1.0.
+# Quarterly transition probabilities (rows = from, cols = to). Curated reference:
+# the off-diagonal rotation follows the Merrill Lynch Investment Clock clockwise
+# cycle (Recovery -> Overheat -> Stagflation -> Reflation, i.e.
+# Spring -> Summer -> Autumn -> Winter -> Spring); the diagonal/persistence is
+# anchored to documented average business-cycle phase dwell (~2.5-2.9 quarters).
+# Stagflation (Autumn) is set slightly less persistent (resolves toward Winter).
+# Each row sums to 1.0. See planning/specs/systems/
+# macro-research-reference-datasets-provenance.md.
 TRANSITION_MATRIX: dict[str, dict[str, float]] = {
-    "Spring": {"Spring": 0.60, "Summer": 0.25, "Autumn": 0.05, "Winter": 0.10},
-    "Summer": {"Spring": 0.08, "Summer": 0.60, "Autumn": 0.27, "Winter": 0.05},
-    "Autumn": {"Spring": 0.05, "Summer": 0.08, "Autumn": 0.57, "Winter": 0.30},
-    "Winter": {"Spring": 0.30, "Summer": 0.07, "Autumn": 0.03, "Winter": 0.60},
+    "Spring": {"Spring": 0.65, "Summer": 0.25, "Autumn": 0.03, "Winter": 0.07},
+    "Summer": {"Spring": 0.07, "Summer": 0.65, "Autumn": 0.25, "Winter": 0.03},
+    "Autumn": {"Spring": 0.03, "Summer": 0.07, "Autumn": 0.60, "Winter": 0.30},
+    "Winter": {"Spring": 0.25, "Summer": 0.03, "Autumn": 0.07, "Winter": 0.65},
 }
 
 
