@@ -89,8 +89,8 @@ _PMI = CallableSpec(
 )
 
 # APIClient.get_live_stock_prices(ticker, s=None). The first positional arg
-# is named "ticker" on the SDK, matching the runtime parameter from
-# macro_research.needs.yaml#stock_quote.
+# is named "ticker" on the SDK, matching the runtime parameter of the
+# macro_research stock_quote need.
 _STOCK_QUOTE = CallableSpec(
     need_id="stock_quote",
     access_mode="python_lib",

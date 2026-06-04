@@ -5,7 +5,7 @@ public Mediastack REST API at `api.mediastack.com`. Mediastack ships no
 official MCP server and no official Python SDK, so OpenLIA carries a tiny
 HTTP wrapper alongside the template.
 
-Covers the macro_research `geopolitical_news` runner need.
+Covers the macro_research `geopolitical_news` need.
 """
 
 from __future__ import annotations

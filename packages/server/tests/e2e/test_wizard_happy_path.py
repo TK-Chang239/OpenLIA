@@ -106,6 +106,6 @@ def test_wizard_happy_path_lights_up_chat_flow_depts(client: TestClient, monkeyp
 
     # MR + RS require a runner; without approved specs they stay disabled
     # (they have unresolved needs even though categories are satisfied).
-    for runner_dept in ("macro_research", "retail_sentiment"):
+    for runner_dept in ("retail_sentiment",):
         assert by_id[runner_dept]["status"] == "disabled"
         assert by_id[runner_dept]["unresolved_needs"], f"{runner_dept} should have unresolved needs"

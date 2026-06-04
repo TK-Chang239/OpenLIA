@@ -15,6 +15,13 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("../../../../api/macro_research", () => apiMocks);
 
+const deptHealthMocks = vi.hoisted(() => ({
+  fetchDeptHealth: vi.fn(),
+  recheckDeptHealth: vi.fn(),
+}));
+
+vi.mock("../../../../api/dept-health", () => deptHealthMocks);
+
 vi.mock("echarts-for-react", () => ({
   default: () => <div data-testid="echarts-stub" />,
 }));
@@ -42,6 +49,7 @@ beforeEach(() => {
   apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
   apiMocks.getConfig.mockResolvedValue({ view_config: {}, threshold_overrides: {} });
   apiMocks.getSchedule.mockResolvedValue({ cron_expression: null, last_assessment_at: null });
+  deptHealthMocks.fetchDeptHealth.mockResolvedValue([]);
 });
 
 function renderShell(initialPath = "/macro-research") {

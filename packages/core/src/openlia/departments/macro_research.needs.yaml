@@ -1,13 +1,16 @@
-# Macro Research deterministic-runner needs (spec §5.4).
+# Macro Research data needs — connector-resolution metadata.
 #
 # Each entry is a stable, code-facing need id referenced from the
-# MR dashboards' T1_REQUIREMENTS lists. The wizard-time adapter LLM
-# resolves each id to a concrete callable on a configured financial
-# (or news) connector. At runtime the dispatcher binds the
-# parameters declared here to the resolved callable's arguments.
+# MR dashboards' T1_REQUIREMENTS lists and from the builtin connector
+# templates' runner_specs (which declare how a configured financial /
+# news connector resolves each id).
 #
-# Need ids are treated as a public API: once shipped, they do not
-# change.
+# NOTE: Macro Research is now a dashboard department (report_dash_mr,
+# requires_runner=False) — it is NOT health-gated on these needs and the
+# wizard does not hydrate/propose specs for it. These declarations are
+# retained as connector-resolution metadata, not as a runtime-runner
+# contract. Need ids are still treated as a public API: once shipped,
+# they do not change.
 
 department: macro_research
 needs:
