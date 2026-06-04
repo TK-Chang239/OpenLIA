@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 from openlia.connectors.types import Category, RunnerNeed
+from openlia.departments.retail_sentiment import RetailSentimentDepartment
 from openlia_server.app import create_app
 from openlia_server.middleware.rate_limit import limiter
 from openlia_server.services import connectors_service, runner_specs_service
@@ -44,6 +45,14 @@ def client(db_session):
 
 
 def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
+    # Force RS to behave as a runner department for this test. RS is a
+    # dashboard dept (requires_runner=False) in production; this test
+    # exercises the atomic-disable subsystem using RS as the vehicle.
+    # Also override required_categories to FINANCIAL so check_dept_health
+    # sees FINANCIAL as the required (and, after deletion, missing) category.
+    monkeypatch.setattr(RetailSentimentDepartment, "requires_runner", True)
+    monkeypatch.setattr(RetailSentimentDepartment, "required_categories", (Category.FINANCIAL,))
+
     fake_need = RunnerNeed(
         id="social_posts",
         description="Social media posts for sentiment analysis.",

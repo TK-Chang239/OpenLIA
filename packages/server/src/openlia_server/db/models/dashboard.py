@@ -245,8 +245,12 @@ class RsDashboardCache(Base):
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_rs_dashboard_cache"),
-        UniqueConstraint("user_id", "ticker", name="uq_rs_dashboard_cache_user_ticker"),
-        Index("ix_rs_dashboard_cache_user_ticker", "user_id", "ticker"),
+        Index(
+            "ix_rs_dashboard_cache_user_ticker_generated",
+            "user_id",
+            "ticker",
+            "generated_at",
+        ),
     )
 
 

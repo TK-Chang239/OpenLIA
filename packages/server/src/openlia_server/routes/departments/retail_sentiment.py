@@ -112,8 +112,12 @@ def build_retail_sentiment_router(
         with db_session_factory() as session:
             row = (
                 session.query(RsDashboardCache)
-                .filter_by(user_id=user.id, ticker=ticker)
-                .one_or_none()
+                .filter(
+                    RsDashboardCache.user_id == user.id,
+                    RsDashboardCache.ticker == ticker,
+                )
+                .order_by(RsDashboardCache.generated_at.desc())
+                .first()
             )
         if row is None:
             return {"payload": None, "generated_at": None, "is_stale": True, "provenance": None}

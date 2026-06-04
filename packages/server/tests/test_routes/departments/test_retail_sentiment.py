@@ -99,6 +99,39 @@ def test_get_dashboard_with_cache_row(client: TestClient, session_factory) -> No
     assert body["generated_at"] is not None
 
 
+def test_get_dashboard_returns_latest_of_multiple_rows(client: TestClient, session_factory) -> None:
+    """When multiple rows exist, the route returns the most recent one."""
+    older = datetime.now(UTC) - timedelta(hours=2)
+    newer = datetime.now(UTC)
+    with session_factory() as s:
+        s.add(
+            RsDashboardCache(
+                user_id="u-1",
+                ticker="AAPL",
+                payload_json=json.dumps({"sentiment_score": 0.3}),
+                provenance="live",
+                model_ref="m",
+                generated_at=older,
+            )
+        )
+        s.add(
+            RsDashboardCache(
+                user_id="u-1",
+                ticker="AAPL",
+                payload_json=json.dumps({"sentiment_score": 0.8}),
+                provenance="live",
+                model_ref="m",
+                generated_at=newer,
+            )
+        )
+        s.commit()
+
+    r = client.get("/departments/retail_sentiment/dashboard/AAPL")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["payload"]["sentiment_score"] == 0.8
+
+
 def test_get_dashboard_stale_when_old(client: TestClient, session_factory) -> None:
     old_time = datetime.now(UTC) - timedelta(hours=25)
     with session_factory() as s:
@@ -151,6 +184,42 @@ def test_get_history_with_cache_row(client: TestClient, session_factory) -> None
     assert len(body) == 1
     assert body[0]["payload"]["sentiment_score"] == 0.6
     assert body[0]["generated_at"] is not None
+
+
+def test_get_history_two_rows_newest_first(client: TestClient, session_factory) -> None:
+    """Two accumulated rows for same (user, ticker) both appear, newest first."""
+    older = datetime.now(UTC) - timedelta(hours=2)
+    newer = datetime.now(UTC)
+    with session_factory() as s:
+        s.add(
+            RsDashboardCache(
+                user_id="u-1",
+                ticker="AAPL",
+                payload_json=json.dumps({"sentiment_score": 0.3}),
+                provenance="live",
+                model_ref="m",
+                generated_at=older,
+            )
+        )
+        s.add(
+            RsDashboardCache(
+                user_id="u-1",
+                ticker="AAPL",
+                payload_json=json.dumps({"sentiment_score": 0.6}),
+                provenance="live",
+                model_ref="m",
+                generated_at=newer,
+            )
+        )
+        s.commit()
+
+    r = client.get("/departments/retail_sentiment/dashboard/AAPL/history?days=7")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 2
+    # Newest first.
+    assert body[0]["payload"]["sentiment_score"] == 0.6
+    assert body[1]["payload"]["sentiment_score"] == 0.3
 
 
 def test_get_history_excludes_old_rows(client: TestClient, session_factory) -> None:

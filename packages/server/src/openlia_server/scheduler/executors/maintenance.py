@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.db.models.auth import Session as AuthSession
 from openlia_server.db.models.content import RepoItem, Report
+from openlia_server.db.models.dashboard import RsDashboardCache
 from openlia_server.db.models.pipeline_runs import PipelineRun
 from openlia_server.db.models.safety import LiaGuardrailEvent
 from openlia_server.db.models.scheduler import JobRun, UserNotification
@@ -30,6 +31,7 @@ NOTIFICATION_RETENTION_DAYS = 30
 JOB_RUN_RETENTION_DAYS = 90
 LIA_GUARDRAIL_LOG_RETENTION_DAYS_DEFAULT = 365
 UNSAVED_REPORT_RETENTION_DAYS_DEFAULT = 7
+RS_DASHBOARD_CACHE_RETENTION_DAYS = 90
 
 
 def run_maintenance_once(session: Session) -> dict[str, int]:
@@ -159,6 +161,16 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         )
         v2_runs_tombstoned = len(v2_candidate_ids)
 
+    rs_dashboard_cache_deleted = (
+        session.execute(
+            delete(RsDashboardCache).where(
+                RsDashboardCache.generated_at
+                < now - timedelta(days=RS_DASHBOARD_CACHE_RETENTION_DAYS)
+            )
+        ).rowcount
+        or 0
+    )
+
     return {
         "sessions_deleted": int(sessions_deleted),
         "password_resets_expired": int(password_resets_expired),
@@ -169,6 +181,7 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         "reports_tombstoned": int(reports_tombstoned),
         "reports_hard_deleted": int(reports_hard_deleted),
         "v2_runs_tombstoned": int(v2_runs_tombstoned),
+        "rs_dashboard_cache_deleted": int(rs_dashboard_cache_deleted),
     }
 
 

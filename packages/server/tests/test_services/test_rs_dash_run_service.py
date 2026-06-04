@@ -149,18 +149,18 @@ def test_run_to_cache_writes_payload(db_session, make_user):
     assert row.model_ref == "claude-sonnet-4-6"
 
 
-def test_run_to_cache_upserts_in_place(db_session, make_user):
-    """A second run for the same (user, ticker) updates the existing row
-    rather than inserting a duplicate."""
+def test_run_to_cache_appends_rows(db_session, make_user):
+    """Each run appends a new row; two runs produce two rows for (user, ticker)."""
     user = make_user()
-    payload = _complete_rs_payload()
 
     asyncio.run(
         run_to_cache(
             db_session,
             user_id=user.id,
             ticker="AAPL",
-            session=_fake_session([_tool_call("emit_dashboard", {"payload": payload})]),
+            session=_fake_session(
+                [_tool_call("emit_dashboard", {"payload": _complete_rs_payload(0.30)})]
+            ),
         )
     )
     asyncio.run(
@@ -168,12 +168,31 @@ def test_run_to_cache_upserts_in_place(db_session, make_user):
             db_session,
             user_id=user.id,
             ticker="AAPL",
-            session=_fake_session([_tool_call("emit_dashboard", {"payload": payload})]),
+            session=_fake_session(
+                [_tool_call("emit_dashboard", {"payload": _complete_rs_payload(0.50)})]
+            ),
         )
     )
 
-    rows = db_session.query(RsDashboardCache).filter_by(user_id=user.id, ticker="AAPL").all()
-    assert len(rows) == 1
+    rows = (
+        db_session.query(RsDashboardCache)
+        .filter_by(user_id=user.id, ticker="AAPL")
+        .order_by(RsDashboardCache.generated_at.asc())
+        .all()
+    )
+    assert len(rows) == 2
+
+    # Latest row should reflect the second run's score.
+    latest = (
+        db_session.query(RsDashboardCache)
+        .filter_by(user_id=user.id, ticker="AAPL")
+        .order_by(RsDashboardCache.generated_at.desc())
+        .first()
+    )
+    assert latest is not None
+    import json
+
+    assert json.loads(latest.payload_json)["sentiment_score"] == 0.50
 
 
 def test_run_to_cache_momentum_improving(db_session, make_user):
@@ -221,8 +240,17 @@ def test_run_to_cache_momentum_improving(db_session, make_user):
         )
     )
 
-    row = db_session.query(RsDashboardCache).filter_by(user_id=user.id, ticker="AAPL").one()
-    stored = json.loads(row.payload_json)
+    # Two rows: the seeded prior + the new run.
+    all_rows = db_session.query(RsDashboardCache).filter_by(user_id=user.id, ticker="AAPL").all()
+    assert len(all_rows) == 2
+
+    latest = (
+        db_session.query(RsDashboardCache)
+        .filter_by(user_id=user.id, ticker="AAPL")
+        .order_by(RsDashboardCache.generated_at.desc())
+        .first()
+    )
+    stored = json.loads(latest.payload_json)
     assert stored["momentum"] is not None
     assert stored["trend_label"] == "improving"
 

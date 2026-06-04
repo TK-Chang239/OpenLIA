@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 from openlia.connectors.types import Category, RunnerNeed
+from openlia.departments.retail_sentiment import RetailSentimentDepartment
 from openlia_server.app import create_app
 from openlia_server.middleware.rate_limit import limiter
 from openlia_server.services import connectors_service, runner_specs_service
@@ -48,6 +49,14 @@ def client(db_session) -> TestClient:
 
 
 def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
+    # Force RS to behave as a runner department for this test. RS is a
+    # dashboard dept (requires_runner=False) in production; this test
+    # exercises the runner-spec activation subsystem using RS as the vehicle.
+    # Also override required_categories to FINANCIAL (matching the connector
+    # created below) so check_dept_health sees categories satisfied.
+    monkeypatch.setattr(RetailSentimentDepartment, "requires_runner", True)
+    monkeypatch.setattr(RetailSentimentDepartment, "required_categories", (Category.FINANCIAL,))
+
     # 1. Override RS's need set to a single placeholder need so the dept
     #    activates after one approval.
     fake_need = RunnerNeed(

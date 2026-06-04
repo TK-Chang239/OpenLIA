@@ -1,10 +1,10 @@
 """Retail Sentiment dashboard run service.
 
 Runs the ``openlia.llm.runtime.report_dash_rs`` engine for one ticker and
-upserts its typed payload into ``rs_dashboard_cache``. Sibling of
+inserts a new row into ``rs_dashboard_cache`` on each run. Sibling of
 ``mr_dash_run_service``: no report rows, sections, or charts — one engine run
-produces one typed dashboard payload, persisted as a single cache row keyed on
-``(user_id, ticker)``.
+produces one typed dashboard payload. Rows accumulate; the route reads the
+latest by ``generated_at DESC``; old rows are pruned by maintenance.
 
 After the engine run, the service reads prior sentiment-score history for
 ``(user_id, ticker)`` and merges deterministic momentum/trend fields into the
@@ -108,7 +108,7 @@ def _prior_scores(db: DBSession, *, user_id: str, ticker: str) -> list[float]:
     return scores
 
 
-def _upsert_cache(
+def _insert_cache(
     db: DBSession,
     *,
     user_id: str,
@@ -116,32 +116,25 @@ def _upsert_cache(
     payload: dict,
     model_ref: str,
 ) -> None:
-    """Insert-or-update the ``(user_id, ticker)`` cache row.
+    """Insert a new ``rs_dashboard_cache`` row for each run.
 
-    The unique constraint on ``(user_id, ticker)`` guarantees one row
-    per ticker per user, so we update in place when a row exists rather
-    than accumulating duplicates.
+    Each run appends a fresh row; the route reads the latest by
+    ``generated_at DESC LIMIT 1``. Old rows are pruned by the maintenance
+    executor after ``RS_DASHBOARD_CACHE_RETENTION_DAYS`` days.
     """
     payload_json = json.dumps(payload)
     provenance = payload.get("provenance", "live")
     generated_at = datetime.now(UTC)
 
-    row = db.query(RsDashboardCache).filter_by(user_id=user_id, ticker=ticker).one_or_none()
-    if row is None:
-        row = RsDashboardCache(
-            user_id=user_id,
-            ticker=ticker,
-            payload_json=payload_json,
-            provenance=provenance,
-            model_ref=model_ref,
-            generated_at=generated_at,
-        )
-        db.add(row)
-    else:
-        row.payload_json = payload_json
-        row.provenance = provenance
-        row.model_ref = model_ref
-        row.generated_at = generated_at
+    row = RsDashboardCache(
+        user_id=user_id,
+        ticker=ticker,
+        payload_json=payload_json,
+        provenance=provenance,
+        model_ref=model_ref,
+        generated_at=generated_at,
+    )
+    db.add(row)
     db.flush()
 
 
@@ -156,10 +149,11 @@ async def run_to_cache(
     session: LLMSession | None = None,
     cancel_token: CancelToken | None = None,
 ) -> str:
-    """Run the RS dashboard engine inline and upsert the payload into cache.
+    """Run the RS dashboard engine inline and insert a new cache row.
 
     Awaits the engine to completion using the caller's DB session, then
-    upserts one ``rs_dashboard_cache`` row keyed on ``(user_id, ticker)``.
+    inserts a fresh ``rs_dashboard_cache`` row for ``(user_id, ticker)``.
+    Each run appends; the route reads the latest by ``generated_at DESC``.
     Merges deterministic momentum/trend fields from prior score history.
     Fails loud on a non-completed run or a missing payload — no partial /
     empty cache row is written. Returns the ticker.
@@ -217,7 +211,7 @@ async def run_to_cache(
     if not payload.get("captured_at"):
         payload["captured_at"] = datetime.now(UTC).isoformat()
 
-    _upsert_cache(
+    _insert_cache(
         db,
         user_id=user_id,
         ticker=ticker,

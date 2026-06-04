@@ -1,8 +1,9 @@
 """rs_dashboard_cache table
 
-Adds ``rs_dashboard_cache``: one row per (user, ticker) storing the
-latest typed payload produced by the ``report_dash_rs`` engine. The route
-reads this row for instant dashboard delivery without re-running the engine.
+Adds ``rs_dashboard_cache``: history-accumulating rows per (user, ticker)
+produced by the ``report_dash_rs`` engine. Each run appends a new row;
+the route reads the latest by ``generated_at DESC LIMIT 1``, and the
+history endpoint returns the full series within a rolling window.
 
 Per-user so that portfolio-dependent dashboards remain isolated per user.
 
@@ -41,15 +42,14 @@ def upgrade() -> None:
         sa.Column("model_ref", sa.String(128), nullable=True),
         sa.Column("generated_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", name="pk_rs_dashboard_cache"),
-        sa.UniqueConstraint("user_id", "ticker", name="uq_rs_dashboard_cache_user_ticker"),
     )
     op.create_index(
-        "ix_rs_dashboard_cache_user_ticker",
+        "ix_rs_dashboard_cache_user_ticker_generated",
         "rs_dashboard_cache",
-        ["user_id", "ticker"],
+        ["user_id", "ticker", "generated_at"],
     )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_rs_dashboard_cache_user_ticker", table_name="rs_dashboard_cache")
+    op.drop_index("ix_rs_dashboard_cache_user_ticker_generated", table_name="rs_dashboard_cache")
     op.drop_table("rs_dashboard_cache")
