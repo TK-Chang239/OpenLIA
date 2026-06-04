@@ -6,7 +6,6 @@ by `_scheduler_fakes.py` in this plan's test tree."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -63,17 +62,6 @@ class ReportStore(Protocol):
         department: str,
         payload: dict[str, Any],
     ) -> str: ...  # returns report_id
-
-
-# ------------------------------------------------------------------
-# RS — Retail Sentiment snapshot runner
-# ------------------------------------------------------------------
-
-
-class RSSnapshotRunner(Protocol):
-    """Run a RS snapshot for a given user. Owned by the RS service layer."""
-
-    def run_many(self, tickers: Sequence[str]) -> list[Any]: ...
 
 
 # ------------------------------------------------------------------

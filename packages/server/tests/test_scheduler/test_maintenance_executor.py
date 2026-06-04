@@ -6,7 +6,6 @@ import pytest
 from _scheduler_fakes import FakeSleep
 from openlia_server.db.models.auth import PasswordResetRequest, User
 from openlia_server.db.models.auth import Session as AuthSession
-from openlia_server.db.models.dashboard import RsSnapshot
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.maintenance import (
     MaintenanceExecutor,
@@ -70,22 +69,6 @@ def _seed(session: Session) -> dict[str, list[str]]:
         expires_at=now + timedelta(days=1),
     )
     session.add_all([r_flip, r_old, r_live])
-
-    rs_old = RsSnapshot(
-        id="rs_old",
-        ticker="AAPL",
-        snapshot_data={},
-        source_breakdown={},
-        captured_at=now - timedelta(days=100),
-    )
-    rs_new = RsSnapshot(
-        id="rs_new",
-        ticker="AAPL",
-        snapshot_data={},
-        source_breakdown={},
-        captured_at=now - timedelta(days=10),
-    )
-    session.add_all([rs_old, rs_new])
 
     n_old = UserNotification(
         id="n_old",
@@ -157,7 +140,6 @@ def _seed(session: Session) -> dict[str, list[str]]:
     return {
         "sessions": ["s_new"],
         "password_reset_requests": ["r_flip", "r_live"],
-        "rs_snapshots": ["rs_new"],
         "user_notifications": ["n_new"],
         "job_runs": ["j_old_failed", "j_new_ok"],
     }
@@ -172,7 +154,6 @@ def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
     assert summary["sessions_deleted"] == 1
     assert summary["password_resets_expired"] == 1
     assert summary["password_resets_deleted"] == 1
-    assert summary["rs_snapshots_deleted"] == 1
     assert summary["notifications_deleted"] == 1
     assert summary["job_runs_deleted"] == 2
 
@@ -181,9 +162,6 @@ def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
 
     prrs = {r.id: r.status for r in db_session.query(PasswordResetRequest).all()}
     assert prrs == {"r_flip": "expired", "r_live": "pending"}
-
-    snaps = {r.id for r in db_session.query(RsSnapshot).all()}
-    assert snaps == set(expected["rs_snapshots"])
 
     notifs = {n.id for n in db_session.query(UserNotification).all()}
     assert notifs == set(expected["user_notifications"])

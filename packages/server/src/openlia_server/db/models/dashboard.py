@@ -3,14 +3,13 @@
 Rows:
   pt_user_configs, pt_presets — Panic Thermometer.
   mr_dashboard_state, mr_dashboard_cache — Macro Research Dalio dashboards.
-  rs_user_config, rs_snapshots — Retail Sentiment.
+  rs_user_config, rs_dashboard_cache — Retail Sentiment.
   fe_saved_formulas — shared formula-engine DSL rows.
 
 Notes:
   - pt_presets.user_id is nullable: NULL rows are shipped library presets.
   - pt_user_configs.active_preset_id uses SET NULL so deleting a preset
     demotes the active config to "custom unsaved."
-  - rs_snapshots is also global — one row per ticker per refresh cycle.
   - fe_saved_formulas.expression is stored as Text; Plan 17 (formula engine)
     validates the DSL at the service layer on write.
 """
@@ -220,67 +219,6 @@ class RsUserConfig(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
-    )
-
-
-class RsSnapshot(Base):
-    """Point-in-time sentiment metric snapshots. Global, per ticker per cycle."""
-
-    __tablename__ = "rs_snapshots"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    ticker: Mapped[str] = mapped_column(String(16), nullable=False)
-    snapshot_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    source_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    captured_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
-
-    __table_args__ = (
-        Index(
-            "ix_rs_snapshots_ticker_captured",
-            "ticker",
-            text("captured_at DESC"),
-        ),
-    )
-
-
-class RsClassificationLog(Base):
-    """One row per LLM classification batch call. Global, no user_id:
-    classifications are produced per ticker and shared across users via
-    `rs_snapshots`, so the audit trail follows the same shape."""
-
-    __tablename__ = "rs_classification_log"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    batch_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    ticker: Mapped[str] = mapped_column(String(16), nullable=False)
-    model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
-    item_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    prompt_tokens: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0")
-    )
-    completion_tokens: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0")
-    )
-    latency_ms: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default=text("0")
-    )
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        UTCDateTime(),
-        nullable=False,
-        server_default=func.now(),
-    )
-
-    __table_args__ = (
-        Index(
-            "ix_rs_classification_log_ticker_created",
-            "ticker",
-            "created_at",
-        ),
-        Index(
-            "ix_rs_classification_log_batch",
-            "batch_id",
-        ),
     )
 
 

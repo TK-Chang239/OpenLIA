@@ -31,15 +31,6 @@ def _run_alembic(args: list[str], db_url: str) -> subprocess.CompletedProcess:
     )
 
 
-_RS_SNAPSHOT_INDEX_DIFF_REASON = (
-    "SQLite reflection cannot recover a text-expression index direction "
-    "('captured_at DESC'), so alembic autogenerate always re-issues the "
-    "drop/create pair for ix_rs_snapshots_ticker_captured even when the "
-    "underlying schema is correct. This is a known Alembic+SQLite "
-    "limitation and does not represent real ORM-vs-migration drift."
-)
-
-
 def _extract_body(file_path: Path, func_name: str) -> str:
     tree = ast.parse(file_path.read_text())
     for node in ast.walk(tree):
@@ -53,25 +44,12 @@ def _extract_body(file_path: Path, func_name: str) -> str:
                     and isinstance(stmt.value.value, str)
                 )
             ]
-            body_statements = [
-                stmt for stmt in body_statements if not _is_rs_snapshot_index_statement(stmt)
-            ]
             if not body_statements or (
                 len(body_statements) == 1 and isinstance(body_statements[0], ast.Pass)
             ):
                 return ""
             return ast.unparse(ast.Module(body=body_statements, type_ignores=[]))
     raise AssertionError(f"function {func_name} not found in {file_path}")
-
-
-def _is_rs_snapshot_index_statement(stmt: ast.stmt) -> bool:
-    """Whitelist the known-benign rs_snapshots DESC-index roundtrip noise."""
-    if not isinstance(stmt, ast.With):
-        return False
-    source = ast.unparse(stmt)
-    return (
-        "batch_alter_table('rs_snapshots'" in source and "ix_rs_snapshots_ticker_captured" in source
-    )
 
 
 def test_alembic_autogenerate_is_clean(tmp_path: Path) -> None:
