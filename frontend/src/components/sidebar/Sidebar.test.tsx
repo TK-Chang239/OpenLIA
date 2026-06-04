@@ -126,7 +126,6 @@ describe("Sidebar", () => {
           status: "disabled",
           reason: "Missing required categories: financial",
           missing_categories: ["financial"],
-          unresolved_needs: [],
         },
       },
       loaded: true,
