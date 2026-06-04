@@ -88,11 +88,12 @@ class Connector(Base):
 
 
 class RunnerCallableSpec(Base):
-    """Per-department, per-need callable resolution (§3.5).
+    """Per-(department, need) callable resolution for the Portfolio data path.
 
-    The wizard-time adapter LLM populates these rows when a department's
-    needs.yaml is resolved against a connector. The deterministic runtime
-    runner reads them at execution time.
+    `connectors_service._upsert_runner_specs_from_template` writes one row per
+    builtin connector `runner_spec` on validation; `build_dispatcher` loads them
+    into the dispatcher's `callable_specs`, and `Dispatcher.fetch_need` resolves
+    them when `ConnectorFinancialAdapter` fetches portfolio prices/history.
     """
 
     __tablename__ = "runner_callable_specs"
