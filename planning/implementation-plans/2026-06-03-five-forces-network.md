@@ -986,3 +986,29 @@ git commit -m "chore(macro-research): lint/format fixups for Five Forces network
 - **The model never invents the network numbers.** The tool returns them; the prompt maps the snake_case tool keys to the camelCase payload keys explicitly (`from_label`->`fromLabel`, `contagion_label`->`contagionLabel`, etc.) and turns the `edges`/`projections` lists into `{...}` arrays. The model authors only the short `network.label`.
 - **No server `mr_dash_run_service` change** — Five Forces already seeds F1/F3 via `data_context`; F2/F4/F5 are LLM-scored.
 - If `npx vitest`/`tsc` is run from the repo root it will fail; run from `frontend/`.
+
+## Post-implementation amendments (review-driven)
+
+Changes made during code review / verification, reflected in the final code:
+
+1. **Task 4 — FALLBACK consistency.** The static `five_forces.ts` FALLBACK `network`
+   instance was rewritten to be internally consistent with the engine contract:
+   all five forces active (intensity 7-9, matching `active: "5 / 5"`), all 11
+   active edges with `strength = coupling × (driver_intensity/10)`, correctly
+   derived projections, and `contagion` = the mean of those edge strengths
+   (0.32 → "Spreading"). The initial draft had edges whose strengths/drivers
+   didn't reconcile with the projections table.
+2. **Task 5 — explicit per-edge key rename.** `_FIVE_FORCES_WORKFLOW` step 4's
+   inline mapping spells out `edges`->`edges` (each `{from_label, to_label,
+   strength}` becomes `{fromLabel, toLabel, strength}`), and the tool descriptor
+   notes `contagion_label` renders as `contagionLabel` — the snake_case/camelCase
+   + dict→array clarity the sibling engines needed.
+3. **Task 6 — runner fixture.** Docstring updated to "three turns" (classify →
+   network → emit); the scripted `contagion` set to 0.48 to equal its single
+   edge's strength.
+4. **Task 7 — projections layout.** The per-force projection rows use a bespoke
+   2-column flex row instead of `mr-bar-row` (a 3-column label|track|val grid),
+   which had misplaced the value into the track column.
+5. Trivial lint hygiene: `ACTIVE_THRESHOLD: float` / `PERSISTENCE: float`
+   annotations (Task 1); Task 1 scoped strictly to the baked data + accessor
+   (an early pull-forward of Task 2's dataclasses was reverted).
