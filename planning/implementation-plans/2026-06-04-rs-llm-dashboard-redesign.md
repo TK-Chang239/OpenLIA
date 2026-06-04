@@ -559,7 +559,9 @@ Keep `department_type = "dashboard"`, `prompt_name`. Update `needs.yaml` header 
 
 ## Phase 3 — Server cache + run service
 
-### Task 7: `rs_dashboard_cache` table + drop legacy RS tables
+### Task 7: `rs_dashboard_cache` table (add-only)
+
+> **Sequencing (revised during execution):** Task 7 only ADDS `RsDashboardCache` + a create-table migration. The OLD models (`RsSnapshot`, `RsClassificationLog`) and their tables are NOT touched here — their services (`rs_snapshot.py`, `rs_classification_log.py`) and the current routes still import them until Tasks 9/12. Deleting them now would break server imports mid-stream. The model deletion + drop-table migration moved to **Task 12** (after their importers are gone).
 
 **Files:**
 - Modify: `packages/server/src/openlia_server/db/models/dashboard.py`
@@ -584,13 +586,13 @@ def test_rs_dashboard_cache_roundtrip(db_session):
 
 - [ ] **Step 2: Run, expect fail.**
 
-- [ ] **Step 3: Add the model** in `dashboard.py` mirroring `MrDashboardCache`, with `ticker: Mapped[str] = mapped_column(String(16))` replacing `dashboard`, unique `(user_id, ticker)` named `uq_rs_dashboard_cache_user_ticker`, index `ix_rs_dashboard_cache_user_ticker`. **Delete** the `RsSnapshot` and `RsClassificationLog` model classes. Keep `RsUserConfig` (repurposed as dashboard state; columns unchanged — `metric_settings` JSON now holds threshold overrides, `refresh_interval_minutes` stays).
+- [ ] **Step 3: Add the model** in `dashboard.py` mirroring `MrDashboardCache`, with `ticker: Mapped[str] = mapped_column(String(16))` replacing `dashboard`, unique `(user_id, ticker)` named `uq_rs_dashboard_cache_user_ticker`, index `ix_rs_dashboard_cache_user_ticker`. **Do NOT delete** `RsSnapshot`/`RsClassificationLog` (still imported by their services/routes until Tasks 9/12). Keep `RsUserConfig` (repurposed as dashboard state; columns unchanged — `metric_settings` JSON now holds threshold overrides, `refresh_interval_minutes` stays).
 
-- [ ] **Step 4: Write the migration.** First find the head: `cd packages/server && uv run alembic heads`. Set `down_revision` to that head. The migration `upgrade()`: `create_table("rs_dashboard_cache", ...)` mirroring the `mr_dashboard_cache` migration (ticker String(16) instead of dashboard); `op.drop_table("rs_snapshots")`; `op.drop_table("rs_classification_log")` (drop their indexes first). `downgrade()`: recreate the two dropped tables (copy their `create_table` from `2026-04-24-0100_rs_classification_log.py` and the baseline for `rs_snapshots`) and `drop_table("rs_dashboard_cache")`.
+- [ ] **Step 4: Write the migration.** First find the head: `cd packages/server && uv run alembic heads`. Set `down_revision` to that head. The migration `upgrade()`: `create_table("rs_dashboard_cache", ...)` mirroring the `mr_dashboard_cache` migration (ticker String(16) instead of dashboard) + its index. `downgrade()`: drop the index and `drop_table("rs_dashboard_cache")`. (No drops of legacy tables here — that is Task 12.)
 
 - [ ] **Step 5: Run** `cd packages/server && uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head` to verify up/down/up, then the model test. Expected: clean + PASS.
 
-- [ ] **Step 6: Commit** — `feat(retail-sentiment): rs_dashboard_cache table; drop legacy rs_snapshots/rs_classification_log`
+- [ ] **Step 6: Commit** — `feat(retail-sentiment): add rs_dashboard_cache table`
 
 ### Task 8: `rs_dash_run_service`
 
@@ -698,18 +700,24 @@ Remove `/spikes`, `/stocks/{ticker}`, `/classifier/audit`, the old `/run` (repla
 - Core package: the entire `packages/core/src/openlia/retail_sentiment/` directory (`classifier.py`, `metrics.py`, `reliability.py`, `spike_detector.py`, `quotes.py`, `insights.py`, `schemas.py`, `__init__.py`).
 - Prompts: `packages/core/src/openlia/prompts/retail_sentiment.yaml`, `packages/core/src/openlia/prompts/retail_sentiment_insights.yaml`.
 - Server services: `services/rs_runner.py`, `services/rs_sync_classifier.py`, `services/rs_classification_log.py`.
+- DB models (now unreferenced — their services/routes are gone): the `RsSnapshot` and `RsClassificationLog` classes in `db/models/dashboard.py`.
 - Core tests: all of `packages/core/tests/retail_sentiment/`.
 - Server tests: `test_services/test_rs_runner.py`, `test_rs_runner_insights.py`, `test_rs_sync_classifier.py`; `test_db/test_rs_classification_log.py`; `test_routes/departments/test_retail_sentiment_classifier_audit.py`.
 
-- [ ] **Step 1: Grep for stragglers before deleting.** `grep -rn "openlia.retail_sentiment\|rs_runner\|rs_sync_classifier\|rs_classification_log\|RsRunner\|RsSnapshotService\|NeutralClassifier\|LlmClassifier" packages/ --include=*.py | grep -v __pycache__`. Every hit outside the delete list must already be removed by Tasks 9–11 — if any remain, fix the referencing file. Also check `prompts/__init__.py` for a registry reference to the deleted YAMLs, and `services/smoke_service.py` (the inventory flagged a retail_sentiment reference) and `routes/chat_sessions.py`.
+**Files (CREATE):**
+- Migration `packages/server/src/openlia_server/db/migrations/versions/2026-06-04-YYYY_drop_legacy_rs_tables.py` (chained after Task 7's migration head): `upgrade()` drops indexes + `drop_table("rs_snapshots")` + `drop_table("rs_classification_log")`; `downgrade()` recreates both (copy their `create_table` from `2026-04-24-0100_rs_classification_log.py` and the baseline migration for `rs_snapshots`).
 
-- [ ] **Step 2: Delete** the files/dirs above (`git rm -r`).
+- [ ] **Step 1: Grep for stragglers before deleting.** `grep -rn "openlia.retail_sentiment\|rs_runner\|rs_sync_classifier\|rs_classification_log\|RsRunner\|RsSnapshotService\|RsSnapshot\b\|RsClassificationLog\|NeutralClassifier\|LlmClassifier" packages/ --include=*.py | grep -v __pycache__`. Every hit outside the delete list must already be removed by Tasks 9–11 — if any remain, fix the referencing file. Also check `prompts/__init__.py` for a registry reference to the deleted YAMLs, and `services/smoke_service.py` (the inventory flagged a retail_sentiment reference) and `routes/chat_sessions.py`. Confirm nothing still imports `RsSnapshot`/`RsClassificationLog` before deleting those model classes.
 
-- [ ] **Step 3: Verify import-clean.** Run the full core suite and the server collection:
+- [ ] **Step 2: Delete** the files/dirs + the two model classes above (`git rm -r` for files; edit `dashboard.py` to remove the two classes).
+
+- [ ] **Step 3: Write + run the drop-tables migration** (above). Verify up/down/up: `cd packages/server && uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head`.
+
+- [ ] **Step 4: Verify import-clean.** Run the full core suite and the server collection:
 `cd packages/core && uv run pytest -q` then `cd packages/server && uv run pytest tests/test_routes/departments/ tests/test_services/ tests/test_scheduler/ tests/test_db/ -q`.
 Expected: green (no import errors, no orphaned references). Fix any remaining import.
 
-- [ ] **Step 4: Commit** — `refactor(retail-sentiment): delete inert per-post pipeline (core + server + tests)`
+- [ ] **Step 5: Commit** — `refactor(retail-sentiment): delete inert per-post pipeline + drop legacy rs tables`
 
 ---
 
