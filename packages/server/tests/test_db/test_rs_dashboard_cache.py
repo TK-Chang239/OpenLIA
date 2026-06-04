@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-from sqlalchemy.orm import Session
-
 from openlia_server.db.models.dashboard import RsDashboardCache
+from sqlalchemy.orm import Session
 
 
 def test_rs_dashboard_cache_roundtrip(create_tables, db_session: Session, make_user) -> None:
