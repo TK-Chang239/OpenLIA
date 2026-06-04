@@ -518,7 +518,7 @@ def _upsert_runner_specs_from_template(
     `template.runner_specs`. Returns the number of specs upserted.
 
     Day-1 templates can be alternative providers (EODHD vs FMP both
-    claim macro_research/stock_quote). The (dept, need) UNIQUE
+    claim portfolio/stock_quote). The (dept, need) UNIQUE
     constraint forbids two rows for the same key, so we transfer
     ownership: delete any existing row for each (dept, need) this
     template covers, then insert the new spec. The previous owning
