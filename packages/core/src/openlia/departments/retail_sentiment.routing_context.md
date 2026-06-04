@@ -2,33 +2,42 @@
 
 ## What this department does
 
-Retail Sentiment is a deterministic-runner dashboard department. It
-ingests social posts and news mentions for a single ticker, classifies
-each one (bullish / bearish / neutral) via a batch LLM call, and
-computes a 12-metric snapshot — sentiment score, buzz volume, momentum,
-bull/bear ratio, buzz-sentiment divergence, cross-source agreement,
-plus five optional metrics (options skew, short interest, etc.). It
-also detects 7-day buzz spikes and emits an optional 2-4 sentence
-narrative summary. In chat mode it answers narrow questions about a
-freshly-computed snapshot or alert, citing the metric values rather
-than re-fetching posts.
+Retail Sentiment is a web-search-backbone dashboard department. It surfaces
+the retail investing community's collective view on a single ticker by
+searching the open web — Reddit threads, StockTwits posts, financial Twitter,
+earnings-call summaries, and news commentary — rather than relying on a
+proprietary social-data connector. The engine (report_dash_rs) gathers
+discussion fragments via web search, synthesizes a sentiment read across
+multiple retail forums and commentary sources, and produces a structured
+snapshot: overall sentiment direction (bullish / bearish / mixed), buzz
+volume estimate, notable narratives driving the conversation, contrarian
+signals worth monitoring, and an optional 2-4 sentence plain-English summary.
+Financial and news connectors are optional enrichment: if a validated
+FINANCIAL connector is present the engine can anchor the sentiment read to
+live price and volume; a NEWS connector supplies headline context for
+cross-source agreement scoring. Neither is required for the dashboard to run.
 
 ## Data this department needs access to
 
-RS pulls its primary input — `social_posts` — through the financial
-connectors' sentiment endpoints (EODHD, FMP), not through a separate
-social provider. The router should authorize:
+RS's primary data source is the web search connector (required). The engine
+issues targeted queries — e.g. "NVDA retail sentiment Reddit today" or
+"$TSLA StockTwits discussion" — and synthesizes the retrieved content
+directly. The router should authorize:
 
-- Sentiment-endpoint reads on financial connectors (the `social_posts`
-  need): post id, ticker, source, text, engagement counters,
-  created-at timestamp.
-- Real-time and recent quotes for the ticker so metric snapshots can
-  be price-anchored.
-- Company news for cross-source agreement scoring (a financial-news
-  feed and a retail-platform feed should agree or disagree).
-- Optional inputs for the five extended metrics: historical price
-  series (volatility), options chains, short interest, institutional
-  holdings.
+- Web search queries covering retail discussion forums, social-finance
+  platforms, and financial news commentary for the requested ticker.
+- Optional real-time and recent price quotes if a FINANCIAL connector is
+  validated; used to anchor sentiment reads to price action and identify
+  buzz-price divergences.
+- Optional company news headlines if a NEWS connector is validated; used
+  to distinguish retail-driven narratives from news-driven ones and score
+  cross-source agreement between professional and retail views.
+
+No per-post classification pipeline, no batch LLM call over raw social
+posts, and no connector-resident `social_posts` endpoint is required.
+The EODHD connector's `social_posts` runner_spec declaration is retained
+as connector-resolution metadata (a stable public API) but is not
+activated by this engine.
 
 ## Out-of-scope topics
 
@@ -41,20 +50,23 @@ social provider. The router should authorize:
 
 ## Example prompts and the data they imply
 
-1. **"What's retail saying about NVDA right now?"** — `social_posts`
-   need bound to `ticker=NVDA`, batch classification, full 12-metric
-   snapshot.
-2. **"Has there been a buzz spike on GME this week?"** — recent
-   metric snapshots only; spike-detector run; no fresh posts needed
-   if a recent snapshot exists.
+1. **"What's retail saying about NVDA right now?"** — web search for
+   recent retail discussion on NVDA; synthesize sentiment direction, buzz
+   volume, and dominant narratives from forum threads and commentary.
+2. **"Has there been a buzz spike on GME this week?"** — web search for
+   recent GME discussion volume across retail platforms; identify whether
+   activity is elevated relative to a baseline read.
 3. **"Compare retail sentiment on AAPL versus MSFT."** — two parallel
-   snapshots, comparison on sentiment score and bull/bear ratio.
-4. **"Why is the buzz-sentiment divergence high on TSLA?"** —
-   read-only against the cached snapshot; surface the underlying
-   metric values plus any active signals.
+   web-search passes, one per ticker; side-by-side sentiment direction
+   and narrative summary for each.
+4. **"Why is retail so bearish on TSLA lately?"** — web search for
+   bearish retail narratives on TSLA; surface the specific concerns or
+   catalysts driving the negative read.
 5. **"Summarize today's retail picture on PLTR in plain English."**
-   — snapshot + signals + the narrative-synthesis prompt for a
-   2-4 sentence summary.
-6. **"Are short-interest and retail sentiment diverging on SPCE?"** —
-   short-interest optional input + sentiment score; relies on the
-   extended metrics being available.
+   — web search for current retail discussion on PLTR; produce a 2-4
+   sentence plain-English summary with sentiment direction and top
+   narrative themes.
+6. **"Are retail investors and the news in agreement on SPCE?"** —
+   web search for retail commentary plus NEWS connector headlines if
+   available; compare the retail narrative to professional coverage and
+   flag agreement or divergence.
