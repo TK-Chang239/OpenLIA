@@ -4,7 +4,7 @@ Sources:
 - https://github.com/EventRegistry/event-registry-python (pip: `eventregistry`)
 - https://newsapi.ai/
 
-Covers macro_research's `geopolitical_news` runner need.
+Covers macro_research's `geopolitical_news` need.
 
 Event Registry's `EventRegistry.execQuery(query: QueryParamsBase)`
 takes a constructed Query object (not kwargs), so the python_lib

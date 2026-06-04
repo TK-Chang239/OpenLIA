@@ -106,12 +106,19 @@ def check_dept_health(
         cat for cat in dept.required_categories if cat not in validated_cats
     ]
 
-    satisfied_categories = sorted(validated_cats)
-
     any_of_groups: tuple[tuple[Category, ...], ...] = getattr(dept, "required_any_of", ()) or ()
     unsatisfied_any_of: list[tuple[Category, ...]] = [
         group for group in any_of_groups if not any(c in validated_cats for c in group)
     ]
+
+    # Validated categories relevant to this department (required, optional, or in
+    # an any-of group) — the dept's own coverage, not the whole system's.
+    relevant_categories = (
+        set(dept.required_categories)
+        | set(getattr(dept, "optional_categories", ()))
+        | {c for group in any_of_groups for c in group}
+    )
+    satisfied_categories = sorted(validated_cats & relevant_categories)
 
     unresolved_needs: list[str] = []
     if dept.requires_runner:
