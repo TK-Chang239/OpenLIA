@@ -3,12 +3,13 @@
 Reads sibling files next to each `<dept>.py`:
   - `<dept>.routing_context.md` — markdown copy injected into the
     runtime router's prompt template (spec §5.3). Required.
-  - `<dept>.needs.yaml` — declared deterministic-runner needs
-    (spec §5.4). Optional; absent / empty for chat-flow depts.
+  - `<dept>.needs.yaml` — connector need declarations used by the
+    spec-approval flow (spec §5.4). Optional; absent / empty for
+    chat-flow depts that declare no needs.
 
-This module is the single read path for both files. The wizard-time
-adapter and the runtime router both go through `load_routing_context`
-and `load_needs`.
+`load_routing_context` is used by the runtime router.
+`load_needs` is used by the connector spec-approval/save flow
+(`resolver_save_flow._load_need`).
 """
 
 from __future__ import annotations

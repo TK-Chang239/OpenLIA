@@ -35,8 +35,7 @@ class MacroResearchDepartment:
     )
     required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = ()
 
-    # Runtime behavior: dashboard engine, no deterministic runner / needs.
-    requires_runner: ClassVar[bool] = False
+    # Runtime behavior: dashboard engine.
     disable_runtime_routing: ClassVar[bool] = False
 
     valid_modes: tuple[str, ...] = ()

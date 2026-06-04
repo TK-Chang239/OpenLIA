@@ -118,23 +118,13 @@ def set_dept_categories_for_testing(
 def hydrate_dept_registries() -> None:
     """Populate `_DEPT_NEEDS` / `_DEPT_CATEGORIES` from the live registry.
 
-    Without this, the resolve services iterate over empty maps and never
-    produce drafts, so every runner-bearing dept stays disabled with every
-    need unresolved. Called once at app startup.
+    No department currently declares runner needs (all are chat-flow or
+    dashboard engines). This function is retained as the startup hook in
+    case a future department adds portfolio-linked runner needs; today it
+    clears the maps and returns immediately.
     """
-    from openlia.departments import _REGISTRY
-    from openlia.departments.loader import load_needs
-
     _DEPT_NEEDS.clear()
     _DEPT_CATEGORIES.clear()
-    for dept_id, dept in _REGISTRY.items():
-        if not getattr(dept, "requires_runner", False):
-            continue
-        _DEPT_NEEDS[dept_id] = load_needs(dept_id)
-        _DEPT_CATEGORIES[dept_id] = (
-            set(dept.required_categories),
-            set(dept.optional_categories),
-        )
 
 
 # ---------------------------------------------------------------------------

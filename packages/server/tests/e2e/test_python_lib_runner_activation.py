@@ -1,14 +1,16 @@
-"""Scenario 2 — `python_lib` runner activation lifts Retail Sentiment from disabled to active.
+"""Scenario 2 — `python_lib` connector creation + spec approval flow.
 
-Drives the wizard-time adapter flow with a stubbed need-set so the test
-doesn't have to approve all production RS needs:
+Drives the wizard-time adapter flow:
 
-  1. Inject a single fake need into `runner_specs_service` via the
-     test-only registry override.
-  2. Create a `python_lib` connector (validation stubbed).
-  3. Seed a proposed spec directly into the in-memory cache.
-  4. POST `/api/connectors/{id}/proposed-specs/approve` to persist it.
-  5. GET `/api/dept-health` and assert `retail_sentiment` is active.
+  1. Create a `python_lib` connector (validation stubbed).
+  2. Seed a proposed spec directly into the in-memory cache.
+  3. POST `/api/connectors/{id}/proposed-specs/approve` to persist it.
+  4. GET `/api/dept-health` and assert `equity_research` is active
+     (FINANCIAL category now satisfied by the validated connector).
+
+The runner-spec activation was previously gated on `requires_runner` and
+`unresolved_needs` — both removed in refactor/rescope-need-resolution-portfolio.
+Health is now driven purely by category coverage.
 """
 
 from __future__ import annotations
@@ -16,7 +18,6 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 from openlia.connectors.types import Category, RunnerNeed
-from openlia.departments.retail_sentiment import RetailSentimentDepartment
 from openlia_server.app import create_app
 from openlia_server.middleware.rate_limit import limiter
 from openlia_server.services import connectors_service, runner_specs_service
@@ -48,17 +49,9 @@ def client(db_session) -> TestClient:
     return TestClient(app)
 
 
-def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
-    # Force RS to behave as a runner department for this test. RS is a
-    # dashboard dept (requires_runner=False) in production; this test
-    # exercises the runner-spec activation subsystem using RS as the vehicle.
-    # Also override required_categories to FINANCIAL (matching the connector
-    # created below) so check_dept_health sees categories satisfied.
-    monkeypatch.setattr(RetailSentimentDepartment, "requires_runner", True)
-    monkeypatch.setattr(RetailSentimentDepartment, "required_categories", (Category.FINANCIAL,))
-
-    # 1. Override RS's need set to a single placeholder need so the dept
-    #    activates after one approval.
+def test_python_lib_connector_activates_equity_research(client: TestClient, monkeypatch) -> None:
+    """Creating and approving a python_lib financial connector activates
+    Equity Research (which requires the FINANCIAL category)."""
     fake_need = RunnerNeed(
         id="social_posts",
         description="Social media posts for sentiment analysis.",
@@ -70,15 +63,7 @@ def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
         {"retail_sentiment": ({Category.FINANCIAL}, set())}
     )
 
-    # The pure dept-health checker reads needs straight from YAML; for this
-    # test we want it to see the same fake-need slate so RS can flip from
-    # disabled to active after a single approval.
-    def _fake_load_needs(dept_id: str) -> list[RunnerNeed]:
-        return [fake_need] if dept_id == "retail_sentiment" else []
-
-    monkeypatch.setattr("openlia.departments.health.load_needs", _fake_load_needs)
-
-    # 2. Stub validation to succeed and surface a python_lib callable.
+    # Stub validation to succeed and surface a python_lib callable.
     async def fake_validate(_launch, _secrets, *, tool_overrides=None):
         return connectors_service.ValidationOk(
             tools=[],
@@ -93,7 +78,12 @@ def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
 
     monkeypatch.setattr(connectors_service, "_validate_launch", fake_validate)
 
-    # Create a python_lib financial connector — RS requires FINANCIAL.
+    # ER requires FINANCIAL — confirm it starts disabled.
+    health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
+    assert health["equity_research"]["status"] == "disabled"
+    assert "financial" in health["equity_research"]["missing_categories"]
+
+    # Create a python_lib financial connector.
     resp = client.post(
         "/api/connectors",
         json={
@@ -118,15 +108,7 @@ def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
     assert resp.status_code == 201, resp.text
     connector_id = resp.json()["id"]
 
-    # RS should still be disabled at this point — categories OK but
-    # the need has no spec.
-    health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
-    assert health["retail_sentiment"]["status"] == "disabled"
-    assert health["retail_sentiment"]["unresolved_needs"] == ["social_posts"]
-
-    # 3. Seed a proposed spec directly into the cache. (Bypassing the
-    #    adapter-LLM canary keeps this test independent of any real
-    #    LLM provider.)
+    # Seed a proposed spec and approve it.
     runner_specs_service._PROPOSALS[connector_id] = [  # type: ignore[attr-defined]
         runner_specs_service.ProposedSpec(
             department_id="retail_sentiment",
@@ -147,14 +129,12 @@ def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
             error=None,
         )
     ]
-
-    # 4. Approve.
     approve = client.post(
         f"/api/connectors/{connector_id}/proposed-specs/approve",
         json={"department_id": "retail_sentiment", "need_id": "social_posts"},
     )
     assert approve.status_code == 201, approve.text
 
-    # 5. RS should now be active.
+    # ER should now be active — FINANCIAL category satisfied.
     health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
-    assert health["retail_sentiment"]["status"] == "active", health["retail_sentiment"]
+    assert health["equity_research"]["status"] == "active", health["equity_research"]

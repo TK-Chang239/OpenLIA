@@ -23,7 +23,6 @@ class EquityResearchDepartment:
     )
 
     # Runtime behavior (spec §5.2).
-    requires_runner: ClassVar[bool] = False
     disable_runtime_routing: ClassVar[bool] = False
 
     extra_tools: tuple[dict[str, Any], ...] = ()

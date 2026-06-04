@@ -37,14 +37,12 @@ def test_get_dept_health_returns_list_shape(health_client: TestClient) -> None:
             status="active",
             reason=None,
             missing_categories=[],
-            unresolved_needs=[],
         ),
         "macro_research": DepartmentHealth(
             department_id="macro_research",
             status="disabled",
             reason="Missing required categories: financial",
             missing_categories=[Category.FINANCIAL],
-            unresolved_needs=["stock_quote"],
         ),
     }
     resp = health_client.get("/api/dept-health")
@@ -55,7 +53,6 @@ def test_get_dept_health_returns_list_shape(health_client: TestClient) -> None:
     assert by_id["equity_research"]["missing_categories"] == []
     assert by_id["macro_research"]["status"] == "disabled"
     assert by_id["macro_research"]["missing_categories"] == ["financial"]
-    assert by_id["macro_research"]["unresolved_needs"] == ["stock_quote"]
 
 
 def test_get_dept_health_empty_when_cache_unset(health_client: TestClient) -> None:
@@ -81,7 +78,6 @@ def test_post_dept_health_refresh_recomputes_and_returns(db_session_factory) -> 
             status="disabled",
             reason="stale",
             missing_categories=[],
-            unresolved_needs=[],
         )
     }
     client = TestClient(app)
@@ -123,7 +119,6 @@ def test_gate_dept_or_409_raises_when_disabled() -> None:
                     status="disabled",
                     reason="Missing required categories: financial",
                     missing_categories=[Category.FINANCIAL],
-                    unresolved_needs=[],
                 )
             }
 
@@ -158,7 +153,6 @@ def test_gate_dept_or_409_no_op_when_active() -> None:
                     status="active",
                     reason=None,
                     missing_categories=[],
-                    unresolved_needs=[],
                 )
             }
 
@@ -232,7 +226,6 @@ def test_mr_run_assessment_returns_409_when_disabled(db_session_factory) -> None
             status="disabled",
             reason="Missing required categories: financial",
             missing_categories=[Category.FINANCIAL],
-            unresolved_needs=[],
         )
     }
 
@@ -285,7 +278,6 @@ async def test_scheduler_run_job_skips_disabled_dept() -> None:
             status="disabled",
             reason="Missing required categories: financial",
             missing_categories=[Category.FINANCIAL],
-            unresolved_needs=[],
         )
     }
 
@@ -334,7 +326,6 @@ async def test_scheduler_run_job_runs_when_active() -> None:
             status="active",
             reason=None,
             missing_categories=[],
-            unresolved_needs=[],
         )
     }
 
