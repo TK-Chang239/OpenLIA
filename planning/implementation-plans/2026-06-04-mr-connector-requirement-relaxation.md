@@ -449,4 +449,12 @@ git add -A && git commit -m "chore(macro-research): lint/format pass for connect
 
 ## Post-implementation amendments
 
-(Record any divergence here as it is executed — e.g. additional frontend tests that referenced MR as runner-bearing, or any `test_dept_health_api.py` fixture that needed a registry-value fix.)
+The de-runner change had a wider test tail than the plan's §6 blast radius enumerated. All fixed by migrating MR→retail_sentiment or supplying a synthetic need; no production behavior changed beyond the planned relaxation.
+
+- **`test_needs_canonical_keys.py`** (Task 1) — used MR's `geopolitical_news` need as its `list[dict]` canonical-keys example; rewritten to use RS's `social_posts` (the scalar `debt_gdp` "no canonical_keys" assertion was dropped — RS has no scalar need; the synthetic-fixture rejection test below still covers scalar+canonical_keys).
+- **`test_dept_health_api.py`** — needed no change (synthetic fixtures; assertions read fixture values, not the registry), as predicted.
+- **`e2e/test_disabled_banner_409.py`** (found in Task 6) — MR's missing category is now `web_search` (not `financial`) and it has no unresolved needs; also fixed a stale `/assessment/run` URL (renamed to `/refresh` back in #246).
+- **`e2e/test_atomic_disable_on_delete.py`** (found in Task 6) — premise "delete the sole FINANCIAL connector → MR disabled" is void (FINANCIAL optional); retargeted to `retail_sentiment`/`social_posts`.
+- **`test_resolver_save_flow.py`, `test_resolver_redesign_e2e.py`** (found in Task 6) — depend on MR's real `stock_quote` need via `resolver_save_flow.load_needs`; fixed by monkeypatching `load_needs` with a synthetic scalar `stock_quote` need (keeps the scalar fixtures; cleaner than forcing RS's `list[dict]` shape).
+- **`test_routes_runner_specs.py::test_hydrate_..._real_macro_research_needs`** (found in Task 6) — tests real runner-dept hydration; retargeted to `retail_sentiment` (asserts `social_posts` + `FINANCIAL` required).
+- **Note:** a 1240-test cross-dir megarun surfaced one unrelated Morning-Briefing scheduler failure (`test_lifespan_integration`) from global-state pollution; it passes in isolation and `test_scheduler` passes standalone (155). Pre-existing test-isolation fragility, not a regression from this PR. CI runs targeted dirs, so it does not affect the branch.
