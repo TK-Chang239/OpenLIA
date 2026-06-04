@@ -2,25 +2,66 @@ import { fetchJson } from "./client";
 
 const BASE = "/api/departments/retail_sentiment";
 
-export interface RsSnapshot {
-  ticker: string;
-  captured_at: string;
-  sentiment_score: number;
-  buzz_volume: number;
-  buzz_count: number;
-  sentiment_momentum: number;
-  bull_bear_ratio: number;
-  buzz_sentiment_divergence: number;
-  social_velocity: number;
-  cross_source_agreement: number;
-  put_call_ratio: number | null;
-  short_interest_pressure: number | null;
-  narrative_concentration: number | null;
-  institutional_retail_gap: number | null;
-  event_sensitivity: number | null;
-  source_breakdown: Record<string, number>;
-  narrative: string | null;
+async function _fetch(url: string, init: RequestInit = {}): Promise<unknown> {
+  const r = await fetch(url, { credentials: "include", ...init });
+  if (!r.ok) {
+    throw new Error(`${init.method ?? "GET"} ${url} failed: ${r.status}`);
+  }
+  return r.status === 204 ? null : r.json();
 }
+
+// ---------------------------------------------------------------------------
+// Payload types
+// ---------------------------------------------------------------------------
+
+export interface RsSignal {
+  name: string;
+  severity: "info" | "caution" | "alert";
+  note: string;
+}
+
+export interface RsEvidenceItem {
+  title: string;
+  url: string;
+  source: string;
+  classification: "bullish" | "bearish" | "neutral";
+  published_at?: string | null;
+}
+
+export interface RetailSentimentPayload {
+  subject: string;
+  sentiment_score: number; // -1..1
+  direction: "bullish" | "bearish" | "neutral";
+  momentum: number | null;
+  trend_label: string | null;
+  buzz_level: "low" | "elevated" | "high";
+  buzz_note: string;
+  bull_pct: number; // 0..100
+  bear_pct: number; // 0..100
+  narratives: string[];
+  signals: RsSignal[];
+  evidence: RsEvidenceItem[];
+  narrative: string;
+  aggregated_sentiment: number | null;
+  analyst_gap: number | null;
+  captured_at: string | null;
+}
+
+export interface DashboardResponse<T = unknown> {
+  payload: T | null;
+  generated_at: string | null;
+  is_stale: boolean;
+  provenance: string | null;
+}
+
+export interface DashboardConfig {
+  view_config: Record<string, unknown>;
+  threshold_overrides: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// Schedule types (unchanged from prior shape)
+// ---------------------------------------------------------------------------
 
 export interface RsSchedule {
   id: string;
@@ -39,86 +80,63 @@ export interface RsScheduleUpsert {
   is_enabled?: boolean;
 }
 
-export interface RsSpike {
-  ticker: string;
-  detected_at: string;
-  buzz: number;
-  baseline_mean: number;
-  baseline_stddev: number;
-  z_score: number;
+// ---------------------------------------------------------------------------
+// Dashboard API
+// ---------------------------------------------------------------------------
+
+export function getDashboard(
+  ticker: string,
+): Promise<DashboardResponse<RetailSentimentPayload>> {
+  return _fetch(
+    `${BASE}/dashboard/${encodeURIComponent(ticker)}`,
+  ) as Promise<DashboardResponse<RetailSentimentPayload>>;
 }
 
-export interface RsQuoteBar {
-  date: string;
-  close: number;
-  daily_change_pct: number;
-  cumulative_pct: number;
+export function getHistory(
+  ticker: string,
+  days = 7,
+): Promise<{ items: Array<{ payload: RetailSentimentPayload; generated_at: string }> }> {
+  return _fetch(
+    `${BASE}/dashboard/${encodeURIComponent(ticker)}/history?days=${days}`,
+  ) as Promise<{ items: Array<{ payload: RetailSentimentPayload; generated_at: string }> }>;
 }
 
-export interface RsQuotes {
-  ticker: string;
-  bars: RsQuoteBar[];
+export interface RefreshResult {
+  job_run_id: string | null;
+  status: string;
 }
 
-export interface RsDashboard {
-  tickers: string[];
-  snapshots: RsSnapshot[];
-  generated_at: string;
+export async function refreshDashboard(ticker: string): Promise<RefreshResult> {
+  const url = `${BASE}/dashboard/${encodeURIComponent(ticker)}/refresh`;
+  const r = await fetch(url, { method: "POST", credentials: "include" });
+  if (r.status === 409) {
+    return { job_run_id: null, status: "already_running" };
+  }
+  if (!r.ok) {
+    throw new Error(`POST ${url} failed: ${r.status}`);
+  }
+  return r.json() as Promise<RefreshResult>;
 }
 
-export interface RsConfig {
-  id: string;
-  user_id: string;
-  active_tab: string;
-  metric_settings: Record<string, unknown>;
-  filter_presets: unknown[];
-  refresh_interval_minutes: number;
+// ---------------------------------------------------------------------------
+// Config API
+// ---------------------------------------------------------------------------
+
+export function getConfig(): Promise<DashboardConfig> {
+  return _fetch(`${BASE}/config`) as Promise<DashboardConfig>;
 }
 
-export interface RsConfigUpdate {
-  active_tab?: string;
-  metric_settings?: Record<string, unknown>;
-  filter_presets?: unknown[];
-  refresh_interval_minutes?: number;
+export function putConfig(body: Partial<DashboardConfig>): Promise<DashboardConfig> {
+  return _fetch(`${BASE}/config`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }) as Promise<DashboardConfig>;
 }
 
-export interface RsRunResponse {
-  snapshots: Array<RsSnapshot & { snapshot_id: string; spike: RsSpike | null }>;
-}
-
-export function getDashboard(): Promise<RsDashboard> {
-  return fetchJson<RsDashboard>(`${BASE}/dashboard`);
-}
-
-export function getHistory(ticker: string, days = 7): Promise<{ ticker: string; snapshots: RsSnapshot[] }> {
-  return fetchJson(`${BASE}/dashboard/history?ticker=${encodeURIComponent(ticker)}&days=${days}`);
-}
-
-export function getQuotes(ticker: string, days = 30): Promise<RsQuotes> {
-  return fetchJson<RsQuotes>(
-    `${BASE}/dashboard/quotes?ticker=${encodeURIComponent(ticker)}&days=${days}`,
-  );
-}
-
-export function getConfig(): Promise<RsConfig> {
-  return fetchJson<RsConfig>(`${BASE}/config`);
-}
-
-export function updateConfig(payload: RsConfigUpdate): Promise<RsConfig> {
-  return fetchJson<RsConfig>(`${BASE}/config`, { method: "PUT", json: payload });
-}
-
-export function runSnapshot(tickers: string[]): Promise<RsRunResponse> {
-  return fetchJson<RsRunResponse>(`${BASE}/run`, { method: "POST", json: { tickers } });
-}
-
-export function getStockSentiment(ticker: string): Promise<{ latest: RsSnapshot; history: RsSnapshot[] }> {
-  return fetchJson(`${BASE}/stocks/${encodeURIComponent(ticker)}/sentiment`);
-}
-
-export function getSpikes(): Promise<{ spikes: RsSpike[] }> {
-  return fetchJson(`${BASE}/spikes`);
-}
+// ---------------------------------------------------------------------------
+// Schedule API (preserved from prior shape)
+// ---------------------------------------------------------------------------
 
 export function getSchedule(): Promise<{ schedule: RsSchedule | null }> {
   return fetchJson(`${BASE}/schedule`);

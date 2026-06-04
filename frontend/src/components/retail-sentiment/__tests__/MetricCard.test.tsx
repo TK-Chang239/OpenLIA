@@ -15,10 +15,15 @@ describe("MetricCard", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  it("renders reliability badge when supplied", () => {
+  it("renders units when supplied and value is present", () => {
+    render(<MetricCard label="Buzz" value={1.5} units="× 30d" />);
+    expect(screen.getByText("× 30d")).toBeInTheDocument();
+  });
+
+  it("applies disabled note when value is null", () => {
     render(
-      <MetricCard label="Buzz" value={1.5} reliability="medium" />,
+      <MetricCard label="Gap" value={null} disabledNote="Provider not configured." />,
     );
-    expect(screen.getByTestId("reliability-medium")).toBeInTheDocument();
+    expect(screen.getByText("Provider not configured.")).toBeInTheDocument();
   });
 });
