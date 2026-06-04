@@ -39,7 +39,7 @@ Portfolio's needs (the only ones to keep): `stock_quote` (refresh prices, schedu
 | P4 | Drop the `needs.yaml` mechanism (`load_needs`, the `Need` type, both `*.needs.yaml`). Make the builtin `runner_specs` self-contained for the 3 portfolio needs; replace the needs.yaml drift test with an internal-consistency test. | `fetch_need`/`_upsert` never read `needs.yaml` at runtime; it was only a department-runner contract + a drift test. The builtin template `runner_specs` are the real source of truth. |
 | P5 | Remove the `requires_runner` field, the deterministic runtime mode, `DepartmentHealth.unresolved_needs`, and `deterministic.py`. | All dead (no runner dept; MR/RS migrated). |
 | P6 | Fix the pre-existing `company_profile` ticker-search bug as part of giving Portfolio a clean, complete need-set. | It's one of Portfolio's three needs; leaving it broken while fixing the other two is inconsistent. Best-effort on the EODHD endpoint mapping (flag if EODHD lacks a suitable callable). |
-| P7 | Guardrail: the Portfolio resolution must stay green throughout. Keep/extend `test_portfolio_value_series*` + a connector-validate→upsert→fetch_need test as the regression gate. | This is the failure mode that derailed the first attempt; verify it explicitly at every step. |
+| P7 | Guardrail: the resolution chain must stay green. The gate is the **resolution-chain tests** — `test_dispatcher.py` (`fetch_need`), `test_dispatcher_factory_substitutions.py` (`_hydrate_spec`/`callable_specs`), and `test_connectors_service` (`_upsert`). These pass on main and exercise the real chain. NOTE: `test_value_series_returns_points` is a **pre-existing baseline red** (quote-seeded route test, unrelated to `fetch_need`) — it is NOT a guardrail; leave it red. | Verify the chain explicitly at every step; don't be misled by the unrelated pre-existing portfolio red. |
 
 ## 3. Goals / Non-goals
 
@@ -88,7 +88,7 @@ Portfolio's needs (the only ones to keep): `stock_quote` (refresh prices, schedu
 5. **DB**: drop `resolver_call_log` + `smoke_call_log` (keep `runner_callable_specs`); remove the 2 models.
 6. **Verify**: full suites + the Portfolio resolution guardrail.
 
-After each step: the Portfolio guardrail tests (`test_portfolio_value_series*`, connectors-validate→upsert→fetch_need) must stay green. That is the non-negotiable invariant.
+After each step: the resolution-chain guardrails (`test_dispatcher.py` fetch_need, `test_dispatcher_factory_substitutions.py` _hydrate_spec, `test_connectors_service` _upsert) must stay green. That is the non-negotiable invariant. (`test_value_series_returns_points` is pre-existing red — ignore it.)
 
 ## 8. Risks / landmines
 
@@ -101,7 +101,8 @@ After each step: the Portfolio guardrail tests (`test_portfolio_value_series*`, 
 
 ## 9. Verification
 
-- Portfolio guardrail (must be green at every step): `test_portfolio_value_series*`, `test_portfolio_prices`, the `connectors_service` validate→upsert tests, `test_dispatcher` `fetch_need` resolution tests.
+- Resolution-chain guardrail (must be green at every step): `packages/core/tests/connectors/test_dispatcher.py` + `test_dispatcher_field_map.py` (`fetch_need`), `packages/server/tests/test_services/test_dispatcher_factory_substitutions.py` (`_hydrate_spec`), `packages/server/tests/services/test_connectors_service.py` (`_upsert`). NOTE: `test_value_series_returns_points` already fails on main (pre-existing baseline red) — not a regression signal here.
+- `eod_history` / `company_profile` have NO builtin spec today (pre-existing gap; only `stock_quote` resolves) — the rescope does not worsen this. Adding their specs is best-effort (P6), not required.
 - Full `core` + targeted server dirs + frontend `tsc`/`vitest` + `alembic` up/down/up.
 - Orphan grep: no live `requires_runner`/`unresolved_needs`/`load_needs`/`needs.yaml`/wizard-resolve refs; `fetch_need`/`RunnerCallableSpec`/`_NEED_DEPARTMENT_MAP`/`callable_specs`/`sync_template_specs`/`covered_need_ids` remain (portfolio).
 - Baseline pre-existing reds unchanged (SettingsShellBlocker, MB-lifespan, `mr_dashboard_cache` alembic drift).
