@@ -208,8 +208,8 @@ Work in this order:
      qualitative buzz_level — "low" when discussion is sparse, "elevated" when
      there is notable but not extreme activity, "high" when the ticker is
      dominating retail chatter.
-  3. Call `classify_retail_sentiment` with those four values: bullish_count,
-     bearish_count, neutral_count, and buzz_level. Use the returned
+  3. Call `classify_retail_sentiment` with those four values: bullish,
+     bearish, neutral (integer counts), and buzz_level. Use the returned
      sentiment_score, direction, bull_pct, bear_pct, and signals verbatim —
      do not invent or override the computed numbers.
   4. Extract the key narratives and themes driving the discussion (e.g.

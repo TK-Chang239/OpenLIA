@@ -95,10 +95,10 @@ export function getDashboard(
 export function getHistory(
   ticker: string,
   days = 7,
-): Promise<{ items: Array<{ payload: RetailSentimentPayload; generated_at: string }> }> {
+): Promise<Array<{ payload: RetailSentimentPayload; generated_at: string }>> {
   return _fetch(
     `${BASE}/dashboard/${encodeURIComponent(ticker)}/history?days=${days}`,
-  ) as Promise<{ items: Array<{ payload: RetailSentimentPayload; generated_at: string }> }>;
+  ) as Promise<Array<{ payload: RetailSentimentPayload; generated_at: string }>>;
 }
 
 export interface RefreshResult {

@@ -560,8 +560,6 @@ export default function RsOverviewView({ ticker }: { ticker: string }) {
     );
   }
 
-  if (generating && !payload) return <LoadingSkeleton />;
-
   return (
     <PayloadView
       ticker={ticker}

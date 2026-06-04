@@ -46,10 +46,17 @@ DEPARTMENT_REQUIREMENTS: dict[str, DepartmentRequirements] = {
         min_output_tokens=2_048,
     ),
     "retail_sentiment": DepartmentRequirements(
-        required=[Capability.STREAMING, Capability.STRUCTURED_OUTPUT],
-        preferred=[Capability.TOOL_CALLING],
-        min_context_tokens=8_000,
-        min_output_tokens=1_024,
+        # report_dash_rs is a web-search tool-use dashboard engine (sibling of
+        # macro_research): it drives classify/emit tool calls and leans on
+        # native web search, so TOOL_CALLING is required and WEB_SEARCH preferred.
+        required=[
+            Capability.STREAMING,
+            Capability.TOOL_CALLING,
+            Capability.STRUCTURED_OUTPUT,
+        ],
+        preferred=[Capability.WEB_SEARCH],
+        min_context_tokens=32_000,
+        min_output_tokens=2_048,
     ),
     "macro_research": DepartmentRequirements(
         required=[

@@ -11,18 +11,13 @@ from ..report_dash_mr import (
     MbDataTransports,
     NullEmitter,
 )
+from .runner import Runner
 from .schemas import EvidenceItem, RetailSentimentData, RunRequest, RunResult, RunStatus, Signal
-
-try:
-    from .runner import Runner
-    from .tools.dashboard_tools import (
-        CLASSIFY_TOOL_BY_SLUG,
-        PAYLOAD_MODEL_BY_SLUG,
-        implemented_dashboard_slugs,
-    )
-except ModuleNotFoundError:
-    # Built incrementally — runner/tools land in later tasks.
-    pass
+from .tools.dashboard_tools import (
+    CLASSIFY_TOOL_BY_SLUG,
+    PAYLOAD_MODEL_BY_SLUG,
+    implemented_dashboard_slugs,
+)
 
 __all__ = [
     "CLASSIFY_TOOL_BY_SLUG",
