@@ -45,15 +45,9 @@ def downgrade() -> None:
         sa.Column("ticker", sa.String(length=16), nullable=False),
         sa.Column("model_ref", sa.String(length=128), nullable=False),
         sa.Column("item_count", sa.Integer(), nullable=False),
-        sa.Column(
-            "prompt_tokens", sa.Integer(), nullable=False, server_default=sa.text("0")
-        ),
-        sa.Column(
-            "completion_tokens", sa.Integer(), nullable=False, server_default=sa.text("0")
-        ),
-        sa.Column(
-            "latency_ms", sa.Integer(), nullable=False, server_default=sa.text("0")
-        ),
+        sa.Column("prompt_tokens", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("completion_tokens", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("latency_ms", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
