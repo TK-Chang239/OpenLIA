@@ -26,6 +26,8 @@ PROXIES: dict[str, str] = {
     "commodities": "DBC.US",
 }
 ASSET_ORDER = ("equities", "long_bonds", "intermediate_bonds", "gold", "commodities")
+# FROM_DATE is the fetch start; the actual window is clipped to the common-date
+# intersection across all five proxies (~2006-02-03, bound by DBC.US inception).
 FROM_DATE = "2004-01-01"
 TO_DATE = "2025-12-31"  # most recent complete year-end
 TRADING_DAYS = 252
