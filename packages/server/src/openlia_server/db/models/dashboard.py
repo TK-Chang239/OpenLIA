@@ -284,6 +284,29 @@ class RsClassificationLog(Base):
     )
 
 
+class RsDashboardCache(Base):
+    """Latest dashboard payload per (user, ticker). The report_dash_rs
+    engine writes here on each scheduled/refresh run; the route reads it."""
+
+    __tablename__ = "rs_dashboard_cache"
+
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    ticker: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    provenance: Mapped[str] = mapped_column(String(16), nullable=False, default="live")
+    model_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_rs_dashboard_cache"),
+        UniqueConstraint("user_id", "ticker", name="uq_rs_dashboard_cache_user_ticker"),
+        Index("ix_rs_dashboard_cache_user_ticker", "user_id", "ticker"),
+    )
+
+
 # ---------- Formula engine ----------
 
 
