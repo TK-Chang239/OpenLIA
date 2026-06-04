@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from openlia.connectors.types import Category
+from openlia.connectors.types import Category, NeedParameter, RunnerNeed
 from openlia_server.db.models.connectors import (
     Connector,
     ResolverCallLog,
@@ -32,6 +32,15 @@ from openlia_server.services.template_upgrade import (
     revert_to_default,
 )
 from sqlalchemy.orm import Session
+
+_STOCK_QUOTE_NEED = RunnerNeed(
+    id="stock_quote",
+    description="Latest closing price for a ticker.",
+    parameters=[
+        NeedParameter(name="ticker", description="Ticker symbol", type="str", required=True)
+    ],
+    shape="float",
+)
 
 
 class _StubLlm:
@@ -110,7 +119,11 @@ def _llm_ok() -> _StubLlm:
 
 
 @pytest.mark.asyncio
-async def test_e2e_happy_path(db_session: Session) -> None:
+async def test_e2e_happy_path(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "openlia_server.services.resolver_save_flow.load_needs",
+        lambda dept_id: [_STOCK_QUOTE_NEED] if dept_id == "macro_research" else [],
+    )
     conn = _connector(db_session)
     result = await save_user_picked_spec(
         session=db_session,
@@ -135,7 +148,13 @@ async def test_e2e_happy_path(db_session: Session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_e2e_auth_failure_preserves_no_spec(db_session: Session) -> None:
+async def test_e2e_auth_failure_preserves_no_spec(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "openlia_server.services.resolver_save_flow.load_needs",
+        lambda dept_id: [_STOCK_QUOTE_NEED] if dept_id == "macro_research" else [],
+    )
     conn = _connector(db_session)
     result = await save_user_picked_spec(
         session=db_session,
@@ -161,6 +180,7 @@ async def test_e2e_auth_failure_preserves_no_spec(db_session: Session) -> None:
 @pytest.mark.asyncio
 async def test_e2e_override_path_preserves_user_pick_on_template_upgrade(
     db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """End-to-end override-wins path:
 
@@ -169,6 +189,10 @@ async def test_e2e_override_path_preserves_user_pick_on_template_upgrade(
        pending default change but does not clobber.
     3. Revert_to_default replaces the spec with the pending one.
     """
+    monkeypatch.setattr(
+        "openlia_server.services.resolver_save_flow.load_needs",
+        lambda dept_id: [_STOCK_QUOTE_NEED] if dept_id == "macro_research" else [],
+    )
     conn = _connector(db_session)
     save_result = await save_user_picked_spec(
         session=db_session,
