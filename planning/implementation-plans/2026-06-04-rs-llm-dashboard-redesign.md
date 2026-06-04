@@ -698,7 +698,7 @@ Remove `/spikes`, `/stocks/{ticker}`, `/classifier/audit`, the old `/run` (repla
 
 **Files (DELETE):**
 - Core package: the entire `packages/core/src/openlia/retail_sentiment/` directory (`classifier.py`, `metrics.py`, `reliability.py`, `spike_detector.py`, `quotes.py`, `insights.py`, `schemas.py`, `__init__.py`).
-- Prompts: `packages/core/src/openlia/prompts/retail_sentiment.yaml`, `packages/core/src/openlia/prompts/retail_sentiment_insights.yaml`.
+- Prompts: `packages/core/src/openlia/prompts/retail_sentiment_insights.yaml` (old narrative-synthesis prompt). **KEEP `prompts/retail_sentiment.yaml`** — its `chat:` section is the desk routing prompt (exact parallel to the retained `macro_research.yaml`) and the app-lifespan prompt-slot validation requires it. (Its dead `batch:` classifier section may be left as-is for MR parity; remove it only if MR removed its own and slot-validation still passes.)
 - Server services: `services/rs_runner.py`, `services/rs_sync_classifier.py`, `services/rs_classification_log.py`.
 - DB models (now unreferenced — their services/routes are gone): the `RsSnapshot` and `RsClassificationLog` classes in `db/models/dashboard.py`.
 - Core tests: all of `packages/core/tests/retail_sentiment/`.
