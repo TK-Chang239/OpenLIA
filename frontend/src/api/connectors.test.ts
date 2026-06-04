@@ -98,7 +98,7 @@ describe("listBuiltinTemplates", () => {
           display_name: "Firecrawl",
           category: "web_search",
           api_key_env_var: "FIRECRAWL_API_KEY",
-          covered_need_ids: ["usd_fx_reserve_share"],
+          covered_need_ids: ["stock_quote"],
         },
       ]),
     );

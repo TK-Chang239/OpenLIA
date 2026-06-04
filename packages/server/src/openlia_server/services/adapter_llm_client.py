@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from openlia.connectors.adapter import LlmClient, ResolverError
@@ -123,49 +122,8 @@ def make_adapter_llm_client_factory(
     return _factory
 
 
-def make_agentic_resolver_factory(
-    db_session_factory: Callable[[], DBSession],
-) -> Callable[..., LlmClient]:
-    """Build the per-connector factory the dept resolve route hands the service.
-
-    Each invocation opens a fresh DB session (so newly-configured models
-    take effect immediately), resolves a thinking-tier `LLMProvider`, and
-    wraps it in an `AgenticResolverClient` scoped to the connector's
-    grounding clone path. With `connector_root=None` the agentic loop
-    degrades to a single-shot JSON call. An optional `tool_call_listener`
-    is forwarded to the client so the wizard can stream a live tool-call
-    log to the user.
-    """
-    from openlia.llm.types import ToolCall
-
-    from openlia_server.services.agentic_resolver_client import (
-        AgenticResolverClient,
-    )
-
-    def _factory(
-        connector_root: Path | None,
-        *,
-        tool_call_listener: Callable[[ToolCall], None] | None = None,
-        grounding_paths: list[str] | None = None,
-    ) -> LlmClient:
-        db = db_session_factory()
-        try:
-            provider = _resolve_provider_for_role(db, "connector_agentic_resolver")
-        finally:
-            db.close()
-        return AgenticResolverClient(
-            provider=provider,
-            connector_root=connector_root,
-            tool_call_listener=tool_call_listener,
-            grounding_paths=grounding_paths,
-        )
-
-    return _factory
-
-
 __all__ = [
     "AdapterLlmJsonClient",
     "AdapterLlmNotConfigured",
     "make_adapter_llm_client_factory",
-    "make_agentic_resolver_factory",
 ]

@@ -217,6 +217,7 @@ def _hydrate_spec(row: RunnerCallableSpec) -> CallableSpec:
         shape=raw.get("shape", "any"),
         result_path=tuple(raw.get("result_path") or ()),
         result_reducer=raw.get("result_reducer"),
+        field_map=raw.get("field_map") or None,
     )
 
 
