@@ -11,7 +11,6 @@ from openlia.departments import (
     RetailSentimentDepartment,
 )
 from openlia.departments.health import check_dept_health
-from openlia.departments.loader import load_needs
 
 
 @dataclass
@@ -79,51 +78,6 @@ def test_string_status_and_category_accepted():
 
 
 # ---------------------------------------------------------------------------
-# Runner-bearing dept (Retail Sentiment) — requires_runner=True with needs
-# ---------------------------------------------------------------------------
-
-
-def test_runner_dept_disabled_with_unresolved_need():
-    dept = RetailSentimentDepartment()
-    needs = load_needs(dept.name)
-    assert needs, "RetailSentiment needs.yaml must declare at least one need"
-
-    connectors = [
-        _Conn(category=cat, status=ConnectorStatus.VALIDATED) for cat in dept.required_categories
-    ]
-    # Resolve all but the first need.
-    specs = [_Spec(department_id=dept.name, need_id=n.id) for n in needs[1:]]
-    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)
-    assert health.status == "disabled"
-    assert health.unresolved_needs == [needs[0].id]
-    assert needs[0].id in health.reason
-
-
-def test_runner_dept_specs_for_other_dept_do_not_count():
-    dept = RetailSentimentDepartment()
-    needs = load_needs(dept.name)
-    connectors = [
-        _Conn(category=cat, status=ConnectorStatus.VALIDATED) for cat in dept.required_categories
-    ]
-    # Specs reference a different dept — must not satisfy RS needs.
-    specs = [_Spec(department_id="macro_research", need_id=n.id) for n in needs]
-    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)
-    assert health.status == "disabled"
-    assert health.unresolved_needs == [n.id for n in needs]
-
-
-def test_runner_dept_disabled_lists_both_missing_categories_and_unresolved_needs():
-    dept = RetailSentimentDepartment()
-    needs = load_needs(dept.name)
-    health = check_dept_health(dept, validated_connectors=[], runner_specs=[])
-    assert health.status == "disabled"
-    assert Category.FINANCIAL in health.missing_categories
-    assert health.unresolved_needs == [n.id for n in needs]
-    assert "Missing required categories" in health.reason
-    assert "Unresolved needs" in health.reason
-
-
-# ---------------------------------------------------------------------------
 # Chat-flow dept ignores needs entirely (requires_runner=False)
 # ---------------------------------------------------------------------------
 
@@ -138,16 +92,34 @@ def test_chat_dept_ignores_needs_yaml_when_requires_runner_false():
     assert health.unresolved_needs == []
 
 
-def test_runner_dept_rs_active_when_all_required_categories_and_needs_resolved():
-    """Retail Sentiment is a runner dept; satisfy all required cats + needs."""
+# ---------------------------------------------------------------------------
+# Retail Sentiment — web-search-backbone dashboard (requires_runner=False)
+# ---------------------------------------------------------------------------
+
+
+def test_retail_sentiment_requires_only_web_search():
     dept = RetailSentimentDepartment()
-    needs = load_needs(dept.name)
-    connectors = [
-        _Conn(category=cat, status=ConnectorStatus.VALIDATED) for cat in dept.required_categories
-    ]
-    specs = [_Spec(department_id=dept.name, need_id=n.id) for n in needs]
-    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)
+    assert dept.required_categories == (Category.WEB_SEARCH,)
+    assert Category.FINANCIAL in dept.optional_categories
+    assert Category.NEWS in dept.optional_categories
+    assert dept.requires_runner is False
+
+
+def test_retail_sentiment_active_with_web_search_only():
+    dept = RetailSentimentDepartment()
+    connectors = [_Conn(category=Category.WEB_SEARCH, status=ConnectorStatus.VALIDATED)]
+    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=[])
     assert health.status == "active"
+    assert health.unresolved_needs == []
+
+
+def test_retail_sentiment_disabled_without_web_search_connector():
+    dept = RetailSentimentDepartment()
+    # FINANCIAL alone is no longer enough — WEB_SEARCH is the one required category.
+    connectors = [_Conn(category=Category.FINANCIAL, status=ConnectorStatus.VALIDATED)]
+    health = check_dept_health(dept, validated_connectors=connectors, runner_specs=[])
+    assert health.status == "disabled"
+    assert Category.WEB_SEARCH in health.missing_categories
 
 
 # ---------------------------------------------------------------------------

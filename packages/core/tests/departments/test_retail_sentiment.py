@@ -10,19 +10,18 @@ def test_rs_identifies_itself():
 
 
 def test_rs_required_categories():
-    # Spec §10.1, §9.5: RS pulls social posts via the financial connectors'
-    # sentiment endpoints; required category is `financial`, not `social`.
-    assert RetailSentimentDepartment.required_categories == (Category.FINANCIAL,)
+    # Web-search-backbone dashboard: WEB_SEARCH is the sole required category.
+    assert RetailSentimentDepartment.required_categories == (Category.WEB_SEARCH,)
 
 
 def test_rs_optional_categories():
     soft = set(RetailSentimentDepartment.optional_categories)
-    assert {Category.NEWS, Category.SOCIAL}.issubset(soft)
+    assert {Category.FINANCIAL, Category.NEWS}.issubset(soft)
 
 
 def test_rs_requires_runner():
-    # Spec §10.1.
-    assert RetailSentimentDepartment.requires_runner is True
+    # Dashboard engine — no deterministic runner.
+    assert RetailSentimentDepartment.requires_runner is False
     assert RetailSentimentDepartment.disable_runtime_routing is False
 
 

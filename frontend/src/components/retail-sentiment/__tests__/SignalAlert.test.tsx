@@ -1,42 +1,41 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
 import { SignalAlert } from "../SignalAlert";
 
 describe("SignalAlert", () => {
-  it("renders ticker and z-score", () => {
+  it("renders signal name and note", () => {
     render(
       <SignalAlert
-        spike={{
-          ticker: "AAPL",
-          detected_at: new Date().toISOString(),
-          buzz: 50,
-          baseline_mean: 10,
-          baseline_stddev: 2.5,
-          z_score: 4.0,
-        }}
+        name="Momentum crossover"
+        severity="info"
+        note="5d MA crossed above 20d."
       />,
     );
-    expect(screen.getByText("AAPL")).toBeInTheDocument();
-    expect(screen.getByText(/z\s*=\s*4\.00/)).toBeInTheDocument();
+    expect(screen.getByText("Momentum crossover")).toBeInTheDocument();
+    expect(screen.getByText("5d MA crossed above 20d.")).toBeInTheDocument();
   });
 
-  it("invokes onPick when clicked", () => {
-    const onPick = vi.fn();
+  it("shows ALERT label for alert severity", () => {
     render(
       <SignalAlert
-        onPick={onPick}
-        spike={{
-          ticker: "MSFT",
-          detected_at: new Date().toISOString(),
-          buzz: 80,
-          baseline_mean: 12,
-          baseline_stddev: 3,
-          z_score: 5,
-        }}
+        name="Extreme buzz"
+        severity="alert"
+        note="Volume 5x above 30d average."
       />,
     );
-    fireEvent.click(screen.getByTestId("signal-MSFT"));
-    expect(onPick).toHaveBeenCalledWith("MSFT");
+    expect(screen.getByTestId("signal-alert")).toBeInTheDocument();
+    expect(screen.getByText("ALERT")).toBeInTheDocument();
+  });
+
+  it("shows CAUTION label for caution severity", () => {
+    render(
+      <SignalAlert
+        name="Buzz spike"
+        severity="caution"
+        note="Volume elevated."
+      />,
+    );
+    expect(screen.getByTestId("signal-caution")).toBeInTheDocument();
   });
 });

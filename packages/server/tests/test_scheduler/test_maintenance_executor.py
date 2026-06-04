@@ -6,9 +6,10 @@ import pytest
 from _scheduler_fakes import FakeSleep
 from openlia_server.db.models.auth import PasswordResetRequest, User
 from openlia_server.db.models.auth import Session as AuthSession
-from openlia_server.db.models.dashboard import RsSnapshot
+from openlia_server.db.models.dashboard import RsDashboardCache
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.maintenance import (
+    RS_DASHBOARD_CACHE_RETENTION_DAYS,
     MaintenanceExecutor,
     run_maintenance_once,
 )
@@ -70,22 +71,6 @@ def _seed(session: Session) -> dict[str, list[str]]:
         expires_at=now + timedelta(days=1),
     )
     session.add_all([r_flip, r_old, r_live])
-
-    rs_old = RsSnapshot(
-        id="rs_old",
-        ticker="AAPL",
-        snapshot_data={},
-        source_breakdown={},
-        captured_at=now - timedelta(days=100),
-    )
-    rs_new = RsSnapshot(
-        id="rs_new",
-        ticker="AAPL",
-        snapshot_data={},
-        source_breakdown={},
-        captured_at=now - timedelta(days=10),
-    )
-    session.add_all([rs_old, rs_new])
 
     n_old = UserNotification(
         id="n_old",
@@ -157,7 +142,6 @@ def _seed(session: Session) -> dict[str, list[str]]:
     return {
         "sessions": ["s_new"],
         "password_reset_requests": ["r_flip", "r_live"],
-        "rs_snapshots": ["rs_new"],
         "user_notifications": ["n_new"],
         "job_runs": ["j_old_failed", "j_new_ok"],
     }
@@ -172,7 +156,6 @@ def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
     assert summary["sessions_deleted"] == 1
     assert summary["password_resets_expired"] == 1
     assert summary["password_resets_deleted"] == 1
-    assert summary["rs_snapshots_deleted"] == 1
     assert summary["notifications_deleted"] == 1
     assert summary["job_runs_deleted"] == 2
 
@@ -181,9 +164,6 @@ def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
 
     prrs = {r.id: r.status for r in db_session.query(PasswordResetRequest).all()}
     assert prrs == {"r_flip": "expired", "r_live": "pending"}
-
-    snaps = {r.id for r in db_session.query(RsSnapshot).all()}
-    assert snaps == set(expected["rs_snapshots"])
 
     notifs = {n.id for n in db_session.query(UserNotification).all()}
     assert notifs == set(expected["user_notifications"])
@@ -341,10 +321,48 @@ def test_sweep_respects_env_retention_override(
     assert db_session.get(Report, "r_10d").expired_at is None
 
 
-def test_sweep_summary_contains_both_new_keys(db_session: Session) -> None:
+def test_sweep_summary_contains_expected_keys(db_session: Session) -> None:
     summary = run_maintenance_once(db_session)
     assert "reports_tombstoned" in summary
     assert "reports_hard_deleted" in summary
+    assert "rs_dashboard_cache_deleted" in summary
+
+
+def test_rs_dashboard_cache_prune(db_session: Session) -> None:
+    """Old rs_dashboard_cache rows are deleted; recent rows survive."""
+    _ensure_user(db_session)
+    now = datetime.now(UTC)
+    old_cutoff = now - timedelta(days=RS_DASHBOARD_CACHE_RETENTION_DAYS + 1)
+
+    db_session.add(
+        RsDashboardCache(
+            user_id="u_1",
+            ticker="AAPL",
+            payload_json="{}",
+            provenance="live",
+            model_ref="m",
+            generated_at=old_cutoff,
+        )
+    )
+    db_session.add(
+        RsDashboardCache(
+            user_id="u_1",
+            ticker="AAPL",
+            payload_json='{"sentiment_score": 0.5}',
+            provenance="live",
+            model_ref="m",
+            generated_at=now,
+        )
+    )
+    db_session.commit()
+
+    summary = run_maintenance_once(db_session)
+    db_session.commit()
+
+    assert summary["rs_dashboard_cache_deleted"] == 1
+
+    surviving = db_session.query(RsDashboardCache).filter_by(user_id="u_1", ticker="AAPL").all()
+    assert len(surviving) == 1
 
 
 @pytest.mark.asyncio

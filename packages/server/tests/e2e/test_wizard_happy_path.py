@@ -2,10 +2,12 @@
 
 Asserts that creating one validated financial connector and one validated
 news connector lights up every chat-flow department (Secretary, Equity
-Research, Earnings Update, Morning Briefing, Panic Thermometer). The
-runner-driven departments (Macro Research, Retail Sentiment) remain
-`disabled` until a runner-callable spec is approved — that flow is
-covered separately in `test_python_lib_runner_activation.py`.
+Research, Earnings Update, Morning Briefing, Panic Thermometer).
+
+Macro Research remains disabled (runner dept, no approved specs).
+Retail Sentiment remains disabled because it requires WEB_SEARCH, which
+is not created in this scenario; it is a dashboard dept (not runner-driven)
+so it has no unresolved_needs — only a missing WEB_SEARCH category.
 """
 
 from __future__ import annotations
@@ -104,8 +106,10 @@ def test_wizard_happy_path_lights_up_chat_flow_depts(client: TestClient, monkeyp
             f"{dept_id} expected active, got {by_id[dept_id]}"
         )
 
-    # MR + RS require a runner; without approved specs they stay disabled
-    # (they have unresolved needs even though categories are satisfied).
-    for runner_dept in ("retail_sentiment",):
-        assert by_id[runner_dept]["status"] == "disabled"
-        assert by_id[runner_dept]["unresolved_needs"], f"{runner_dept} should have unresolved needs"
+    # RS is a dashboard dept (not runner-driven). It requires WEB_SEARCH,
+    # which was not created in this scenario, so it is disabled with a
+    # missing category and no unresolved needs.
+    rs = by_id["retail_sentiment"]
+    assert rs["status"] == "disabled"
+    assert "web_search" in rs["missing_categories"]
+    assert rs["unresolved_needs"] == []

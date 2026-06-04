@@ -1,29 +1,47 @@
-"""Retail Sentiment department routes.
+"""Retail Sentiment department routes (MR-shaped dashboard engine).
 
-Ships dashboard, history, config GET/PUT, run POST, stocks/{ticker},
-spikes GET, schedule GET/PUT (RS_SNAPSHOT job)."""
+Endpoints mirror Macro Research's dashboard route pattern:
+  GET  /dashboard/{ticker}          — latest RsDashboardCache row
+  GET  /dashboard/{ticker}/history  — recent cache rows (within N days)
+  GET  /config                      — per-user config
+  PUT  /config                      — update per-user config
+  POST /dashboard/{ticker}/refresh  — enqueue RS_SNAPSHOT job (202)
+  GET  /schedule                    — RS cron schedule
+  PUT  /schedule                    — upsert RS cron schedule
+"""
 
 from __future__ import annotations
 
+import json
+import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from openlia.retail_sentiment.quotes import fetch_quotes
-from openlia.retail_sentiment.schemas import MetricSnapshot, SpikeEvent
-from openlia.retail_sentiment.spike_detector import detect_spike
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.dashboard import RsDashboardCache
+from openlia_server.db.models.scheduler import JobRun
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.routes.dept_health import gate_dept_or_409
+from openlia_server.scheduler.registry import JobStatus, JobType
+from openlia_server.scheduler.services import jobs as jobs_svc
 from openlia_server.services import rs_schedules as rs_schedules_svc
 from openlia_server.services.rs_config import RsConfigService
-from openlia_server.services.rs_runner import RsRunner
-from openlia_server.services.rs_snapshot import RsSnapshotService
+
+_DEFAULT_TTL_SECONDS = 24 * 3600
+
+# Reject a concurrent re-trigger while a run for the same ticker is in flight.
+# Rows older than this are treated as dead orphans (crashed mid-run) and ignored.
+_RUN_GUARD_STALE_SECONDS = 30 * 60
+
+
+def _is_stale(generated_at: datetime) -> bool:
+    return (datetime.now(UTC) - generated_at).total_seconds() > _DEFAULT_TTL_SECONDS
 
 
 class _ConfigDTO(BaseModel):
@@ -31,10 +49,6 @@ class _ConfigDTO(BaseModel):
     metric_settings: dict[str, Any] | None = None
     filter_presets: list[Any] | None = None
     refresh_interval_minutes: int | None = None
-
-
-class _RunDTO(BaseModel):
-    tickers: list[str] = Field(default_factory=list)
 
 
 class _ScheduleIn(BaseModel):
@@ -56,39 +70,6 @@ class _ScheduleOut(BaseModel):
     is_enabled: bool
 
 
-def _snapshot_out(snap: MetricSnapshot) -> dict[str, Any]:
-    return {
-        "ticker": snap.ticker,
-        "captured_at": snap.captured_at.isoformat(),
-        "sentiment_score": snap.sentiment_score,
-        "buzz_volume": snap.buzz_volume,
-        "buzz_count": snap.buzz_count,
-        "sentiment_momentum": snap.sentiment_momentum,
-        "bull_bear_ratio": snap.bull_bear_ratio,
-        "buzz_sentiment_divergence": snap.buzz_sentiment_divergence,
-        "social_velocity": snap.social_velocity,
-        "cross_source_agreement": snap.cross_source_agreement,
-        "put_call_ratio": snap.put_call_ratio,
-        "short_interest_pressure": snap.short_interest_pressure,
-        "narrative_concentration": snap.narrative_concentration,
-        "institutional_retail_gap": snap.institutional_retail_gap,
-        "event_sensitivity": snap.event_sensitivity,
-        "source_breakdown": dict(snap.source_breakdown),
-        "narrative": snap.narrative,
-    }
-
-
-def _spike_out(spike: SpikeEvent) -> dict[str, Any]:
-    return {
-        "ticker": spike.ticker,
-        "detected_at": spike.detected_at.isoformat(),
-        "buzz": spike.buzz,
-        "baseline_mean": spike.baseline_mean,
-        "baseline_stddev": spike.baseline_stddev,
-        "z_score": spike.z_score,
-    }
-
-
 def _config_out(cfg: Any) -> dict[str, Any]:
     return {
         "id": cfg.id,
@@ -100,7 +81,7 @@ def _config_out(cfg: Any) -> dict[str, Any]:
     }
 
 
-def _optional_scheduler(request: Request):
+def _optional_scheduler(request: Request) -> Any:
     return getattr(request.app.state, "scheduler", None)
 
 
@@ -108,70 +89,94 @@ def build_retail_sentiment_router(
     *,
     db_session_factory: Callable[[], Any],
     mode: str,
+    require_auth_override: Callable[..., Any] | None = None,
 ) -> APIRouter:
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
     router = APIRouter(prefix="/departments/retail_sentiment", tags=["retail_sentiment"])
+
+    if require_auth_override is not None:
+        require_auth = Depends(require_auth_override)
+    else:
+        require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+
     session_dep = make_session_dependency(db_session_factory)
 
     def _config_svc() -> RsConfigService:
         return RsConfigService(session_factory=db_session_factory)
 
-    def _snap_svc() -> RsSnapshotService:
-        return RsSnapshotService(session_factory=db_session_factory)
+    # ------------------------------------------------------------------
+    # GET /dashboard/{ticker}
+    # ------------------------------------------------------------------
 
-    def _runner_dep(request: Request) -> RsRunner:
-        runner = getattr(request.app.state, "rs_runner", None)
-        if runner is None:
-            raise HTTPException(status_code=503, detail="retail sentiment runner not wired")
-        return runner
-
-    @router.get("/dashboard")
-    def get_dashboard(user: User = require_auth) -> dict[str, Any]:
-        svc = _snap_svc()
-        tickers = svc.all_recent_tickers(days=7)
-        latest = svc.latest_many(tickers)
-        snapshots = [_snapshot_out(s) for s in latest.values()]
+    @router.get("/dashboard/{ticker}")
+    def get_dashboard(ticker: str, user: User = require_auth) -> dict[str, Any]:
+        with db_session_factory() as session:
+            row = (
+                session.query(RsDashboardCache)
+                .filter(
+                    RsDashboardCache.user_id == user.id,
+                    RsDashboardCache.ticker == ticker,
+                )
+                .order_by(RsDashboardCache.generated_at.desc())
+                .first()
+            )
+        if row is None:
+            return {"payload": None, "generated_at": None, "is_stale": True, "provenance": None}
+        generated_at = row.generated_at
+        if generated_at.tzinfo is None:
+            generated_at = generated_at.replace(tzinfo=UTC)
         return {
-            "tickers": tickers,
-            "snapshots": snapshots,
-            "generated_at": datetime.now(UTC).isoformat(),
+            "payload": json.loads(row.payload_json),
+            "generated_at": generated_at.isoformat(),
+            "is_stale": _is_stale(generated_at),
+            "provenance": row.provenance,
         }
 
-    @router.get("/dashboard/history")
+    # ------------------------------------------------------------------
+    # GET /dashboard/{ticker}/history
+    # ------------------------------------------------------------------
+
+    @router.get("/dashboard/{ticker}/history")
     def get_history(
         ticker: str,
         days: int = 7,
         user: User = require_auth,
-    ) -> dict[str, Any]:
-        history = _snap_svc().history(ticker, days=days)
-        return {
-            "ticker": ticker,
-            "snapshots": [_snapshot_out(s) for s in history],
-        }
-
-    @router.get("/dashboard/quotes")
-    def get_quotes(
-        ticker: str,
-        days: int = 30,
-        user: User = require_auth,
-    ) -> dict[str, Any]:
-        bars = fetch_quotes(ticker=ticker, days=days)
-        return {
-            "ticker": ticker,
-            "bars": [
+    ) -> list[dict[str, Any]]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        with db_session_factory() as session:
+            rows = (
+                session.query(RsDashboardCache)
+                .filter(
+                    RsDashboardCache.user_id == user.id,
+                    RsDashboardCache.ticker == ticker,
+                    RsDashboardCache.generated_at >= cutoff,
+                )
+                .order_by(RsDashboardCache.generated_at.desc())
+                .all()
+            )
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            generated_at = row.generated_at
+            if generated_at.tzinfo is None:
+                generated_at = generated_at.replace(tzinfo=UTC)
+            result.append(
                 {
-                    "date": b.date,
-                    "close": b.close,
-                    "daily_change_pct": b.daily_change_pct,
-                    "cumulative_pct": b.cumulative_pct,
+                    "payload": json.loads(row.payload_json),
+                    "generated_at": generated_at.isoformat(),
                 }
-                for b in bars
-            ],
-        }
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # GET /config
+    # ------------------------------------------------------------------
 
     @router.get("/config")
     def get_config(user: User = require_auth) -> dict[str, Any]:
         return _config_out(_config_svc().get_or_create(user.id))
+
+    # ------------------------------------------------------------------
+    # PUT /config
+    # ------------------------------------------------------------------
 
     @router.put("/config")
     def put_config(payload: _ConfigDTO, user: User = require_auth) -> dict[str, Any]:
@@ -187,61 +192,72 @@ def build_retail_sentiment_router(
             raise HTTPException(400, str(exc)) from exc
         return _config_out(cfg)
 
-    @router.post("/run")
-    def post_run(
-        payload: _RunDTO,
+    # ------------------------------------------------------------------
+    # POST /dashboard/{ticker}/refresh
+    # ------------------------------------------------------------------
+
+    @router.post("/dashboard/{ticker}/refresh", status_code=202)
+    async def refresh_dashboard(
+        ticker: str,
         request: Request,
         user: User = require_auth,
-        runner: RsRunner = Depends(_runner_dep),
     ) -> dict[str, Any]:
         gate_dept_or_409(request, "retail_sentiment")
-        if not payload.tickers:
-            raise HTTPException(400, "tickers required")
-        results = runner.run_many(payload.tickers)
-        return {
-            "snapshots": [
-                {
-                    "snapshot_id": r.snapshot_id,
-                    **_snapshot_out(r.snapshot),
-                    "spike": _spike_out(r.spike) if r.spike else None,
-                }
-                for r in results
-            ],
-        }
 
-    @router.get("/stocks/{ticker}/sentiment")
-    def get_stock(ticker: str, user: User = require_auth) -> dict[str, Any]:
-        snap = _snap_svc().latest(ticker)
-        if snap is None:
-            raise HTTPException(404, f"no snapshot for {ticker}")
-        history = _snap_svc().history(ticker, days=7)
-        return {
-            "latest": _snapshot_out(snap),
-            "history": [_snapshot_out(h) for h in history],
-        }
+        if not ticker or not ticker.strip():
+            raise HTTPException(status_code=404, detail="ticker is required")
 
-    @router.get("/spikes")
-    def get_spikes(user: User = require_auth) -> dict[str, Any]:
-        svc = _snap_svc()
-        tickers = svc.all_recent_tickers(days=7)
-        spikes: list[dict[str, Any]] = []
-        now = datetime.now(UTC)
-        for t in tickers:
-            latest = svc.latest(t)
-            if latest is None:
-                continue
-            history = svc.history(t, days=7)
-            # Exclude the latest row from the baseline window.
-            baseline = [h for h in history if h.captured_at < latest.captured_at]
-            spike = detect_spike(
-                ticker=t,
-                detected_at=now,
-                current_buzz=latest.buzz_volume,
-                recent_snapshots=baseline,
+        not_before = datetime.now(UTC) - timedelta(seconds=_RUN_GUARD_STALE_SECONDS)
+        with db_session_factory() as session:
+            active = jobs_svc.active_run_for_schedule(
+                session,
+                user_id=user.id,
+                job_type=JobType.RS_SNAPSHOT,
+                schedule_id=ticker,
+                not_before=not_before,
             )
-            if spike is not None:
-                spikes.append(_spike_out(spike))
-        return {"spikes": spikes}
+        if active is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"a {ticker!r} dashboard run is already in progress",
+            )
+
+        run_id = uuid.uuid4().hex
+        with db_session_factory() as session:
+            session.add(
+                JobRun(
+                    id=run_id,
+                    user_id=user.id,
+                    job_type=JobType.RS_SNAPSHOT.value,
+                    schedule_id=ticker,
+                    status=JobStatus.RUNNING.value,
+                    started_at=datetime.now(UTC),
+                )
+            )
+            session.commit()
+
+        scheduler = getattr(request.app.state, "scheduler", None)
+        if scheduler is None:
+            with db_session_factory() as session:
+                fresh = session.get(JobRun, run_id)
+                if fresh is not None:
+                    fresh.status = JobStatus.CANCELLED.value
+                    fresh.completed_at = datetime.now(UTC)
+                    fresh.error_message = "scheduler disabled"
+                    session.commit()
+            return {"job_run_id": run_id, "status": "cancelled"}
+
+        await scheduler.run_now(
+            job_type=JobType.RS_SNAPSHOT,
+            user_id=user.id,
+            schedule_id=ticker,
+            run_id=run_id,
+        )
+        return {"job_run_id": run_id, "status": "queued"}
+
+    # ------------------------------------------------------------------
+    # GET /schedule
+    # ------------------------------------------------------------------
 
     @router.get("/schedule")
     def get_schedule(
@@ -262,12 +278,16 @@ def build_retail_sentiment_router(
             ).model_dump()
         }
 
+    # ------------------------------------------------------------------
+    # PUT /schedule
+    # ------------------------------------------------------------------
+
     @router.put("/schedule", response_model=_ScheduleOut)
     async def put_schedule(
         payload: _ScheduleIn,
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
-        scheduler=Depends(_optional_scheduler),
+        scheduler: Any = Depends(_optional_scheduler),
     ) -> _ScheduleOut:
         if scheduler is None:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized")

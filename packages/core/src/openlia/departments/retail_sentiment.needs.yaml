@@ -1,10 +1,15 @@
-# Retail Sentiment deterministic-runner needs (spec §5.4, §9.5).
+# Retail Sentiment data needs — connector-resolution metadata.
 #
-# RS pulls its primary input — `social_posts` — through the financial
-# connectors' sentiment endpoints (EODHD, FMP). The wizard adapter
-# resolves this need to e.g. `eodhd.APIClient.sentiment_data(s=ticker)`
-# at configuration time; the dispatcher binds `ticker` at runtime.
-# This is why the dept's required category is `financial`, not `social`.
+# Each entry is a stable, code-facing need id referenced from the
+# EODHD builtin connector's runner_spec (which declares how a configured
+# financial connector resolves each id for social-post enrichment).
+#
+# NOTE: Retail Sentiment is now a dashboard department (report_dash_rs,
+# requires_runner=False) — it is NOT health-gated on these needs and the
+# wizard does not hydrate/propose specs for it. These declarations are
+# retained as connector-resolution metadata, not as a runtime-runner
+# contract. Need ids are still treated as a public API: once shipped,
+# they do not change.
 
 department: retail_sentiment
 needs:

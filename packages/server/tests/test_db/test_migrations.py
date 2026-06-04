@@ -36,14 +36,13 @@ EXPECTED_TABLES = {
     "wizard_state",
     "config_store",
     # --- Plan 1B additions (11 tables) ---
-    # Dashboard (7)
+    # Dashboard (6)
     "pt_user_configs",
     "pt_presets",
     "mr_dashboard_state",
     "mr_dashboard_cache",
     "rs_user_config",
-    "rs_snapshots",
-    "rs_classification_log",
+    "rs_dashboard_cache",
     "fe_saved_formulas",
     # Scheduler + notifications (4)
     "mb_schedules",
