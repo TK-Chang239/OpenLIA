@@ -1,17 +1,18 @@
 """Scenario 4 — atomic disable when the only FINANCIAL connector is deleted.
 
-Sets up Retail Sentiment with one approved python_lib spec → RS active.
-Deleting the sole financial connector must flip RS back to disabled in the
-same request (no race window). Uses the same fake-need / direct-proposal
-plumbing as `test_python_lib_runner_activation.py`.
+Sets up Equity Research (which requires FINANCIAL) with one validated
+python_lib connector → ER active. Deleting the sole financial connector
+must flip ER back to disabled in the same request (no race window).
+
+The runner-spec activation path (requires_runner / unresolved_needs) was
+removed in refactor/rescope-need-resolution-portfolio. Health is now
+driven purely by category coverage.
 """
 
 from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from openlia.connectors.types import Category, RunnerNeed
-from openlia.departments.retail_sentiment import RetailSentimentDepartment
 from openlia_server.app import create_app
 from openlia_server.middleware.rate_limit import limiter
 from openlia_server.services import connectors_service, runner_specs_service
@@ -45,28 +46,7 @@ def client(db_session):
 
 
 def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
-    # Force RS to behave as a runner department for this test. RS is a
-    # dashboard dept (requires_runner=False) in production; this test
-    # exercises the atomic-disable subsystem using RS as the vehicle.
-    # Also override required_categories to FINANCIAL so check_dept_health
-    # sees FINANCIAL as the required (and, after deletion, missing) category.
-    monkeypatch.setattr(RetailSentimentDepartment, "requires_runner", True)
-    monkeypatch.setattr(RetailSentimentDepartment, "required_categories", (Category.FINANCIAL,))
-
-    fake_need = RunnerNeed(
-        id="social_posts",
-        description="Social media posts for sentiment analysis.",
-        parameters=[],
-        shape="list[dict]",
-    )
-    runner_specs_service.set_dept_needs_for_testing({"retail_sentiment": [fake_need]})
-    runner_specs_service.set_dept_categories_for_testing(
-        {"retail_sentiment": ({Category.FINANCIAL}, set())}
-    )
-    monkeypatch.setattr(
-        "openlia.departments.health.load_needs",
-        lambda dept_id: [fake_need] if dept_id == "retail_sentiment" else [],
-    )
+    """Deleting the only FINANCIAL connector atomically disables Equity Research."""
 
     async def fake_validate(_launch, _secrets, *, tool_overrides=None):
         return connectors_service.ValidationOk(
@@ -82,7 +62,12 @@ def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
 
     monkeypatch.setattr(connectors_service, "_validate_launch", fake_validate)
 
-    # Step 1: create the python_lib financial connector.
+    # Step 1: confirm ER is disabled before any connector exists.
+    health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
+    assert health["equity_research"]["status"] == "disabled"
+    assert "financial" in health["equity_research"]["missing_categories"]
+
+    # Step 2: create the python_lib financial connector — ER requires FINANCIAL.
     create = client.post(
         "/api/connectors",
         json={
@@ -107,42 +92,16 @@ def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
     assert create.status_code == 201, create.text
     connector_id = create.json()["id"]
 
-    # Step 2: seed proposal + approve so RS activates.
-    runner_specs_service._PROPOSALS[connector_id] = [  # type: ignore[attr-defined]
-        runner_specs_service.ProposedSpec(
-            department_id="retail_sentiment",
-            need_id="social_posts",
-            proposed_spec={
-                "need_id": "social_posts",
-                "access_mode": "python_lib",
-                "module": "financialmodelingprep",
-                "instance_factory": {"cls": "APIClient", "args": {}},
-                "method": "APIClient.real_time_quote",
-                "param_bindings": {},
-                "constants": {},
-                "shape": "list[dict]",
-            },
-            canary_value=[],
-            canary_ok=True,
-            shape_match=True,
-            error=None,
-        )
-    ]
-    approve = client.post(
-        f"/api/connectors/{connector_id}/proposed-specs/approve",
-        json={"department_id": "retail_sentiment", "need_id": "social_posts"},
-    )
-    assert approve.status_code == 201, approve.text
-
+    # ER should now be active.
     health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
-    assert health["retail_sentiment"]["status"] == "active"
+    assert health["equity_research"]["status"] == "active"
 
     # Step 3: delete the connector.
     delete = client.delete(f"/api/connectors/{connector_id}")
     assert delete.status_code == 204, delete.text
 
-    # Step 4: GET dept-health immediately — RS must be disabled now,
+    # Step 4: GET dept-health immediately — ER must be disabled now,
     # with `financial` listed as a missing category.
     health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
-    assert health["retail_sentiment"]["status"] == "disabled"
-    assert "financial" in health["retail_sentiment"]["missing_categories"]
+    assert health["equity_research"]["status"] == "disabled"
+    assert "financial" in health["equity_research"]["missing_categories"]

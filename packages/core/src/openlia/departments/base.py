@@ -17,6 +17,5 @@ class Department(Protocol):
     # two categories serve interchangeable roles (e.g., NEWS or
     # WEB_SEARCH for headline retrieval).
     required_any_of: tuple[tuple[Category, ...], ...]
-    requires_runner: bool
     disable_runtime_routing: bool
     extra_tools: tuple[dict[str, Any], ...]

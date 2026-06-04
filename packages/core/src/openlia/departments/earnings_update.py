@@ -19,7 +19,6 @@ class EarningsUpdateDepartment:
     optional_categories: ClassVar[tuple[Category, ...]] = (Category.NEWS,)
 
     # Runtime behavior (spec §5.2).
-    requires_runner: ClassVar[bool] = False
     disable_runtime_routing: ClassVar[bool] = False
 
     extra_tools: tuple[dict[str, Any], ...] = ()
