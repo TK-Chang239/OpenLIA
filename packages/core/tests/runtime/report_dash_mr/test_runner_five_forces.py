@@ -1,8 +1,7 @@
 """End-to-end five_forces dashboard run through the real tool-use loop.
 
-Mirrors test_runner_all_weather.py: a fake adapter scripts two turns —
-classify_five_forces (with F1/F3 seeded via the injected data_context and the
-remaining three forces scored by the model), then emit_dashboard with a
+Mirrors test_runner_all_weather.py: a fake adapter scripts three turns —
+classify_five_forces, analyze_five_forces_network, then emit_dashboard with a
 complete FiveForcesData payload. The runner is exercised for real (no mocking
 of the loop); the assertions confirm the typed payload round-trips into
 ``RunResult`` and validates as FiveForcesData.
@@ -66,6 +65,23 @@ def _complete_five_forces_payload() -> dict:
                 "countTone": "amber",
                 "title": "Elevated",
                 "body": "Three forces simultaneously active.",
+            },
+            "network": {
+                "label": "Influence network (current)",
+                "edges": [
+                    {"fromLabel": "Debt / money", "toLabel": "Internal politics", "strength": 0.48},
+                ],
+                "projections": [
+                    {"force": "Debt / money", "current": 8.0, "projected": 7.8, "delta": -0.2},
+                    {"force": "Internal politics", "current": 7.0, "projected": 7.4, "delta": 0.4},
+                    {"force": "Geopolitical", "current": 5.0, "projected": 5.3, "delta": 0.3},
+                    {"force": "Technology", "current": 7.0, "projected": 6.9, "delta": -0.1},
+                    {"force": "Nature", "current": 4.0, "projected": 4.2, "delta": 0.2},
+                ],
+                "amplifier": "Debt / money",
+                "absorber": "Internal politics",
+                "contagion": 0.48,
+                "contagionLabel": "Spreading",
             },
         },
         "signals": {
@@ -150,6 +166,18 @@ async def test_runner_classify_then_emit_five_forces():
                 },
             )
         ),
+        script_tool_calls(
+            (
+                "analyze_five_forces_network",
+                {
+                    "debt_money": 8,
+                    "political": 7,
+                    "geopolitical": 5,
+                    "technology": 7,
+                    "natural": 4,
+                },
+            )
+        ),
         script_tool_calls(("emit_dashboard", {"payload": payload})),
     ]
     session = LLMSession.create(provider_kind="stub", model="stub")
@@ -168,3 +196,5 @@ async def test_runner_classify_then_emit_five_forces():
     assert validated.loops.active.countText == "3 / 5"
     assert validated.scenarios.cards[1].variant == "bear"
     assert validated.verdict.title == "Synthesis verdict"
+    assert validated.loops.network.amplifier == "Debt / money"
+    assert validated.loops.network.contagionLabel == "Spreading"

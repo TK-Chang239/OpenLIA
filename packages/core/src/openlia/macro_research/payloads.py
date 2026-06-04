@@ -622,10 +622,34 @@ class T5Scorecard(BaseModel):
     rows: list[T5ForceRow]
 
 
+class T5NetworkEdge(BaseModel):
+    fromLabel: str
+    toLabel: str
+    strength: float
+
+
+class T5ForceProjection(BaseModel):
+    force: str
+    current: float
+    projected: float
+    delta: float
+
+
+class T5ForceNetwork(BaseModel):
+    label: str
+    edges: list[T5NetworkEdge]
+    projections: list[T5ForceProjection]
+    amplifier: str
+    absorber: str
+    contagion: float
+    contagionLabel: str
+
+
 class T5Loops(BaseModel):
     label: str
     blocks: list[T5LoopBlock]
     active: T5ActiveCount
+    network: T5ForceNetwork
 
 
 class T5Signals(BaseModel):
