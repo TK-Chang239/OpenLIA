@@ -5,6 +5,7 @@ import {
   runAssessment,
   type DashboardSummary,
 } from "../../../api/macro_research";
+import { fetchDeptHealth, type DepartmentHealth } from "../../../api/dept-health";
 import ScheduleEditor from "./ScheduleEditor";
 
 // Dashboards the backend engine (report_dash_mr) can actually generate.
@@ -53,6 +54,25 @@ function rowsToOverrides(rows: ThresholdRow[]): Record<string, unknown> {
   return out;
 }
 
+const MR_COVERAGE: Record<string, { label: string; satisfied: string; missing: string }> = {
+  web_search: {
+    label: "Web search",
+    satisfied: "Macro backbone active.",
+    missing: "Required — without it Macro Research is disabled.",
+  },
+  financial: {
+    label: "Financial",
+    satisfied: "Live quotes and indicators active.",
+    missing:
+      "Optional — quote/indicator tiles fall back to web search or show source-unavailable. Add one in Settings, Connectors.",
+  },
+  news: {
+    label: "News",
+    satisfied: "Headlines active.",
+    missing: "Optional — narrative-context tiles fall back to web search.",
+  },
+};
+
 export default function MRSettingsPanel({
   dashboards,
   onClose,
@@ -67,6 +87,7 @@ export default function MRSettingsPanel({
   const [error, setError] = useState<string | null>(null);
   const [scheduleVisible, setScheduleVisible] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<DepartmentHealth | null>(null);
 
   const onRunNow = async (slug: string) => {
     setRunning(slug);
@@ -85,6 +106,14 @@ export default function MRSettingsPanel({
       .then((cfg) => setRows(rowsFromOverrides(cfg.threshold_overrides)))
       .catch((e: unknown) => setError(String(e)));
   }, [activeSlug]);
+
+  useEffect(() => {
+    fetchDeptHealth()
+      .then((rows) =>
+        setCoverage(rows.find((r) => r.department_id === "macro_research") ?? null),
+      )
+      .catch(() => setCoverage(null));
+  }, []);
 
   const onAddRow = () => setRows([...rows, { key: "", value: "" }]);
   const onChangeRow = (idx: number, patch: Partial<ThresholdRow>) =>
@@ -146,6 +175,39 @@ export default function MRSettingsPanel({
             ))}
         </div>
       </section>
+
+      {coverage ? (
+        <section className="space-y-3" data-testid="mr-coverage">
+          <h3 className="text-sm font-medium text-[--color-text-primary]">Source coverage</h3>
+          <ul className="space-y-2">
+            {(["web_search", "financial", "news"] as const).map((cat) => {
+              const note = MR_COVERAGE[cat];
+              const satisfied = coverage.satisfied_categories?.includes(cat) ?? false;
+              return (
+                <li
+                  key={cat}
+                  data-testid={`mr-coverage-${cat}`}
+                  className="text-xs text-[--color-text-secondary]"
+                >
+                  <span className="font-medium text-[--color-text-primary]">{note.label}</span>
+                  {" — "}
+                  <span
+                    className={
+                      satisfied
+                        ? "text-[--color-feedback-success]"
+                        : "text-[--color-text-secondary]"
+                    }
+                  >
+                    {satisfied ? "active" : "not configured"}
+                  </span>
+                  {". "}
+                  {satisfied ? note.satisfied : note.missing}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <section
         className="space-y-3"
