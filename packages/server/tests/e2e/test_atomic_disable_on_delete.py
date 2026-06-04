@@ -1,8 +1,8 @@
-"""Scenario 4 — atomic disable when the only EODHD connector is deleted.
+"""Scenario 4 — atomic disable when the only FINANCIAL connector is deleted.
 
-Sets up MR with one approved python_lib spec → MR active. Deleting the
-sole financial connector must flip MR back to disabled in the same
-request (no race window). Uses the same fake-need / direct-proposal
+Sets up Retail Sentiment with one approved python_lib spec → RS active.
+Deleting the sole financial connector must flip RS back to disabled in the
+same request (no race window). Uses the same fake-need / direct-proposal
 plumbing as `test_python_lib_runner_activation.py`.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from openlia.connectors.types import Category, NeedParameter, RunnerNeed
+from openlia.connectors.types import Category, RunnerNeed
 from openlia_server.app import create_app
 from openlia_server.middleware.rate_limit import limiter
 from openlia_server.services import connectors_service, runner_specs_service
@@ -45,26 +45,18 @@ def client(db_session):
 
 def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
     fake_need = RunnerNeed(
-        id="debt_gdp",
-        description="Government debt as % of GDP.",
-        parameters=[
-            NeedParameter(
-                name="country",
-                description="ISO code",
-                type="str",
-                required=False,
-                default="US",
-            )
-        ],
-        shape="float",
+        id="social_posts",
+        description="Social media posts for sentiment analysis.",
+        parameters=[],
+        shape="list[dict]",
     )
-    runner_specs_service.set_dept_needs_for_testing({"macro_research": [fake_need]})
+    runner_specs_service.set_dept_needs_for_testing({"retail_sentiment": [fake_need]})
     runner_specs_service.set_dept_categories_for_testing(
-        {"macro_research": ({Category.FINANCIAL}, set())}
+        {"retail_sentiment": ({Category.FINANCIAL}, set())}
     )
     monkeypatch.setattr(
         "openlia.departments.health.load_needs",
-        lambda dept_id: [fake_need] if dept_id == "macro_research" else [],
+        lambda dept_id: [fake_need] if dept_id == "retail_sentiment" else [],
     )
 
     async def fake_validate(_launch, _secrets, *, tool_overrides=None):
@@ -106,45 +98,22 @@ def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
     assert create.status_code == 201, create.text
     connector_id = create.json()["id"]
 
-    # Step 1b: seed a validated WEB_SEARCH connector so MR's category
-    # gate (which now requires both FINANCIAL and WEB_SEARCH) is met.
-    ws_create = client.post(
-        "/api/connectors",
-        json={
-            "source": "remote_mcp",
-            "category": "web_search",
-            "provider_id": "firecrawl",
-            "display_name": "Firecrawl",
-            "launch": {
-                "modes": [
-                    {
-                        "kind": "remote_mcp",
-                        "url": "https://example.invalid/mcp",
-                        "headers": {},
-                    }
-                ]
-            },
-            "secrets": {},
-        },
-    )
-    assert ws_create.status_code == 201, ws_create.text
-
-    # Step 2: seed proposal + approve so MR activates.
+    # Step 2: seed proposal + approve so RS activates.
     runner_specs_service._PROPOSALS[connector_id] = [  # type: ignore[attr-defined]
         runner_specs_service.ProposedSpec(
-            department_id="macro_research",
-            need_id="debt_gdp",
+            department_id="retail_sentiment",
+            need_id="social_posts",
             proposed_spec={
-                "need_id": "debt_gdp",
+                "need_id": "social_posts",
                 "access_mode": "python_lib",
                 "module": "financialmodelingprep",
                 "instance_factory": {"cls": "APIClient", "args": {}},
                 "method": "APIClient.real_time_quote",
-                "param_bindings": {"country": {"to_arg": "symbol", "transform": None}},
+                "param_bindings": {},
                 "constants": {},
-                "shape": "float",
+                "shape": "list[dict]",
             },
-            canary_value=110.0,
+            canary_value=[],
             canary_ok=True,
             shape_match=True,
             error=None,
@@ -152,19 +121,19 @@ def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
     ]
     approve = client.post(
         f"/api/connectors/{connector_id}/proposed-specs/approve",
-        json={"department_id": "macro_research", "need_id": "debt_gdp"},
+        json={"department_id": "retail_sentiment", "need_id": "social_posts"},
     )
     assert approve.status_code == 201, approve.text
 
     health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
-    assert health["macro_research"]["status"] == "active"
+    assert health["retail_sentiment"]["status"] == "active"
 
     # Step 3: delete the connector.
     delete = client.delete(f"/api/connectors/{connector_id}")
     assert delete.status_code == 204, delete.text
 
-    # Step 4: GET dept-health immediately — MR must be disabled now,
+    # Step 4: GET dept-health immediately — RS must be disabled now,
     # with `financial` listed as a missing category.
     health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
-    assert health["macro_research"]["status"] == "disabled"
-    assert "financial" in health["macro_research"]["missing_categories"]
+    assert health["retail_sentiment"]["status"] == "disabled"
+    assert "financial" in health["retail_sentiment"]["missing_categories"]
