@@ -8,13 +8,14 @@ of the loop); the assertions confirm the typed payload round-trips into
 """
 
 import pytest
-from _fakes import FakeLLMProvider, script_tool_calls
 from openlia.llm.runtime.report_dash_mr import (
     LLMSession,
     MbDataTransports,
 )
 from openlia.llm.runtime.report_dash_rs import Runner
 from openlia.llm.runtime.report_dash_rs.schemas import EnabledConnectors, RunRequest
+
+from ._fakes import FakeLLMProvider, script_tool_calls
 
 
 def _complete_retail_sentiment_payload() -> dict:
