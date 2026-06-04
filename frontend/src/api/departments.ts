@@ -28,7 +28,6 @@ export const isDepartmentSlug = (value: string): value is DepartmentSlug =>
  * tools dynamically at runtime via the chat router.
  */
 export const RUNNER_BEARING_DEPARTMENTS: readonly DepartmentSlug[] = [
-  "macro_research",
   "retail_sentiment",
 ] as const;
 

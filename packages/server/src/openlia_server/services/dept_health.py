@@ -40,9 +40,11 @@ def serialize(health: DepartmentHealth) -> dict:
     """JSON-serializable shape for the GET endpoint."""
     dept = _REGISTRY.get(health.department_id)
     required_cats: list[str] = []
+    optional_cats: list[str] = []
     any_of: list[list[str]] = []
     if dept is not None:
         required_cats = [c.value for c in getattr(dept, "required_categories", ())]
+        optional_cats = [c.value for c in getattr(dept, "optional_categories", ())]
         any_of = [[c.value for c in group] for group in getattr(dept, "required_any_of", ()) or ()]
     return {
         "department_id": health.department_id,
@@ -53,6 +55,8 @@ def serialize(health: DepartmentHealth) -> dict:
         "required_categories": required_cats,
         "required_any_of": any_of,
         "unsatisfied_any_of": [[c.value for c in group] for group in health.unsatisfied_any_of],
+        "optional_categories": optional_cats,
+        "satisfied_categories": [c.value for c in health.satisfied_categories],
     }
 
 

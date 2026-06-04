@@ -47,21 +47,17 @@ def _reset_state() -> Iterator[None]:
     runner_specs_service._PROPOSALS.clear()
 
 
-def test_hydrate_dept_registries_loads_real_macro_research_needs() -> None:
+def test_hydrate_dept_registries_loads_real_retail_sentiment_needs() -> None:
     """The hydration helper must populate `_DEPT_NEEDS` for runner-bearing
-    departments — without it, every macro_research need stays unresolved."""
+    departments — without it, every retail_sentiment need stays unresolved."""
     runner_specs_service.hydrate_dept_registries()
-    needs = runner_specs_service._DEPT_NEEDS.get("macro_research", [])
+    needs = runner_specs_service._DEPT_NEEDS.get("retail_sentiment", [])
     need_ids = {n.id for n in needs}
-    # Smoke-check a handful of needs declared in macro_research.needs.yaml.
-    assert "stock_quote" in need_ids
-    assert "cpi_yoy" in need_ids
-    assert "geopolitical_news" in need_ids
-    cats = runner_specs_service._DEPT_CATEGORIES.get("macro_research")
+    assert "social_posts" in need_ids
+    cats = runner_specs_service._DEPT_CATEGORIES.get("retail_sentiment")
     assert cats is not None
-    required, optional = cats
+    required, _optional = cats
     assert Category.FINANCIAL in required
-    assert Category.NEWS in optional
 
 
 def _client(

@@ -1,9 +1,9 @@
 """Scenario 3 — disabled dept banner + mutating endpoint returns 409.
 
 With no connectors configured, `macro_research` is disabled (missing
-required `financial` category, plus runner needs unresolved). Hitting
-its mutating run-assessment endpoint must short-circuit with HTTP 409
-and the structured `{"error": "dept_disabled", "reason": ...}` body.
+required `web_search` category). Hitting its mutating refresh endpoint
+must short-circuit with HTTP 409 and the structured
+`{"error": "dept_disabled", "reason": ...}` body.
 """
 
 from __future__ import annotations
@@ -54,16 +54,16 @@ def test_dept_health_marks_macro_research_disabled(client: TestClient) -> None:
     """Sanity: with empty DB, /api/dept-health flags MR disabled."""
     by_id = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
     assert by_id["macro_research"]["status"] == "disabled"
-    # Both gating reasons present: missing category + unresolved needs.
-    assert "financial" in by_id["macro_research"]["missing_categories"]
-    assert by_id["macro_research"]["unresolved_needs"]
+    # MR now requires only web_search; financial/news are optional.
+    assert "web_search" in by_id["macro_research"]["missing_categories"]
+    assert by_id["macro_research"]["unresolved_needs"] == []
 
 
 def test_macro_research_run_assessment_returns_409_when_disabled(
     client: TestClient,
 ) -> None:
     resp = client.post(
-        "/departments/macro_research/dashboards/world_order/assessment/run",
+        "/departments/macro_research/dashboards/world_order/refresh",
         json={},
     )
     assert resp.status_code == 409, resp.text

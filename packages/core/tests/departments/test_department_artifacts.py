@@ -110,6 +110,14 @@ def test_needs_yaml_present_when_runner_required(department_id: str) -> None:
             assert need.description.strip(), (
                 f"{department_id}: need '{need.id}' has an empty description."
             )
+    elif department_id == "macro_research":
+        # Macro Research is a dashboard dept (report_dash_mr): it is no longer
+        # gated or hydrated as a runtime runner (requires_runner=False), but it
+        # retains its need declarations as connector-resolution metadata — the
+        # builtin connector templates' runner_specs reference these need ids.
+        path = _DEPT_DIR / f"{department_id}.needs.yaml"
+        assert path.exists(), f"{department_id}: expected retained needs.yaml is missing."
+        assert needs, f"{department_id}: needs.yaml must declare at least one need."
     else:
         # Chat-flow depts: no needs.yaml is the expected state.
         path = _DEPT_DIR / f"{department_id}.needs.yaml"

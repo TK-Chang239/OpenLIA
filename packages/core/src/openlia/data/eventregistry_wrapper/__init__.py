@@ -8,7 +8,7 @@ internally and exposes a kwargs-only `geopolitical_news(window_days,
 limit)` method that returns a flat `list[dict]` of articles.
 
 Topic keywords are baked in (geopolitical conflict + reserve-policy
-themes) because the macro_research `geopolitical_news` runner need
+themes) because the macro_research `geopolitical_news` need
 declares only `window_days` and `limit` as runtime parameters — the
 topic intent is fixed by the World Order dashboard's narrative-context
 layer.
@@ -35,7 +35,7 @@ _GEOPOLITICAL_KEYWORDS: tuple[str, ...] = (
 
 class EventRegistryWrapper(EventRegistry):
     """`eventregistry.EventRegistry` plus a kwargs-only wrapper for the
-    macro_research `geopolitical_news` runner need.
+    macro_research `geopolitical_news` need.
     """
 
     def geopolitical_news(self, window_days: int = 7, limit: int = 25) -> list[dict[str, Any]]:

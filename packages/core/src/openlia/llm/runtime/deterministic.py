@@ -2,18 +2,19 @@
 
 Spec: docs/superpowers/specsv2/2026-04-27-connector-dataflow-design.md §9.
 
-Deterministic runners (Macro Research T1, Retail Sentiment data fetch,
-scheduled jobs) consume data without an LLM in the path. They declare
-their needs via stable id tuples and call the dispatcher by id:
+Deterministic runners (Retail Sentiment data fetch, scheduled jobs)
+consume data without an LLM in the path. They declare their needs via
+stable id tuples and call the dispatcher by id:
 
-    async with dispatcher.in_department("macro_research"):
-        debt = await dispatcher.fetch_need("debt_gdp", country="US")
+    async with dispatcher.in_department("retail_sentiment"):
+        posts = await dispatcher.fetch_need("social_posts")
 
-This module owns the small translation layer that maps the legacy
+This module owns the small translation layer that maps legacy
 T1_REQUIREMENTS strings (e.g. `"stock_quote:TIP"`,
 `"macro_indicator:debt_gdp"`, `"company_news:geopolitical"`) to v2
-`(need_id, runtime_args)` pairs declared in
-`packages/core/src/openlia/departments/macro_research.needs.yaml`.
+`(need_id, runtime_args)` pairs. (Macro Research has since migrated to
+the `report_dash_mr` dashboard engine and is no longer a deterministic
+runner; this legacy T1 translation layer is retained for tests.)
 
 Failure semantics (§9.3): missing callable specs surface as
 `NeedNotResolved`; underlying call failures propagate. No silent

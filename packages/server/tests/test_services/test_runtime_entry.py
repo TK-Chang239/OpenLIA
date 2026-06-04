@@ -20,7 +20,6 @@ def test_select_mode_chat_default_for_chat_only_dept() -> None:
 
 
 def test_select_mode_deterministic_default_for_runner_dept() -> None:
-    assert select_runtime_mode(department_id="macro_research", requested=None) == "deterministic"
     assert select_runtime_mode(department_id="retail_sentiment", requested=None) == "deterministic"
 
 
@@ -41,9 +40,9 @@ def test_select_mode_scheduled_chat_allowed_on_pt_mb() -> None:
 
 def test_select_mode_rejects_chat_on_runner_dept() -> None:
     with pytest.raises(RuntimeModeMismatchError):
-        select_runtime_mode(department_id="macro_research", requested="chat")
+        select_runtime_mode(department_id="retail_sentiment", requested="chat")
     with pytest.raises(RuntimeModeMismatchError):
-        select_runtime_mode(department_id="macro_research", requested="scheduled_chat")
+        select_runtime_mode(department_id="retail_sentiment", requested="scheduled_chat")
 
 
 def test_select_mode_rejects_deterministic_on_chat_dept() -> None:
