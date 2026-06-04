@@ -4,6 +4,7 @@ from openlia.macro_research.quant.forces import ForceScores
 from openlia.macro_research.quant.forces_network import (
     FORCE_LABELS,
     FORCE_ORDER,
+    INFLUENCE,
     PERSISTENCE,
     analyze_force_network,
     coupling,
@@ -25,6 +26,8 @@ def test_every_force_has_a_label() -> None:
 
 
 def test_influence_entries_in_range_and_zero_diagonal() -> None:
+    assert set(INFLUENCE) == set(FORCE_ORDER)
+    assert "debt_money" in INFLUENCE
     for driver in FORCE_ORDER:
         for driven in FORCE_ORDER:
             c = coupling(driver, driven)
