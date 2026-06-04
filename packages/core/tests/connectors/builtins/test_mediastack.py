@@ -18,9 +18,11 @@ def test_mediastack_has_python_lib_only() -> None:
     assert isinstance(MEDIASTACK_TEMPLATE.available_modes[0], PythonLibRecipe)
 
 
-def test_mediastack_covers_geopolitical_news() -> None:
-    need_ids = {spec.need_id for spec in MEDIASTACK_TEMPLATE.runner_specs}
-    assert "geopolitical_news" in need_ids
+def test_mediastack_has_no_runner_specs() -> None:
+    """All previous MR runner specs were removed — Mediastack is now
+    chat-toolbox only.
+    """
+    assert MEDIASTACK_TEMPLATE.runner_specs == ()
 
 
 def test_mediastack_canary_tool_set() -> None:

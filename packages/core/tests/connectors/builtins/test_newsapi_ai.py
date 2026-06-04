@@ -30,18 +30,11 @@ def test_newsapi_ai_python_lib_targets_event_registry_wrapper() -> None:
     assert args.get("apiKey") == "$NEWSAPI_AI_API_KEY"
 
 
-def test_newsapi_ai_runner_spec_targets_geopolitical_news_method() -> None:
-    specs = NEWSAPI_AI_TEMPLATE.runner_specs
-    assert len(specs) == 1
-    spec = specs[0]
-    assert spec.need_id == "geopolitical_news"
-    assert spec.access_mode == "python_lib"
-    assert spec.module == "openlia.data.eventregistry_wrapper"
-    assert spec.method == "EventRegistryWrapper.geopolitical_news"
-    # Bindings match the runtime parameters declared in macro_research.needs.yaml
-    assert set(spec.param_bindings.keys()) == {"window_days", "limit"}
-    assert spec.param_bindings["window_days"].to_arg == "window_days"
-    assert spec.param_bindings["limit"].to_arg == "limit"
+def test_newsapi_ai_has_no_runner_specs() -> None:
+    """All previous MR runner specs were removed — NewsAPI.ai is now
+    chat-toolbox only.
+    """
+    assert NEWSAPI_AI_TEMPLATE.runner_specs == ()
 
 
 def test_newsapi_ai_canary_tool_is_geopolitical_news() -> None:

@@ -173,40 +173,40 @@ async def test_dispatch_constraint_passes_when_one_alternative_supplied():
 async def test_fetch_need_without_department_context_raises():
     d = Dispatcher(connectors={})
     with pytest.raises(DispatchError, match="in_department"):
-        await d.fetch_need("debt_gdp", country="US")
+        await d.fetch_need("stock_quote", ticker="AAPL")
 
 
 async def test_fetch_need_with_no_resolved_spec_raises_need_not_resolved():
     d = Dispatcher(connectors={"c1": _eodhd_mcp()}, callable_specs={})
-    async with d.in_department("macro_research"):
+    async with d.in_department("portfolio"):
         with pytest.raises(NeedNotResolved):
-            await d.fetch_need("debt_gdp", country="US")
+            await d.fetch_need("stock_quote", ticker="AAPL")
 
 
 async def test_fetch_need_mcp_spec_happy_path_with_transform_and_constants():
     eod = _eodhd_mcp()
-    eod.tools["get_economic_indicator"] = _td("get_economic_indicator")
+    eod.tools["get_live_stock_prices"] = _td("get_live_stock_prices")
     spec = CallableSpec(
-        need_id="debt_gdp",
+        need_id="stock_quote",
         access_mode="cli_mcp",
-        tool_name="get_economic_indicator",
-        param_bindings={"country": ParamBinding(to_arg="country", transform="upper")},
-        constants={"indicator": "DEBT_GDP_PCT"},
-        shape="float",
+        tool_name="get_live_stock_prices",
+        param_bindings={"ticker": ParamBinding(to_arg="ticker", transform="upper")},
+        constants={"exchange": "US"},
+        shape="dict",
     )
     d = Dispatcher(
         connectors={"c1": eod},
-        callable_specs={("macro_research", "debt_gdp"): spec},
+        callable_specs={("portfolio", "stock_quote"): spec},
     )
-    async with d.in_department("macro_research"):
-        result = await d.fetch_need("debt_gdp", country="us")
+    async with d.in_department("portfolio"):
+        result = await d.fetch_need("stock_quote", ticker="aapl")
 
     assert eod.transport.calls == [  # type: ignore[attr-defined]
-        ("get_economic_indicator", {"country": "US", "indicator": "DEBT_GDP_PCT"}),
+        ("get_live_stock_prices", {"ticker": "AAPL", "exchange": "US"}),
     ]
     assert result == {
-        "name": "get_economic_indicator",
-        "args": {"country": "US", "indicator": "DEBT_GDP_PCT"},
+        "name": "get_live_stock_prices",
+        "args": {"ticker": "AAPL", "exchange": "US"},
     }
 
 
@@ -219,26 +219,26 @@ async def test_fetch_need_python_lib_spec_happy_path():
         status=ConnectorStatus.VALIDATED,
         transport=transport,
         tools={},
-        callables={"economic_data": _cd("APIClient.economic_data")},
+        callables={"get_live_stock_prices": _cd("ExtendedAPIClient.get_live_stock_prices")},
     )
     spec = CallableSpec(
-        need_id="debt_gdp",
+        need_id="stock_quote",
         access_mode="python_lib",
         module="eodhd",
-        method="economic_data",
-        param_bindings={"country": ParamBinding(to_arg="country_code", transform=None)},
-        constants={"indicator": "DEBT_GDP_PCT"},
-        shape="float",
+        method="get_live_stock_prices",
+        param_bindings={"ticker": ParamBinding(to_arg="ticker", transform=None)},
+        constants={},
+        shape="dict",
     )
     d = Dispatcher(
         connectors={"c1": conn},
-        callable_specs={("macro_research", "debt_gdp"): spec},
+        callable_specs={("portfolio", "stock_quote"): spec},
     )
-    async with d.in_department("macro_research"):
-        await d.fetch_need("debt_gdp", country="US")
+    async with d.in_department("portfolio"):
+        await d.fetch_need("stock_quote", ticker="AAPL")
 
     assert transport.calls == [
-        ("economic_data", {"country_code": "US", "indicator": "DEBT_GDP_PCT"}),
+        ("get_live_stock_prices", {"ticker": "AAPL"}),
     ]
 
 
