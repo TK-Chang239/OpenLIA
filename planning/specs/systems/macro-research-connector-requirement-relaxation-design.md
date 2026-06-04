@@ -69,15 +69,29 @@ required macro backbone; FINANCIAL/NEWS are optional (the engine falls back to
 `web_search` for any value a connector does not cover); MR is dashboard-routed,
 not a runner department.
 
-### 3.2 Retire the dead needs file
-Delete `departments/macro_research.needs.yaml`. With `requires_runner=False`:
-- `health.py`'s runner branch is skipped for MR (no `load_needs` call).
-- `runner_specs_service._hydrate_registry_caches()` already filters on
-  `requires_runner`, so the live wizard stops proposing MR runner specs
-  automatically.
-- Any previously-approved MR `RunnerCallableSpec` rows simply become unused —
-  the health check and engine never read them. **No migration** (orphaned rows
-  are harmless; deleting them is not required).
+### 3.2 Retain `macro_research.needs.yaml` as connector-resolution metadata
+**Do NOT delete `departments/macro_research.needs.yaml`.** (An earlier draft of
+this spec called for deleting it; that was wrong — see below.) The need
+declarations are referenced by the builtin connector templates'
+`runner_specs` (eodhd/fmp/mediastack/newsapi_ai/firecrawl declare how a
+configured connector resolves each MR need id) and by the MR dashboards'
+`T1_REQUIREMENTS` drift checks. That connector-resolution layer is **orthogonal
+to the health gate** and out of scope here; ripping it out would be a separate,
+large refactor ("remove MR's legacy need-resolution layer").
+
+With `requires_runner=False` the needs file is simply no longer a runtime-runner
+contract:
+- `health.py`'s runner branch is skipped for MR (no need-gating).
+- `runner_specs_service._hydrate_registry_caches()` filters on `requires_runner`,
+  so the wizard stops hydrating/proposing MR specs automatically.
+- Any previously-approved MR `RunnerCallableSpec` rows simply become unused. **No
+  migration.**
+
+One invariant must be relaxed: `test_department_artifacts.py`'s
+`test_needs_yaml_present_when_runner_required` asserts `requires_runner=False ⇒
+no needs.yaml`. Add a documented exception for `macro_research` (a dashboard dept
+that retains need declarations as connector-resolution metadata). Update the
+needs.yaml header comment to say so.
 
 ### 3.3 Health derivation (`departments/health.py`)
 No code change required — the runner branch is gated on `dept.requires_runner`.
@@ -203,9 +217,12 @@ informational (not error).
 
 ## 8. Decisions on record
 
-- **Clean de-runner, not a hack** — MR is genuinely a dashboard department, not a
-  runner; `requires_runner=False` + delete the dead needs file. The redesign
-  started this; this spec finishes it. (Relaxing categories alone is a no-op.)
+- **De-runner = `requires_runner=False` + relaxed categories** — MR is genuinely
+  a dashboard department, not a runtime runner. (Relaxing categories alone is a
+  no-op; the runner-need gate is the real blocker.) **The needs.yaml is RETAINED**
+  as connector-resolution metadata (deleting it orphans the builtin connector
+  `runner_specs` — out of scope); the `requires_runner⇔needs.yaml` invariant is
+  relaxed for this dashboard dept instead.
 - **`retail_sentiment` becomes the canonical runner-dept example** in the tests
   and e2e that previously used MR. The seeded resolver unit tests are unaffected
   (synthetic `"macro_research"` label).

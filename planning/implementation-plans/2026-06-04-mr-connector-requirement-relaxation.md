@@ -55,11 +55,16 @@ Replace the comment block + the three category class-vars + `requires_runner` (c
     disable_runtime_routing: ClassVar[bool] = False
 ```
 
-- [ ] **Step 2: Delete the dead needs file**
+- [ ] **Step 2: Retain `macro_research.needs.yaml` (do NOT delete)**
 
-```bash
-git rm packages/core/src/openlia/departments/macro_research.needs.yaml
-```
+SUPERSEDED — the original plan deleted this file; that orphaned the builtin
+connector `runner_specs` that reference MR need ids. Instead KEEP the file
+(update its header comment to note MR is now `requires_runner=False` and the
+declarations are retained as connector-resolution metadata), and relax the
+`requires_runner⇔needs.yaml` invariant in `test_department_artifacts.py` (add a
+documented `macro_research` exception in `test_needs_yaml_present_when_runner_required`).
+The `_runner_need_ids_for` MR branch and the canonical-keys / resolver tests stay
+on MR (unchanged). See Post-implementation amendments.
 
 - [ ] **Step 3: Migrate the MR runner block in `test_health.py` to Retail Sentiment**
 
@@ -449,12 +454,20 @@ git add -A && git commit -m "chore(macro-research): lint/format pass for connect
 
 ## Post-implementation amendments
 
+### Major course-correction: keep `macro_research.needs.yaml` (do not delete)
+
+The plan/spec originally deleted `macro_research.needs.yaml`. During Task 6 the full core suite surfaced `test_runner_specs_reference_only_declared_need_ids`: the builtin connector templates (eodhd, fmp, mediastack, newsapi_ai, firecrawl) declare `runner_specs` keyed to MR's need ids (`debt_gdp`, `stock_quote`, `geopolitical_news`, `usd_fx_reserve_share`, …). Deleting the needs.yaml orphaned that entire connector-resolution layer. Ripping it out (5 builtin templates + `deterministic.py` + their tests) is a separate, large refactor — out of scope for requirement relaxation.
+
+**Correction:** RETAIN the needs.yaml as connector-resolution metadata; achieve the de-runner purely via `requires_runner=False` + relaxed categories. This reverted the deletion-driven test churn (canonical-keys, resolver save-flow, resolver redesign-e2e) back to MR, and relaxed the single coupling invariant (`test_department_artifacts.py::test_needs_yaml_present_when_runner_required` now allows `macro_research` to keep its needs.yaml). Net production change is minimal: `macro_research.py` (categories + `requires_runner=False`), `health.py`/`dept_health.py` (coverage fields), `runtime.py` docstring, and the frontend. Verified: full core suite 2067 passed; server resolver/e2e/dept-health dirs 934 passed.
+
+### Test tail (still applicable, from the de-runner itself)
+
 The de-runner change had a wider test tail than the plan's §6 blast radius enumerated. All fixed by migrating MR→retail_sentiment or supplying a synthetic need; no production behavior changed beyond the planned relaxation.
 
-- **`test_needs_canonical_keys.py`** (Task 1) — used MR's `geopolitical_news` need as its `list[dict]` canonical-keys example; rewritten to use RS's `social_posts` (the scalar `debt_gdp` "no canonical_keys" assertion was dropped — RS has no scalar need; the synthetic-fixture rejection test below still covers scalar+canonical_keys).
+- **`test_needs_canonical_keys.py`** — briefly migrated to RS during the deletion attempt, then **reverted** to its original MR-based form once the needs.yaml was retained. No net change.
 - **`test_dept_health_api.py`** — needed no change (synthetic fixtures; assertions read fixture values, not the registry), as predicted.
 - **`e2e/test_disabled_banner_409.py`** (found in Task 6) — MR's missing category is now `web_search` (not `financial`) and it has no unresolved needs; also fixed a stale `/assessment/run` URL (renamed to `/refresh` back in #246).
 - **`e2e/test_atomic_disable_on_delete.py`** (found in Task 6) — premise "delete the sole FINANCIAL connector → MR disabled" is void (FINANCIAL optional); retargeted to `retail_sentiment`/`social_posts`.
-- **`test_resolver_save_flow.py`, `test_resolver_redesign_e2e.py`** (found in Task 6) — depend on MR's real `stock_quote` need via `resolver_save_flow.load_needs`; fixed by monkeypatching `load_needs` with a synthetic scalar `stock_quote` need (keeps the scalar fixtures; cleaner than forcing RS's `list[dict]` shape).
+- **`test_resolver_save_flow.py`, `test_resolver_redesign_e2e.py`** — briefly monkeypatched during the deletion attempt, then **reverted** to original once the needs.yaml was retained (MR's `stock_quote` need exists again). No net change.
 - **`test_routes_runner_specs.py::test_hydrate_..._real_macro_research_needs`** (found in Task 6) — tests real runner-dept hydration; retargeted to `retail_sentiment` (asserts `social_posts` + `FINANCIAL` required).
 - **Note:** a 1240-test cross-dir megarun surfaced one unrelated Morning-Briefing scheduler failure (`test_lifespan_integration`) from global-state pollution; it passes in isolation and `test_scheduler` passes standalone (155). Pre-existing test-isolation fragility, not a regression from this PR. CI runs targeted dirs, so it does not affect the branch.
