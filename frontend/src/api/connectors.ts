@@ -60,27 +60,6 @@ export interface CreateConnectorInput {
   openapi_url?: string | null;
 }
 
-export interface ProposedSpec {
-  department_id: string;
-  need_id: string;
-  proposed_spec: Record<string, unknown>;
-  canary_value: unknown;
-  canary_ok: boolean;
-  shape_match: boolean;
-  error: string | null;
-  connector_id?: string | null;
-  unsatisfiable?: boolean;
-  reason?: string | null;
-}
-
-export interface ApprovalOut {
-  id: string;
-  department_id: string;
-  need_id: string;
-  connector_id: string;
-  access_mode: string;
-}
-
 export const listConnectors = () =>
   fetchJson<ConnectorRow[]>("/api/connectors");
 
@@ -141,86 +120,6 @@ export const syncTemplateSpecs = (id: string) =>
 
 // Backward-compatible alias used by older callers.
 export const revalidateConnector = validateConnector;
-
-export const listProposedSpecs = (connectorId: string) =>
-  fetchJson<ProposedSpec[]>(
-    `/api/connectors/${encodeURIComponent(connectorId)}/proposed-specs`,
-  );
-
-export const reResolveSpecs = (connectorId: string) =>
-  fetchJson<ProposedSpec[]>(
-    `/api/connectors/${encodeURIComponent(connectorId)}/proposed-specs/resolve`,
-    { method: "POST" },
-  );
-
-export const approveSpec = (
-  connectorId: string,
-  departmentId: string,
-  needId: string,
-) =>
-  fetchJson<ApprovalOut>(
-    `/api/connectors/${encodeURIComponent(connectorId)}/proposed-specs/approve`,
-    {
-      method: "POST",
-      json: { department_id: departmentId, need_id: needId },
-    },
-  );
-
-export const listDeptProposedSpecs = (departmentId: string) =>
-  fetchJson<ProposedSpec[]>(
-    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs`,
-  );
-
-export const resolveDeptProposedSpecs = (departmentId: string) =>
-  fetchJson<ProposedSpec[]>(
-    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/resolve`,
-    { method: "POST" },
-  );
-
-export interface ResolveEvent {
-  type: "tool_call";
-  need_id: string;
-  connector_id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-export const listDeptResolveEvents = (departmentId: string) =>
-  fetchJson<ResolveEvent[]>(
-    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/events`,
-  );
-
-export const resolveDeptNeed = (
-  departmentId: string,
-  needId: string,
-  options?: { excludeConnectorIds?: string[] },
-) =>
-  fetchJson<ProposedSpec[]>(
-    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/${encodeURIComponent(needId)}/resolve`,
-    {
-      method: "POST",
-      json:
-        options?.excludeConnectorIds && options.excludeConnectorIds.length > 0
-          ? { exclude_connector_ids: options.excludeConnectorIds }
-          : { exclude_connector_ids: [] },
-    },
-  );
-
-export const approveDeptSpec = (
-  departmentId: string,
-  needId: string,
-  connectorId?: string,
-) =>
-  fetchJson<ApprovalOut>(
-    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/approve`,
-    {
-      method: "POST",
-      json:
-        connectorId !== undefined
-          ? { need_id: needId, connector_id: connectorId }
-          : { need_id: needId },
-    },
-  );
 
 export interface BuiltinTemplate {
   template_id: string;

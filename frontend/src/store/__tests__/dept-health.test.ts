@@ -21,14 +21,12 @@ describe("dept-health store", () => {
         status: "active",
         reason: null,
         missing_categories: [],
-        unresolved_needs: [],
       },
       {
         department_id: "macro_research",
         status: "disabled",
         reason: "Missing required categories: financial",
         missing_categories: ["financial"],
-        unresolved_needs: [],
       },
     ]);
 

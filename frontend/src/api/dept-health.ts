@@ -7,7 +7,6 @@ export interface DepartmentHealth {
   status: DepartmentStatus;
   reason: string | null;
   missing_categories: string[];
-  unresolved_needs: string[];
   // Static dept-registry metadata + the unsatisfied subset of
   // `required_any_of`. Optional in the type because legacy responses
   // (and many test fixtures) predate these fields.

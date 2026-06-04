@@ -30,7 +30,6 @@ const mkHealth = (
   status: "active",
   reason: null,
   missing_categories: [],
-  unresolved_needs: [],
   required_categories,
   required_any_of,
   unsatisfied_any_of: [],

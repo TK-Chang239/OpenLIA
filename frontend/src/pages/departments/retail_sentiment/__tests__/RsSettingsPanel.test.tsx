@@ -12,7 +12,6 @@ function stubAll(overrides: Partial<deptHealth.DepartmentHealth> = {}) {
       status: "active",
       reason: null,
       missing_categories: [],
-      unresolved_needs: [],
       satisfied_categories: ["web_search"],
       optional_categories: ["financial", "news"],
       required_categories: ["web_search"],

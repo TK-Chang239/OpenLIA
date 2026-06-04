@@ -17,9 +17,6 @@ vi.mock("../../../api/connectors", async () => {
     createConnector: vi.fn(),
     deleteConnector: vi.fn(),
     validateConnector: vi.fn(),
-    listProposedSpecs: vi.fn(),
-    reResolveSpecs: vi.fn(),
-    approveSpec: vi.fn(),
     getConnector: vi.fn(),
     updateConnector: vi.fn(),
     listBuiltinTemplates: vi.fn(),
@@ -43,9 +40,6 @@ const mocked = connectorsApi as unknown as {
   createConnector: ReturnType<typeof vi.fn>;
   deleteConnector: ReturnType<typeof vi.fn>;
   validateConnector: ReturnType<typeof vi.fn>;
-  listProposedSpecs: ReturnType<typeof vi.fn>;
-  reResolveSpecs: ReturnType<typeof vi.fn>;
-  approveSpec: ReturnType<typeof vi.fn>;
   getConnector: ReturnType<typeof vi.fn>;
   updateConnector: ReturnType<typeof vi.fn>;
   listBuiltinTemplates: ReturnType<typeof vi.fn>;
@@ -71,15 +65,6 @@ beforeEach(() => {
   mocked.createConnector.mockResolvedValue(row());
   mocked.deleteConnector.mockResolvedValue(undefined);
   mocked.validateConnector.mockResolvedValue(row());
-  mocked.listProposedSpecs.mockResolvedValue([]);
-  mocked.reResolveSpecs.mockResolvedValue([]);
-  mocked.approveSpec.mockResolvedValue({
-    id: "rcs",
-    department_id: "x",
-    need_id: "y",
-    connector_id: "c1",
-    access_mode: "remote_mcp",
-  });
   vi.spyOn(deptHealthApi, "fetchDeptHealth").mockResolvedValue([]);
   mockedSetup.saveProviders.mockResolvedValue({ ok: true });
   mocked.getConnector.mockResolvedValue({
