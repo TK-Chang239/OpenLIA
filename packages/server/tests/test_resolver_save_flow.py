@@ -11,7 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from openlia.connectors.types import Category, NeedParameter, RunnerNeed
+from openlia.connectors.types import Category
 from openlia_server.db.models.connectors import (
     Connector,
     ResolverCallLog,
@@ -51,16 +51,6 @@ class _StubTransport:
         return None
 
 
-_STOCK_QUOTE_NEED = RunnerNeed(
-    id="stock_quote",
-    description="Latest closing price for a ticker.",
-    parameters=[
-        NeedParameter(name="ticker", description="Ticker symbol", type="str", required=True)
-    ],
-    shape="float",
-)
-
-
 def _make_connector(db_session: Session) -> Connector:
     conn = Connector(
         id=str(uuid4()),
@@ -93,12 +83,7 @@ def _make_connector(db_session: Session) -> Connector:
 @pytest.mark.asyncio
 async def test_save_flow_persists_spec_and_log_rows_on_success(
     db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "openlia_server.services.resolver_save_flow.load_needs",
-        lambda dept_id: [_STOCK_QUOTE_NEED] if dept_id == "macro_research" else [],
-    )
     conn = _make_connector(db_session)
     llm = _StubLlm(
         {
@@ -139,13 +124,8 @@ async def test_save_flow_persists_spec_and_log_rows_on_success(
 @pytest.mark.asyncio
 async def test_save_flow_blocks_persist_on_smoke_failure(
     db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Smoke failure → no live RunnerCallableSpec row, but logs persist."""
-    monkeypatch.setattr(
-        "openlia_server.services.resolver_save_flow.load_needs",
-        lambda dept_id: [_STOCK_QUOTE_NEED] if dept_id == "macro_research" else [],
-    )
     conn = _make_connector(db_session)
     llm = _StubLlm(
         {
@@ -198,13 +178,8 @@ async def test_save_flow_blocks_persist_on_smoke_failure(
 @pytest.mark.asyncio
 async def test_save_flow_overrides_existing_spec_on_resave(
     db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Re-saving for the same (dept, need) updates rather than duplicating."""
-    monkeypatch.setattr(
-        "openlia_server.services.resolver_save_flow.load_needs",
-        lambda dept_id: [_STOCK_QUOTE_NEED] if dept_id == "macro_research" else [],
-    )
     conn = _make_connector(db_session)
     llm = _StubLlm(
         {

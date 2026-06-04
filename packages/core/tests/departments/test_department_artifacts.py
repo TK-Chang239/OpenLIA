@@ -11,6 +11,7 @@ from openlia.departments.loader import (
     load_needs,
     load_routing_context,
 )
+from openlia.macro_research.dashboards import DASHBOARDS
 
 _DEPT_DIR = Path(__file__).resolve().parents[2] / "src" / "openlia" / "departments"
 
@@ -31,13 +32,50 @@ def _all_dept_ids() -> list[str]:
     return get_registered_department_ids()
 
 
+def _t1_requirement_to_need_id(raw: str) -> str:
+    """Extract the need id from a legacy `kind:value` T1 requirement.
+
+    The dashboards historically prefix each requirement with a kind
+    (`macro_indicator:debt_gdp`, `stock_quote:TIP`,
+    `company_news:geopolitical`). The corresponding need id in
+    needs.yaml is:
+      - `<value>` for `macro_indicator:<value>`
+      - `stock_quote` for any `stock_quote:<ticker>` (one parameterized
+        need covers all tickers)
+      - `<value>_news` for `company_news:<value>` (e.g. geopolitical
+        → geopolitical_news)
+    Anything else passes through unchanged so a future dashboard with
+    a bare need id (the spec's `T1_NEEDS` form) just works.
+    """
+    if ":" not in raw:
+        return raw
+    kind, _, value = raw.partition(":")
+    if kind == "macro_indicator":
+        return value
+    if kind == "stock_quote":
+        return "stock_quote"
+    if kind == "company_news":
+        return f"{value}_news"
+    return raw
+
+
 def _runner_need_ids_for(department_id: str) -> set[str]:
     """Walk runner code for `department_id` and return referenced need ids.
 
+    Today only Macro Research has runner code we statically introspect.
     For Retail Sentiment the spec hard-codes `social_posts` (§9.5);
     that reference is captured here directly so the drift-safety check
     still triggers if the YAML drifts.
     """
+    if department_id == "macro_research":
+        ids: set[str] = set()
+        for dashboard in DASHBOARDS.values():
+            for raw in getattr(dashboard, "T1_REQUIREMENTS", ()) or ():
+                ids.add(_t1_requirement_to_need_id(raw))
+            # Forward-compat: support the spec's `T1_NEEDS` shape too.
+            for need_id in getattr(dashboard, "T1_NEEDS", ()) or ():
+                ids.add(str(need_id))
+        return ids
     if department_id == "retail_sentiment":
         return {"social_posts"}
     return set()
@@ -72,6 +110,14 @@ def test_needs_yaml_present_when_runner_required(department_id: str) -> None:
             assert need.description.strip(), (
                 f"{department_id}: need '{need.id}' has an empty description."
             )
+    elif department_id == "macro_research":
+        # Macro Research is a dashboard dept (report_dash_mr): it is no longer
+        # gated or hydrated as a runtime runner (requires_runner=False), but it
+        # retains its need declarations as connector-resolution metadata — the
+        # builtin connector templates' runner_specs reference these need ids.
+        path = _DEPT_DIR / f"{department_id}.needs.yaml"
+        assert path.exists(), f"{department_id}: expected retained needs.yaml is missing."
+        assert needs, f"{department_id}: needs.yaml must declare at least one need."
     else:
         # Chat-flow depts: no needs.yaml is the expected state.
         path = _DEPT_DIR / f"{department_id}.needs.yaml"
