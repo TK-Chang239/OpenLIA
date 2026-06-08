@@ -932,10 +932,10 @@
     "live_label": "Live",
     "streaming_series": "Streaming · {{count}} series",
     "settings": "Settings",
-    "auto_refresh_aria": "Auto-refresh interval",
-    "auto_refresh_5min": "Auto-refresh · 5 min",
-    "auto_refresh_15min": "Auto-refresh · 15 min",
-    "auto_refresh_off": "Auto-refresh · Off"
+    "auto_refresh_aria": "Refresh cadence",
+    "refresh_weekly": "Once per week",
+    "refresh_monthly": "Once per month",
+    "refresh_auto": "Auto refresh"
   },
   "morning_briefing": {
     "title": "Morning Briefing",
