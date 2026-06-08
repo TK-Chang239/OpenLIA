@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,14 +96,67 @@ describe("MacroResearch shell", () => {
     }
   });
 
-  it("auto-refresh select offers the design's three options", () => {
+  it("refresh-cadence select offers once per week, once per month, auto refresh", () => {
     renderShell();
     const select = screen.getByTestId("mr-refresh-select") as HTMLSelectElement;
     const labels = Array.from(select.options).map((o) => o.text);
     expect(labels).toEqual([
-      "Auto-refresh · 5 min",
-      "Auto-refresh · 15 min",
-      "Auto-refresh · Off",
+      "Once per week",
+      "Once per month",
+      "Auto refresh",
     ]);
+  });
+
+  it("defaults to auto refresh when no schedule is set", async () => {
+    apiMocks.getSchedule.mockResolvedValue({
+      cron_expression: null,
+      last_assessment_at: null,
+    });
+    renderShell();
+    const select = await screen.findByTestId<HTMLSelectElement>("mr-refresh-select");
+    await waitFor(() => expect(select.value).toBe("auto"));
+  });
+
+  it("preselects once per week when a weekly cron is persisted", async () => {
+    apiMocks.getSchedule.mockResolvedValue({
+      cron_expression: "0 0 * * 0",
+      last_assessment_at: null,
+    });
+    renderShell();
+    const select = await screen.findByTestId<HTMLSelectElement>("mr-refresh-select");
+    await waitFor(() => expect(select.value).toBe("weekly"));
+  });
+
+  it("writes a weekly cron when once per week is chosen", async () => {
+    apiMocks.putSchedule.mockResolvedValue({ cron_expression: "0 0 * * 0" });
+    renderShell();
+    const select = await screen.findByTestId<HTMLSelectElement>("mr-refresh-select");
+    fireEvent.change(select, { target: { value: "weekly" } });
+    await waitFor(() =>
+      expect(apiMocks.putSchedule).toHaveBeenCalledWith("0 0 * * 0"),
+    );
+  });
+
+  it("writes a monthly cron when once per month is chosen", async () => {
+    apiMocks.putSchedule.mockResolvedValue({ cron_expression: "0 0 1 * *" });
+    renderShell();
+    const select = await screen.findByTestId<HTMLSelectElement>("mr-refresh-select");
+    fireEvent.change(select, { target: { value: "monthly" } });
+    await waitFor(() =>
+      expect(apiMocks.putSchedule).toHaveBeenCalledWith("0 0 1 * *"),
+    );
+  });
+
+  it("clears the schedule when auto refresh is chosen", async () => {
+    apiMocks.getSchedule.mockResolvedValue({
+      cron_expression: "0 0 * * 0",
+      last_assessment_at: null,
+    });
+    apiMocks.deleteSchedule.mockResolvedValue(null);
+    renderShell();
+    const select = await screen.findByTestId<HTMLSelectElement>("mr-refresh-select");
+    await waitFor(() => expect(select.value).toBe("weekly"));
+    fireEvent.change(select, { target: { value: "auto" } });
+    await waitFor(() => expect(apiMocks.deleteSchedule).toHaveBeenCalled());
   });
 });
