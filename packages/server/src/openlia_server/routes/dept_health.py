@@ -3,7 +3,7 @@
 Reads the cached `app.state.dept_health: dict[str, DepartmentHealth]` and
 serializes it as a JSON list. The cache is populated at startup and
 refreshed on every connector / spec mutation by `dept_health` service
-hooks installed in `connectors_service` and `runner_specs_service`.
+hooks installed in `connectors_service`.
 
 `gate_dept_or_409` is the per-handler short-circuit: route code calls it
 before processing a mutating dept request. When the dept is disabled it

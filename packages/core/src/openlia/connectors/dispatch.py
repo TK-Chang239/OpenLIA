@@ -173,7 +173,7 @@ class Dispatcher:
     chat_connector_blocklist: frozenset[str] = field(default_factory=frozenset)
     """Per-session opt-out: connector_ids in this set are omitted from
     `candidate_tools()` (chat-routing surface) but remain available to
-    `fetch_need` so deterministic dept runs are unaffected. Backs the
+    `fetch_need` so the Portfolio data path is unaffected. Backs the
     chat-input "Tools" dropdown."""
     tool_argument_constraints: dict[
         str, tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...]

@@ -4,7 +4,7 @@ contract the portfolio price layer expects.
 The portfolio code calls ``adapter.fetch("stock_quote", {"ticker": "AAPL"})``
 and reads ``result.payload``. We build a fresh ``Dispatcher`` per call so
 connector edits land without an app restart, scope it to the department that
-owns the need (``stock_quote`` -> ``macro_research``), and wrap the raw
+owns the need (``stock_quote`` -> ``portfolio``), and wrap the raw
 payload in a ``SimpleNamespace`` to match the shape callers expect.
 """
 

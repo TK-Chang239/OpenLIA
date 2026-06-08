@@ -20,7 +20,6 @@ class PanicThermometerDepartment:
 
     # Runtime behavior (spec §5.2). PT is dashboard-only with no chat surface
     # today; runtime routing flag stays False.
-    requires_runner: ClassVar[bool] = False
     disable_runtime_routing: ClassVar[bool] = False
 
     panel_ids: tuple[str, ...] = (

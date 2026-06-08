@@ -34,7 +34,6 @@ beforeEach(() => {
       status: "active",
       reason: null,
       missing_categories: [],
-      unresolved_needs: [],
       required_categories: ["web_search"],
       optional_categories: ["financial", "news"],
       satisfied_categories: ["web_search"],

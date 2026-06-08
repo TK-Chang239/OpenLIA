@@ -43,94 +43,13 @@ def test_firecrawl_remote_mcp_uses_v2_mcp_path_with_substitution_placeholder() -
     assert remote.url == "https://mcp.firecrawl.dev/{FIRECRAWL_API_KEY}/v2/mcp"
 
 
-def test_firecrawl_runner_specs_cover_world_order_and_interest_revenue_needs() -> None:
-    """Firecrawl handles five needs upstream financial APIs don't expose:
-    three world-order series (USD reserve share, central-bank gold
-    purchases, foreign Treasury holdings), interest_revenue (federal
-    interest expense as % of revenue), and geopolitical_news as a
-    headline fallback when NewsAPI.ai isn't installed.
+def test_firecrawl_has_no_runner_specs() -> None:
+    """All previous MR/RS runner specs were removed — Firecrawl is now
+    chat-toolbox only (firecrawl_search / firecrawl_scrape for chat depts).
     """
-    need_ids = {spec.need_id for spec in FIRECRAWL_TEMPLATE.runner_specs}
-    assert need_ids == {
-        "usd_fx_reserve_share",
-        "cb_gold_purchases",
-        "foreign_treasury_holdings",
-        "interest_revenue",
-        "geopolitical_news",
-    }
-
-
-def test_firecrawl_geopolitical_news_targets_wikipedia_current_events() -> None:
-    """Headline fallback scrapes Wikipedia's Current Events portal —
-    free, structured by date, scrape-friendly. Schema's required key
-    (`headlines`) matches the second result_path segment so the same
-    invariant the world-order specs satisfy holds here too.
-    """
-    spec = next(s for s in FIRECRAWL_TEMPLATE.runner_specs if s.need_id == "geopolitical_news")
-    assert spec.access_mode == "python_lib"
-    assert spec.method == "Firecrawl.scrape"
-    assert spec.shape == "list[dict]"
-    assert spec.constants["url"] == ("https://en.wikipedia.org/wiki/Portal:Current_events")
-    assert spec.result_path == ("json", "headlines")
-    schema = spec.constants["formats"][0]["schema"]
-    assert "headlines" in schema["properties"]
-    assert schema["properties"]["headlines"]["type"] == "array"
-
-
-def test_firecrawl_runner_specs_use_python_lib_scrape() -> None:
-    """Specs target SDK scrape with v2 JSON-mode formats; deprecated /extract avoided."""
-    for spec in FIRECRAWL_TEMPLATE.runner_specs:
-        assert spec.access_mode == "python_lib"
-        assert spec.method == "Firecrawl.scrape"
-        assert spec.tool_name is None
-        # result_path walks into the Document.json field then into the schema key
-        assert len(spec.result_path) == 2
-        assert spec.result_path[0] == "json"
-        # constants carry a single URL and v2 JSON-mode formats array
-        assert "url" in spec.constants
-        assert spec.constants["url"].startswith("https://")
-        formats = spec.constants["formats"]
-        assert isinstance(formats, list) and len(formats) == 1
-        assert formats[0]["type"] == "json"
-        assert "schema" in formats[0]
-        # the schema's required field matches the second result_path segment
-        required = formats[0]["schema"]["required"]
-        assert spec.result_path[1] in required
+    assert FIRECRAWL_TEMPLATE.runner_specs == ()
 
 
 def test_firecrawl_canary_tool_is_scrape() -> None:
     """scrape is the modern v2 entrypoint; firecrawl_extract is deprecated."""
     assert FIRECRAWL_TEMPLATE.canary_tool == "scrape"
-
-
-def test_firecrawl_runner_spec_urls_were_live_verified() -> None:
-    """URLs were probed against the real Firecrawl scrape endpoint
-    (2026-05-01) using the user's API key. Each one returns a sensible
-    non-zero number under JSON mode with our schema. URLs in this test
-    are pinned so a refactor can't accidentally regress the source.
-    """
-    by_need = {spec.need_id: spec for spec in FIRECRAWL_TEMPLATE.runner_specs}
-    assert by_need["usd_fx_reserve_share"].constants["url"] == (
-        "https://en.wikipedia.org/wiki/Reserve_currency"
-    )
-    assert by_need["cb_gold_purchases"].constants["url"] == (
-        "https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-full-year-2024"
-    )
-    assert by_need["foreign_treasury_holdings"].constants["url"] == (
-        "https://ticdata.treasury.gov/Publish/mfh.txt"
-    )
-    assert by_need["interest_revenue"].constants["url"] == (
-        "https://en.wikipedia.org/wiki/National_debt_of_the_United_States"
-    )
-
-
-def test_foreign_treasury_holdings_field_is_total_not_change() -> None:
-    """Live source publishes the absolute total ($ billions), not a
-    trailing-Δ. The need shape changed accordingly; document it here.
-    """
-    spec = next(
-        s for s in FIRECRAWL_TEMPLATE.runner_specs if s.need_id == "foreign_treasury_holdings"
-    )
-    schema = spec.constants["formats"][0]["schema"]
-    assert "total_usd_billions" in schema["properties"]
-    assert spec.result_path == ("json", "total_usd_billions")

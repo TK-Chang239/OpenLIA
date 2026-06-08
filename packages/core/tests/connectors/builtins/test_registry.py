@@ -126,56 +126,18 @@ def test_get_template_finds_each_builtin() -> None:
         assert tpl.template_id == tid
 
 
-def test_runner_specs_reference_only_declared_need_ids() -> None:
-    """Every runner_spec's need_id must appear in some department's needs.yaml."""
-    from pathlib import Path
-
-    import yaml
-
-    needs_dir = Path(__file__).resolve().parents[3] / "src" / "openlia" / "departments"
-    declared: set[str] = set()
-    for yaml_path in needs_dir.glob("*.needs.yaml"):
-        data = yaml.safe_load(yaml_path.read_text())
-        for need in data.get("needs", []):
-            declared.add(need["id"])
-
+def test_runner_spec_need_ids_are_non_empty() -> None:
+    """Every runner spec must have a non-empty need_id string."""
     for tpl in BUILTIN_TEMPLATES:
         for spec in tpl.runner_specs:
-            assert spec.need_id in declared, (
-                f"template {tpl.template_id!r} references unknown need {spec.need_id!r}"
-            )
+            assert spec.need_id, f"template {tpl.template_id!r} has a spec with an empty need_id"
 
 
-def _load_canonical_keys_by_need_id() -> dict[str, dict[str, str]]:
-    """Build {need_id: canonical_keys} from all departments' needs.yaml files.
+def test_every_list_dict_runner_spec_has_field_map_when_non_empty_shape() -> None:
+    """Internal-consistency: list[dict] specs must declare a field_map (may be empty dict).
 
-    Mirrors how the loader parses needs, but lighter — we only need the
-    canonical_keys map for cross-checking catalog field_maps.
+    `field_map = None` means undeclared and is invalid for list[dict] shapes.
     """
-    from pathlib import Path
-
-    import yaml
-
-    needs_dir = Path(__file__).resolve().parents[3] / "src" / "openlia" / "departments"
-    out: dict[str, dict[str, str]] = {}
-    for yaml_path in needs_dir.glob("*.needs.yaml"):
-        data = yaml.safe_load(yaml_path.read_text())
-        for need in data.get("needs", []):
-            ck = need.get("canonical_keys")
-            if isinstance(ck, dict):
-                out[need["id"]] = {str(k): str(v) for k, v in ck.items()}
-    return out
-
-
-def test_every_list_dict_runner_spec_has_field_map() -> None:
-    """Phase 4 invariant: catalog list[dict] specs must declare a field_map.
-
-    `field_map = None` means "not declared" and is invalid for list[dict]
-    shapes. `field_map = {}` is valid (means the endpoint already returns
-    canonical keys) when canonical_keys is empty; otherwise the spec must
-    populate the rename map.
-    """
-    canonical = _load_canonical_keys_by_need_id()
     for tpl in BUILTIN_TEMPLATES:
         for spec in tpl.runner_specs:
             if spec.shape != "list[dict]":
@@ -184,50 +146,27 @@ def test_every_list_dict_runner_spec_has_field_map() -> None:
                 f"template {tpl.template_id!r} spec for need {spec.need_id!r} "
                 f"is shape 'list[dict]' but does not declare field_map"
             )
-            need_keys = canonical.get(spec.need_id, {})
-            if need_keys:
-                assert spec.field_map, (
+
+
+def test_list_dict_runner_spec_field_map_keys_are_non_empty() -> None:
+    """Internal-consistency: each field_map key in a list[dict] spec must be a non-empty string."""
+    for tpl in BUILTIN_TEMPLATES:
+        for spec in tpl.runner_specs:
+            if spec.shape != "list[dict]" or not spec.field_map:
+                continue
+            for key in spec.field_map:
+                assert key, (
                     f"template {tpl.template_id!r} spec for need {spec.need_id!r} "
-                    f"has empty field_map but the need declares canonical_keys "
-                    f"{set(need_keys)}; the catalog must populate the rename map."
+                    f"has an empty field_map key"
                 )
 
 
-def test_field_maps_cover_canonical_keys() -> None:
-    """Phase 4 invariant: catalog field_map keys must cover the need's canonical_keys."""
-    canonical = _load_canonical_keys_by_need_id()
-    for tpl in BUILTIN_TEMPLATES:
-        for spec in tpl.runner_specs:
-            if spec.shape != "list[dict]":
-                continue
-            need_keys = set(canonical.get(spec.need_id, {}).keys())
-            if not need_keys:
-                continue
-            fm = spec.field_map or {}
-            missing = need_keys - set(fm.keys())
-            assert not missing, (
-                f"template {tpl.template_id!r} spec for need {spec.need_id!r} "
-                f"field_map {set(fm)} missing canonical keys: {missing}"
-            )
-
-
-def test_every_runner_need_is_covered_by_at_least_one_template() -> None:
-    """Every declared need (across both runner depts) is covered by at least one builtin."""
-    from pathlib import Path
-
-    import yaml
-
-    needs_dir = Path(__file__).resolve().parents[3] / "src" / "openlia" / "departments"
-    declared: set[str] = set()
-    for yaml_path in needs_dir.glob("*.needs.yaml"):
-        data = yaml.safe_load(yaml_path.read_text())
-        for need in data.get("needs", []):
-            declared.add(need["id"])
-
+def test_portfolio_needs_covered_by_at_least_one_template() -> None:
+    """The three portfolio runner needs must be covered by at least one builtin."""
+    portfolio_needs = {"stock_quote", "eod_history", "company_profile"}
     covered: set[str] = set()
     for tpl in BUILTIN_TEMPLATES:
         for spec in tpl.runner_specs:
             covered.add(spec.need_id)
-
-    missing = declared - covered
-    assert not missing, f"runner needs uncovered by day-1 catalog: {missing}"
+    missing = portfolio_needs - covered
+    assert not missing, f"portfolio runner needs uncovered by catalog: {missing}"

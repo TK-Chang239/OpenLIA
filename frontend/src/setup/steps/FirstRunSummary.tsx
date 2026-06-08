@@ -110,8 +110,7 @@ export function FirstRunSummary() {
 
 function DisabledDeptRow({ health }: { health: DepartmentHealth }) {
   const [expanded, setExpanded] = useState(false);
-  const hasDetails =
-    health.missing_categories.length > 0 || health.unresolved_needs.length > 0;
+  const hasDetails = health.missing_categories.length > 0;
 
   return (
     <li
@@ -157,20 +156,6 @@ function DisabledDeptRow({ health }: { health: DepartmentHealth }) {
               <p className="mt-1">
                 Add a connector in one of these categories on the Connectors
                 step, then click Re-check.
-              </p>
-            </div>
-          ) : null}
-          {health.unresolved_needs.length > 0 ? (
-            <div>
-              <p className="font-medium text-text-primary">Unresolved needs</p>
-              <ul className="ml-4 list-disc">
-                {health.unresolved_needs.map((n) => (
-                  <li key={n}>{n}</li>
-                ))}
-              </ul>
-              <p className="mt-1">
-                Open Review specs on a connector and approve a binding for each
-                need, then click Re-check.
               </p>
             </div>
           ) : null}

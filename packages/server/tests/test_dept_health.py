@@ -66,7 +66,6 @@ def test_serialize_shape():
         status="disabled",
         reason="Missing required categories: financial",
         missing_categories=[Category.FINANCIAL],
-        unresolved_needs=["q"],
     )
     blob = dept_health.serialize(h)
     # Unknown dept id → registry-derived fields are empty lists.
@@ -75,7 +74,6 @@ def test_serialize_shape():
         "status": "disabled",
         "reason": "Missing required categories: financial",
         "missing_categories": ["financial"],
-        "unresolved_needs": ["q"],
         "required_categories": [],
         "required_any_of": [],
         "unsatisfied_any_of": [],
@@ -94,7 +92,6 @@ def test_serialize_includes_registry_metadata_for_known_dept():
         status="disabled",
         reason="...",
         missing_categories=[],
-        unresolved_needs=[],
         unsatisfied_any_of=[(Category.NEWS, Category.WEB_SEARCH)],
     )
     blob = dept_health.serialize(h)
@@ -111,7 +108,6 @@ def test_serialize_macro_research_shows_web_search_required():
         status="active",
         reason=None,
         missing_categories=[],
-        unresolved_needs=[],
     )
     blob = dept_health.serialize(h)
     assert blob["required_categories"] == ["web_search"]
