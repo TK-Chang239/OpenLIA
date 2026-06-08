@@ -1,9 +1,11 @@
 """MR schedule service — singleton schedule per user tracked on
 the canonical `debt_cycle` mr_dashboard_state row.
 
-The canonical dashboard must be one the engine can actually produce: a
-fired MR_DASH job runs `run_to_cache(dashboard_slug=CANONICAL_DASHBOARD)`,
-so pinning it to an unimplemented slug makes every scheduled run fail."""
+The canonical dashboard is only the storage anchor for the cron (the
+`assessment_schedule` column lives on that row) and must be one the engine
+can produce. A fired MR_DASH job does not run just this dashboard: the
+scheduler tags scheduled fires with the `MR_DASH_ALL` sentinel and the
+executor regenerates every framework dashboard in dependency order."""
 
 from __future__ import annotations
 

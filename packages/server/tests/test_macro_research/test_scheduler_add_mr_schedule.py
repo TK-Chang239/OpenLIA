@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from openlia_server.db.models.dashboard import MrDashboardState
-from openlia_server.scheduler.registry import JobType
+from openlia_server.scheduler.registry import MR_DASH_ALL, JobType
 from openlia_server.scheduler.service import SchedulerService
 
 
@@ -35,6 +35,9 @@ async def test_accepts_mr_dashboard_state_row() -> None:
     inner.add_schedule.assert_awaited_once()
     _args, kwargs = inner.add_schedule.call_args
     assert kwargs.get("id", "").startswith("mr_dash:u-1")
+    # A scheduled fire carries the all-dashboards sentinel, not a single slug,
+    # so the executor regenerates every framework dashboard.
+    assert kwargs["args"] == (JobType.MR_DASH, "u-1", MR_DASH_ALL)
 
 
 @pytest.mark.asyncio

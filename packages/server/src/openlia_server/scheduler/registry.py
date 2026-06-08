@@ -42,6 +42,12 @@ PORTFOLIO_PRICE_REFRESH_KEY = "portfolio_price_refresh"
 EU_V2_SYNC_KEY = "eu_v2_sync"
 EU_V2_DISPATCH_KEY = "eu_v2_dispatch"
 
+# Schedule-id slot value for a scheduled MR_DASH cron fire. An ad-hoc
+# per-dashboard "Run now" passes a single dashboard slug; a cron fire instead
+# carries this sentinel, and the MrDashExecutor branches on it to regenerate
+# every framework dashboard in one run.
+MR_DASH_ALL = "__all__"
+
 
 _DEPARTMENT_BY_JOB: dict[JobType, str] = {
     JobType.MB_BRIEFING: "morning_briefing",

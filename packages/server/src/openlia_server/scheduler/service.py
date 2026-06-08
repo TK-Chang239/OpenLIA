@@ -32,6 +32,7 @@ from openlia_server.scheduler.registry import (
     EU_V2_DISPATCH_KEY,
     EU_V2_SYNC_KEY,
     MAINTENANCE_JOB_KEY,
+    MR_DASH_ALL,
     PORTFOLIO_PRICE_REFRESH_KEY,
     JobType,
     department_for_job_type,
@@ -317,9 +318,11 @@ class SchedulerService:
         schedule: MbSchedule | EuSchedule | RsSchedule | MrDashboardState,
     ) -> None:
         trigger = self._cron_trigger_for(schedule)
-        # MR executor uses the dashboard slug in the schedule_id slot so it
-        # knows which dashboard to run; MB/EU use the row id.
-        schedule_id = schedule.dashboard if isinstance(schedule, MrDashboardState) else schedule.id
+        # A scheduled MR fire regenerates every framework dashboard, so it
+        # carries the MR_DASH_ALL sentinel in the schedule_id slot (an ad-hoc
+        # per-dashboard "Run now" passes a single slug instead); MB/EU use the
+        # row id.
+        schedule_id = MR_DASH_ALL if isinstance(schedule, MrDashboardState) else schedule.id
         # MB allows multiple schedules per user — key by schedule_id so they
         # don't collide. Other job types remain keyed by (type, user) only.
         key_schedule_id = schedule.id if isinstance(schedule, MbSchedule) else None
