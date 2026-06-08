@@ -649,73 +649,20 @@ def create_app(
     # Type: dict[str, openlia.departments.health.DepartmentHealth].
     app.state.dept_health = {}
 
-    # Wire connector + runner-spec mutation hooks so the health cache stays
-    # in sync without route handlers needing to know about it.
+    # Wire connector mutation hook so the health cache stays in sync without
+    # route handlers needing to know about it.
     from openlia_server.services import (
         connectors_service as _connectors_service,
     )
     from openlia_server.services import (
         dept_health as _dept_health_svc,
     )
-    from openlia_server.services import (
-        runner_specs_service as _runner_specs_service,
-    )
 
     def _recompute_dept_health(session: DBSession) -> None:
         app.state.dept_health = _dept_health_svc.compute_all(session)
 
     _connectors_service.set_dept_health_hook(_recompute_dept_health)
-    _runner_specs_service.set_dept_health_hook(_recompute_dept_health)
 
-    # Hydrate the wizard-time adapter's per-department needs/categories
-    # registry from the live `openlia.departments` module. Without this,
-    # `propose_specs` iterates empty maps and every runner-bearing dept
-    # stays permanently disabled with every need unresolved.
-    _runner_specs_service.hydrate_dept_registries()
-
-    # Mount the wizard-time runner specs router. Production wiring of a
-    # real Quick-tier LLM client lives in the wizard adapter integration
-    # work (Phase 9 follow-up); the placeholder below raises loudly when
-    # the resolver runs without a configured provider so misconfiguration
-    # surfaces as a proposal-level error instead of silently dropping
-    # drafts.
-    from openlia_server.routes.runner_specs import (
-        build_dept_proposed_specs_router,
-        build_runner_specs_list_router,
-        build_runner_specs_router,
-    )
-    from openlia_server.services.adapter_llm_client import (
-        make_adapter_llm_client_factory,
-        make_agentic_resolver_factory,
-    )
-
-    _adapter_factory = make_adapter_llm_client_factory(factory)
-    _agentic_factory = make_agentic_resolver_factory(factory)
-    app.include_router(
-        build_runner_specs_router(
-            db_session_factory=factory,
-            llm_client_factory=_adapter_factory,
-        )
-    )
-    app.include_router(
-        build_dept_proposed_specs_router(
-            db_session_factory=factory,
-            agentic_factory=_agentic_factory,
-        )
-    )
-
-    def _transport_for_connector(conn: Any) -> Any:
-        from openlia_server.services.dispatcher_factory import _prepare_connector
-
-        return _prepare_connector(conn).transport
-
-    app.include_router(
-        build_runner_specs_list_router(
-            db_session_factory=factory,
-            llm_client_factory=_adapter_factory,
-            transport_factory=_transport_for_connector,
-        )
-    )
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_llm_slot_defaults_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))

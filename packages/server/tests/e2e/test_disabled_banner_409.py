@@ -56,7 +56,7 @@ def test_dept_health_marks_macro_research_disabled(client: TestClient) -> None:
     assert by_id["macro_research"]["status"] == "disabled"
     # MR now requires only web_search; financial/news are optional.
     assert "web_search" in by_id["macro_research"]["missing_categories"]
-    assert by_id["macro_research"]["unresolved_needs"] == []
+    assert by_id["macro_research"]["missing_categories"] != []
 
 
 def test_macro_research_run_assessment_returns_409_when_disabled(

@@ -19,9 +19,8 @@ def test_rs_optional_categories():
     assert {Category.FINANCIAL, Category.NEWS}.issubset(soft)
 
 
-def test_rs_requires_runner():
-    # Dashboard engine — no deterministic runner.
-    assert RetailSentimentDepartment.requires_runner is False
+def test_rs_disable_runtime_routing():
+    # Dashboard engine.
     assert RetailSentimentDepartment.disable_runtime_routing is False
 
 

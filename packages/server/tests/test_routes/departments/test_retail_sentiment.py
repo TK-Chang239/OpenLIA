@@ -416,10 +416,9 @@ def test_refresh_409_when_dept_disabled(session_factory, fake_scheduler) -> None
             department_id="retail_sentiment",
             status="disabled",
             reason="no WEB_SEARCH connector",
-            missing_categories=frozenset(),
-            satisfied_categories=frozenset(),
-            unsatisfied_any_of=(),
-            unresolved_needs=frozenset(),
+            missing_categories=[],
+            satisfied_categories=[],
+            unsatisfied_any_of=[],
         )
     }
     client = TestClient(app)

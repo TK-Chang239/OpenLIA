@@ -19,7 +19,11 @@ describe('AdminSection', () => {
     expect(screen.getByRole('tab', { name: /invites/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /users/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /reset requests/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /runner specs/i })).toBeInTheDocument();
+  });
+
+  it('no longer shows a runner specs tab', () => {
+    renderAt('/settings/admin/invites');
+    expect(screen.queryByRole('tab', { name: /runner specs/i })).toBeNull();
   });
 
   it('no longer shows a Connectors tab (now a top-level settings tab)', () => {

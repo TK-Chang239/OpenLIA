@@ -58,7 +58,6 @@ function stubAll() {
       status: "active",
       reason: null,
       missing_categories: [],
-      unresolved_needs: [],
       satisfied_categories: ["web_search", "news"],
       optional_categories: ["financial", "news"],
       required_categories: ["web_search"],

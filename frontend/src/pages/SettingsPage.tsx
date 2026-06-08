@@ -15,7 +15,6 @@ import { InvitesPanel } from '../components/settings/admin/InvitesPanel';
 import { UsersPanel } from '../components/settings/admin/UsersPanel';
 import { ResetRequestsPanel } from '../components/settings/admin/ResetRequestsPanel';
 import { ConnectorsSection } from '../components/settings/sections/ConnectorsSection';
-import { RunnerCallableSpecsAdminPanel } from '../components/settings/admin/RunnerCallableSpecsAdminPanel';
 import { useCurrentUser } from '../auth/useCurrentUser';
 import { useAuth } from '../auth/AuthContext';
 
@@ -53,7 +52,6 @@ export function SettingsPage(): JSX.Element {
             <Route path="invites" element={<InvitesPanel />} />
             <Route path="users" element={<UsersPanel currentUserId={user.id} />} />
             <Route path="reset-requests" element={<ResetRequestsPanel />} />
-            <Route path="runner-specs" element={<RunnerCallableSpecsAdminPanel />} />
             <Route path="skills" element={<AdminSkillsSection />} />
           </Route>
         ) : null}

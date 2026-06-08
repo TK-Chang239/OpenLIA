@@ -4,10 +4,9 @@ Asserts that creating one validated financial connector and one validated
 news connector lights up every chat-flow department (Secretary, Equity
 Research, Earnings Update, Morning Briefing, Panic Thermometer).
 
-Macro Research remains disabled (runner dept, no approved specs).
+Macro Research remains disabled (requires WEB_SEARCH, not created here).
 Retail Sentiment remains disabled because it requires WEB_SEARCH, which
-is not created in this scenario; it is a dashboard dept (not runner-driven)
-so it has no unresolved_needs — only a missing WEB_SEARCH category.
+is not created in this scenario.
 """
 
 from __future__ import annotations
@@ -106,10 +105,9 @@ def test_wizard_happy_path_lights_up_chat_flow_depts(client: TestClient, monkeyp
             f"{dept_id} expected active, got {by_id[dept_id]}"
         )
 
-    # RS is a dashboard dept (not runner-driven). It requires WEB_SEARCH,
+    # RS is a dashboard dept. It requires WEB_SEARCH,
     # which was not created in this scenario, so it is disabled with a
-    # missing category and no unresolved needs.
+    # missing category.
     rs = by_id["retail_sentiment"]
     assert rs["status"] == "disabled"
     assert "web_search" in rs["missing_categories"]
-    assert rs["unresolved_needs"] == []

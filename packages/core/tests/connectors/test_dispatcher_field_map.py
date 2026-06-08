@@ -140,7 +140,7 @@ async def test_field_map_missing_canonical_key_raises_field_map_error() -> None:
 @pytest.mark.asyncio
 async def test_field_map_ignored_for_scalar_shape() -> None:
     spec = CallableSpec(
-        need_id="debt_gdp",
+        need_id="stock_quote",
         access_mode="cli_mcp",
         tool_name="posts",
         shape="float",
@@ -148,10 +148,10 @@ async def test_field_map_ignored_for_scalar_shape() -> None:
     )
     d = Dispatcher(
         connectors={"c1": _conn(110.5)},
-        callable_specs={("macro_research", "debt_gdp"): spec},
+        callable_specs={("portfolio", "stock_quote"): spec},
     )
-    async with d.in_department("macro_research"):
-        out = await d.fetch_need("debt_gdp")
+    async with d.in_department("portfolio"):
+        out = await d.fetch_need("stock_quote")
     assert out == 110.5
 
 

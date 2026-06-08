@@ -122,6 +122,52 @@ def test_hydrate_spec_round_trips_result_path() -> None:
     assert hydrated.result_path == ("json", "usd_share_pct")
 
 
+def test_hydrate_spec_round_trips_field_map() -> None:
+    """Specs persist `field_map` as a dict in the spec JSON;
+    the hydrator must read it back so column-rename specs
+    (e.g. EODHD eod_history) keep applying the mapping after
+    every dispatcher rebuild.
+    """
+    from dataclasses import dataclass
+
+    from openlia_server.services.dispatcher_factory import _hydrate_spec
+
+    @dataclass
+    class _StubRow:
+        department_id: str
+        need_id: str
+        access_mode: str
+        spec: dict
+
+    _EODHD_EOD_FIELD_MAP = {
+        "date": "date",
+        "open": "open",
+        "high": "high",
+        "low": "low",
+        "close": "close",
+        "adjusted_close": "adjusted_close",
+        "volume": "volume",
+    }
+
+    row = _StubRow(
+        department_id="portfolio",
+        need_id="eod_history",
+        access_mode="remote_mcp",
+        spec={
+            "need_id": "eod_history",
+            "access_mode": "remote_mcp",
+            "tool_name": "get_eod_data",
+            "constants": {},
+            "param_bindings": {},
+            "shape": "list[dict]",
+            "result_path": [],
+            "field_map": _EODHD_EOD_FIELD_MAP,
+        },
+    )
+    hydrated = _hydrate_spec(row)
+    assert hydrated.field_map == _EODHD_EOD_FIELD_MAP
+
+
 def test_build_transport_leaves_unknown_placeholder_unchanged() -> None:
     """If the secret isn't supplied, the placeholder stays literal — surfacing
     a clear failure rather than silently coercing to an empty string.

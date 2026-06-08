@@ -22,8 +22,7 @@ def test_eu_optional_categories():
     assert Category.NEWS in EarningsUpdateDepartment.optional_categories
 
 
-def test_eu_does_not_require_runner():
-    assert EarningsUpdateDepartment.requires_runner is False
+def test_eu_disable_runtime_routing():
     assert EarningsUpdateDepartment.disable_runtime_routing is False
 
 

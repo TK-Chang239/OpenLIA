@@ -65,7 +65,7 @@ async def test_install_builtin_creates_connector_with_modes_from_template(
 
 
 # ---------------------------------------------------------------------------
-# test 3: runner_specs rows written for macro_research needs
+# test 3: runner_specs rows written for portfolio needs
 # ---------------------------------------------------------------------------
 
 
@@ -76,7 +76,7 @@ async def test_install_builtin_inserts_runner_callable_specs_for_runner_needs(
 ) -> None:
     _stub_validate_ok(monkeypatch)
 
-    connector = await install_builtin(db_session, template_id="firecrawl", api_key="fc-test-key")
+    connector = await install_builtin(db_session, template_id="eodhd", api_key="eodhd-test-key")
 
     rows = (
         db_session.query(RunnerCallableSpec)
@@ -84,22 +84,14 @@ async def test_install_builtin_inserts_runner_callable_specs_for_runner_needs(
         .all()
     )
 
-    # Firecrawl covers five needs: three world-order series, interest_revenue
-    # (which neither EODHD nor FMP exposes), and geopolitical_news as a
-    # headline-source fallback for users without NewsAPI.ai.
-    assert len(rows) == 5
+    # EODHD covers three portfolio needs: stock_quote, company_profile, eod_history.
+    assert len(rows) == 3
 
     need_ids = {r.need_id for r in rows}
-    assert need_ids == {
-        "usd_fx_reserve_share",
-        "cb_gold_purchases",
-        "foreign_treasury_holdings",
-        "interest_revenue",
-        "geopolitical_news",
-    }
+    assert need_ids == {"stock_quote", "company_profile", "eod_history"}
 
     for row in rows:
-        assert row.department_id == "macro_research"
+        assert row.department_id == "portfolio"
         assert row.connector_id == connector.id
         assert row.access_mode == "python_lib"
         assert "need_id" in row.spec
@@ -141,13 +133,13 @@ async def test_install_builtin_replaces_specs_for_overlapping_needs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """EODHD and FMP are alternative providers — both claim
-    (macro_research, stock_quote). UNIQUE(dept, need) on
+    (portfolio, stock_quote). UNIQUE(dept, need) on
     runner_callable_specs forbids two rows for the same key. Installing
     the second should transfer ownership of overlapping needs to the
     new connector (replace) rather than raising IntegrityError.
 
-    EODHD's non-overlapping specs (gdp_yoy, cpi_yoy, debt_gdp,
-    cpi_core_yoy, pmi, social_posts) must remain on the EODHD connector.
+    EODHD's non-overlapping specs (company_profile, eod_history)
+    must remain on the EODHD connector after FMP installs.
     """
     from openlia_server.services import connectors_service as cs
 
@@ -171,15 +163,13 @@ async def test_install_builtin_replaces_specs_for_overlapping_needs(
     rows = db_session.query(RunnerCallableSpec).all()
     by_need = {r.need_id: r for r in rows}
 
-    # FMP claims stock_quote, cpi_yoy, gdp_yoy — all transferred from EODHD.
-    fmp_owned = {"stock_quote", "cpi_yoy", "gdp_yoy"}
-    for need in fmp_owned:
-        assert by_need[need].connector_id == fmp.id, (
-            f"{need!r} should be owned by FMP after install"
-        )
+    # FMP claims stock_quote — transferred from EODHD.
+    assert by_need["stock_quote"].connector_id == fmp.id, (
+        "'stock_quote' should be owned by FMP after install"
+    )
 
     # EODHD's non-overlapping specs remain.
-    eodhd_only = {"debt_gdp", "cpi_core_yoy", "pmi", "social_posts"}
+    eodhd_only = {"company_profile", "eod_history"}
     for need in eodhd_only:
         assert by_need[need].connector_id == eodhd.id, (
             f"{need!r} should still be owned by EODHD after FMP install"
@@ -237,16 +227,16 @@ async def test_sync_template_specs_inserts_new_specs_added_to_template(
     )
     assert initial == len(FIRECRAWL_TEMPLATE.runner_specs)
 
-    # Simulate a future template upgrade: prepend a brand-new spec for
+    # Simulate a future template upgrade: add a brand-new spec for
     # a need the original template did NOT cover, so we can prove the
     # upserted set strictly grew.
     new_spec = CallableSpec(
-        need_id="cpi_yoy",  # MR need; not currently in firecrawl runner_specs
+        need_id="stock_quote",  # portfolio need; not currently in firecrawl runner_specs
         access_mode="python_lib",
         method="Firecrawl.scrape",
         constants={"url": "https://example.invalid/"},
         result_path=("json", "x"),
-        shape="float",
+        shape="dict",
     )
     upgraded = replace(
         FIRECRAWL_TEMPLATE,
@@ -265,7 +255,7 @@ async def test_sync_template_specs_inserts_new_specs_added_to_template(
         .all()
     )
     need_ids = {r.need_id for r in rows}
-    assert "cpi_yoy" in need_ids
+    assert "stock_quote" in need_ids
     assert len(rows) == len(upgraded.runner_specs)
 
 

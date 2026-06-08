@@ -36,47 +36,30 @@ def test_eodhd_python_lib_recipe_targets_extended_api_client() -> None:
 
 
 def test_eodhd_runner_specs_cover_expected_needs() -> None:
-    """EODHD covers macro-indicators-catalog series (debt_percent_gdp,
-    gdp_growth_annual, inflation_consumer_prices_annual) plus the two
-    derived series surfaced via ExtendedAPIClient (core_inflation_rate,
-    ism_manufacturing_pmi). interest_revenue is uncovered here — it
-    falls to Firecrawl scraping.
+    """EODHD covers three Portfolio needs via ExtendedAPIClient:
+    stock_quote (live price), company_profile (fundamentals), and
+    eod_history (daily OHLCV time-series).
     """
     need_ids = {spec.need_id for spec in EODHD_TEMPLATE.runner_specs}
-    assert need_ids == {
-        "debt_gdp",
-        "gdp_yoy",
-        "cpi_yoy",
-        "cpi_core_yoy",
-        "pmi",
-        "stock_quote",
-        "social_posts",
-    }
+    assert need_ids == {"stock_quote", "company_profile", "eod_history"}
 
 
-def test_eodhd_macro_specs_target_float_reducer_methods() -> None:
-    """The 3 macro indicators that come from get_macro_indicators_data
-    (debt_gdp, gdp_yoy, cpi_yoy) must point at ExtendedAPIClient reducer
-    methods (debt_to_gdp / gdp_growth_yoy / cpi_yoy), not at the raw
-    SDK call. The raw call returns list[dict] which would be a runtime
-    shape mismatch against shape='float'.
-    """
+def test_eodhd_portfolio_specs_target_correct_sdk_methods() -> None:
+    """Each portfolio spec must target the right ExtendedAPIClient method."""
     method_for: dict[str, str] = {}
     for spec in EODHD_TEMPLATE.runner_specs:
         method_for[spec.need_id] = spec.method or ""
-    assert method_for["debt_gdp"] == "ExtendedAPIClient.debt_to_gdp"
-    assert method_for["gdp_yoy"] == "ExtendedAPIClient.gdp_growth_yoy"
-    assert method_for["cpi_yoy"] == "ExtendedAPIClient.cpi_yoy"
+    assert method_for["stock_quote"] == "ExtendedAPIClient.get_live_stock_prices"
+    assert method_for["company_profile"] == "ExtendedAPIClient.get_fundamentals_data"
+    assert method_for["eod_history"] == "ExtendedAPIClient.get_eod_historical_stock_market_data"
 
 
 def test_eodhd_runner_specs_have_python_lib_or_mcp_access_mode() -> None:
     for spec in EODHD_TEMPLATE.runner_specs:
         assert spec.access_mode in ("python_lib", "cli_mcp", "remote_mcp")
         if spec.access_mode == "python_lib":
-            # Module varies: get_macro_indicators_data / get_live_stock_prices /
-            # get_sentiment come from the eodhd package; core_inflation_rate
-            # and ism_manufacturing_pmi come from our wrapper module.
-            assert spec.module in ("eodhd", "openlia.data.eodhd_extended")
+            # All three portfolio specs target the eodhd package via ExtendedAPIClient.
+            assert spec.module == "eodhd"
             assert spec.method is not None
             assert spec.instance_factory is not None
             assert spec.instance_factory.cls == "ExtendedAPIClient"

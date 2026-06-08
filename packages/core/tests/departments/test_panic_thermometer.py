@@ -29,8 +29,7 @@ def test_pt_optional_categories():
     assert Category.NEWS in PanicThermometerDepartment.optional_categories
 
 
-def test_pt_does_not_require_runner():
-    assert PanicThermometerDepartment.requires_runner is False
+def test_pt_disable_runtime_routing():
     assert PanicThermometerDepartment.disable_runtime_routing is False
 
 

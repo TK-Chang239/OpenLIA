@@ -30,8 +30,7 @@ def test_mb_optional_categories_empty():
     assert MorningBriefingDepartment.optional_categories == ()
 
 
-def test_mb_does_not_require_runner():
-    assert MorningBriefingDepartment.requires_runner is False
+def test_mb_disable_runtime_routing():
     assert MorningBriefingDepartment.disable_runtime_routing is False
 
 

@@ -24,14 +24,13 @@ beforeEach(() => {
 });
 
 describe("FirstRunSummary", () => {
-  it("expands a disabled department to show missing categories and unresolved needs", async () => {
+  it("expands a disabled department to show missing categories", async () => {
     mocked.fetchDeptHealth.mockResolvedValue([
       {
         department_id: "macro_research",
         status: "disabled",
         reason: "Missing required categories: financial",
         missing_categories: ["financial"],
-        unresolved_needs: ["stock_quote"],
       },
     ]);
     render(<FirstRunSummary />);
@@ -44,8 +43,6 @@ describe("FirstRunSummary", () => {
     );
     expect(details).toHaveTextContent(/Missing categories/);
     expect(details).toHaveTextContent(/financial/);
-    expect(details).toHaveTextContent(/Unresolved needs/);
-    expect(details).toHaveTextContent(/stock_quote/);
   });
 
   it("re-check button calls recheckDeptHealth and updates the list", async () => {
@@ -55,7 +52,6 @@ describe("FirstRunSummary", () => {
         status: "disabled",
         reason: "Missing required categories: financial",
         missing_categories: ["financial"],
-        unresolved_needs: [],
       },
     ]);
     mocked.recheckDeptHealth.mockResolvedValue([
@@ -64,7 +60,6 @@ describe("FirstRunSummary", () => {
         status: "active",
         reason: null,
         missing_categories: [],
-        unresolved_needs: [],
       },
     ]);
     render(<FirstRunSummary />);
@@ -92,14 +87,13 @@ describe("FirstRunSummary", () => {
     );
   });
 
-  it("does not render details when a disabled dept has no categories or needs", async () => {
+  it("does not render details when a disabled dept has no missing categories", async () => {
     mocked.fetchDeptHealth.mockResolvedValue([
       {
         department_id: "panic_thermometer",
         status: "disabled",
         reason: "Missing required categories: financial",
         missing_categories: [],
-        unresolved_needs: [],
       },
     ]);
     render(<FirstRunSummary />);

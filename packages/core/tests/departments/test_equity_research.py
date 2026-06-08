@@ -27,8 +27,7 @@ def test_er_optional_categories():
     assert {Category.NEWS, Category.SOCIAL, Category.WEB_SEARCH}.issubset(soft)
 
 
-def test_er_does_not_require_runner():
-    assert EquityResearchDepartment.requires_runner is False
+def test_er_disable_runtime_routing():
     assert EquityResearchDepartment.disable_runtime_routing is False
 
 

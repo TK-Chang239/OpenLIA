@@ -27,8 +27,7 @@ def test_secretary_optional_categories_cover_all_connector_kinds():
     } <= optional
 
 
-def test_secretary_does_not_require_runner():
-    assert SecretaryDepartment.requires_runner is False
+def test_secretary_disable_runtime_routing():
     assert SecretaryDepartment.disable_runtime_routing is False
 
 

@@ -385,25 +385,13 @@ async def create_connector(
     return row
 
 
-# Maps each declared runner need_id to its owning department_id.
-# Built from packages/core/src/openlia/departments/*.needs.yaml.
+# Maps each runner need_id to its owning department_id.
+# Scoped to Portfolio only — the sole department that uses the
+# deterministic-runner chain for live price data.
 _NEED_DEPARTMENT_MAP: dict[str, str] = {
-    # macro_research
-    "debt_gdp": "macro_research",
-    "interest_revenue": "macro_research",
-    "pmi": "macro_research",
-    "gdp_yoy": "macro_research",
-    "cpi_yoy": "macro_research",
-    "cpi_core_yoy": "macro_research",
-    "usd_fx_reserve_share": "macro_research",
-    "cb_gold_purchases": "macro_research",
-    "foreign_treasury_holdings": "macro_research",
-    "stock_quote": "macro_research",
-    "geopolitical_news": "macro_research",
-    # retail_sentiment
-    "social_posts": "retail_sentiment",
-    # portfolio
+    "stock_quote": "portfolio",
     "eod_history": "portfolio",
+    "company_profile": "portfolio",
 }
 
 
@@ -530,7 +518,7 @@ def _upsert_runner_specs_from_template(
     `template.runner_specs`. Returns the number of specs upserted.
 
     Day-1 templates can be alternative providers (EODHD vs FMP both
-    claim macro_research/stock_quote). The (dept, need) UNIQUE
+    claim portfolio/stock_quote). The (dept, need) UNIQUE
     constraint forbids two rows for the same key, so we transfer
     ownership: delete any existing row for each (dept, need) this
     template covers, then insert the new spec. The previous owning
