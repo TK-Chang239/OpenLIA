@@ -4,8 +4,11 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
 import {
+  deleteSchedule,
   getDashboard,
+  getSchedule,
   listDashboards,
+  putSchedule,
   type DashboardSummary,
 } from "../../api/macro_research";
 import "../../components/macro_research/_shared/styles.css";
@@ -45,11 +48,32 @@ const TCODE_BY_SLUG: Record<string, string> = {
   five_forces: "T5",
 };
 
-const REFRESH_OPTION_KEYS: { key: string; ms: number | null }[] = [
-  { key: "macro.auto_refresh_5min", ms: 300_000 },
-  { key: "macro.auto_refresh_15min", ms: 900_000 },
-  { key: "macro.auto_refresh_off", ms: null },
+// Refresh cadence drives the per-user assessment schedule (a singleton cron
+// shared across every dashboard template). "weekly"/"monthly" persist a cron
+// via the schedule API so the engine regenerates on that calendar; "auto"
+// clears the cron and falls back to live in-session polling.
+type CadenceMode = "weekly" | "monthly" | "auto";
+
+const WEEKLY_CRON = "0 0 * * 0"; // Sunday 00:00
+const MONTHLY_CRON = "0 0 1 * *"; // 1st of month 00:00
+
+// In auto mode, re-fetch the active dashboard on this interval so a backend
+// regeneration shows up without a manual reload.
+const AUTO_POLL_MS = 300_000;
+
+const REFRESH_OPTION_KEYS: { key: string; mode: CadenceMode }[] = [
+  { key: "macro.refresh_weekly", mode: "weekly" },
+  { key: "macro.refresh_monthly", mode: "monthly" },
+  { key: "macro.refresh_auto", mode: "auto" },
 ];
+
+function cronToMode(cron: string | null | undefined): CadenceMode {
+  if (cron === WEEKLY_CRON) return "weekly";
+  if (cron === MONTHLY_CRON) return "monthly";
+  // null (no schedule) and any unrecognized cron both present as auto; an
+  // unrecognized cron is left untouched until the user explicitly changes it.
+  return "auto";
+}
 
 const PAGE_EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -57,14 +81,32 @@ export default function MacroResearch(): JSX.Element {
   const { t } = useTranslation();
   const [dashboards, setDashboards] = useState<DashboardTab[]>(FALLBACK_TABS);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [refreshMs, setRefreshMs] = useState<number | null>(300_000);
+  const [cadence, setCadence] = useState<CadenceMode>("auto");
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
 
   const refreshOptions = useMemo(
-    () => REFRESH_OPTION_KEYS.map((o) => ({ label: t(o.key), ms: o.ms })),
+    () => REFRESH_OPTION_KEYS.map((o) => ({ label: t(o.key), mode: o.mode })),
     [t],
   );
+
+  // Hydrate the cadence control from the persisted schedule on mount.
+  useEffect(() => {
+    getSchedule()
+      .then((s) => setCadence(cronToMode(s.cron_expression)))
+      .catch(() => undefined);
+  }, []);
+
+  const onChangeCadence = async (mode: CadenceMode) => {
+    setCadence(mode);
+    try {
+      if (mode === "weekly") await putSchedule(WEEKLY_CRON);
+      else if (mode === "monthly") await putSchedule(MONTHLY_CRON);
+      else await deleteSchedule();
+    } catch (e) {
+      console.error("Failed to update macro research refresh cadence", e);
+    }
+  };
 
   useEffect(() => {
     listDashboards()
@@ -82,16 +124,16 @@ export default function MacroResearch(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (refreshMs === null) return;
+    if (cadence !== "auto") return;
     const segments = location.pathname.split("/").filter(Boolean);
     const activeSlug = segments[segments.length - 1];
     const knownSlugs = new Set(dashboards.map((d) => d.slug));
     if (!activeSlug || !knownSlugs.has(activeSlug)) return;
     const id = window.setInterval(() => {
       getDashboard(activeSlug).catch(() => undefined);
-    }, refreshMs);
+    }, AUTO_POLL_MS);
     return () => window.clearInterval(id);
-  }, [refreshMs, location.pathname, dashboards]);
+  }, [cadence, location.pathname, dashboards]);
 
   /* Page-mount entrance: animates the whole macro-research shell in
      when the user navigates from another route. With reduced-motion,
@@ -144,15 +186,12 @@ export default function MacroResearch(): JSX.Element {
         <select
           aria-label={t("macro.auto_refresh_aria")}
           data-testid="mr-refresh-select"
-          value={refreshMs ?? ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            setRefreshMs(v === "" ? null : Number(v));
-          }}
+          value={cadence}
+          onChange={(e) => onChangeCadence(e.target.value as CadenceMode)}
           className="h-[30px] rounded-md border border-[--color-border-subtle] bg-transparent pl-2.5 pr-7 font-mono text-[12px] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
         >
           {refreshOptions.map((o) => (
-            <option key={o.label} value={o.ms ?? ""}>
+            <option key={o.mode} value={o.mode}>
               {o.label}
             </option>
           ))}

@@ -932,10 +932,10 @@
     "live_label": "即時",
     "streaming_series": "串流中 · {{count}} 項數列",
     "settings": "設定",
-    "auto_refresh_aria": "自動更新頻率",
-    "auto_refresh_5min": "自動更新 · 每 5 分鐘",
-    "auto_refresh_15min": "自動更新 · 每 15 分鐘",
-    "auto_refresh_off": "自動更新 · 關閉"
+    "auto_refresh_aria": "更新頻率",
+    "refresh_weekly": "每週一次",
+    "refresh_monthly": "每月一次",
+    "refresh_auto": "自動更新"
   },
   "morning_briefing": {
     "title": "晨間簡報",
