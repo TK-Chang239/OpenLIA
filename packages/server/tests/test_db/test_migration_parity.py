@@ -184,8 +184,6 @@ def test_boolean_server_defaults(tmp_path: Path, table: str, column: str, expect
     [
         ("pt_user_configs", "panel_config", "[]"),
         ("pt_user_configs", "composite_settings", "{}"),
-        ("mr_dashboard_state", "view_config", "{}"),
-        ("mr_dashboard_state", "threshold_overrides", "{}"),
         ("rs_user_config", "metric_settings", "{}"),
         ("rs_user_config", "filter_presets", "[]"),
     ],

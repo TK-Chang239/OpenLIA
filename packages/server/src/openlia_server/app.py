@@ -771,17 +771,14 @@ def create_app(
         )
     )
 
-    # Macro Research — singletons for dashboard CRUD + schedule.
-    from openlia_server.services.mr_dashboard import MRDashboardService
+    # Macro Research — singleton for the per-user assessment schedule.
     from openlia_server.services.mr_schedules import MRScheduleService
 
-    mr_dashboard_svc = MRDashboardService(session_factory=factory)
     # Factory-time MR schedule service. The lifespan replaces this with
     # a scheduler-bound instance on app.state.mr_schedule_service before
     # the first request. The route layer reads from app.state for every
     # handler so there is no risk of binding the no-scheduler instance.
     mr_schedule_svc = MRScheduleService(session_factory=factory)
-    app.state.mr_dashboard_service = mr_dashboard_svc
     app.state.mr_schedule_service = mr_schedule_svc
 
     # Wire the cross-department snapshot reader into the registered department
@@ -799,7 +796,6 @@ def create_app(
         build_macro_research_router(
             db_session_factory=factory,
             mode=mode,
-            dashboard_service=mr_dashboard_svc,
         )
     )
     app.include_router(

@@ -10,11 +10,6 @@ export interface DashboardResponse<T = unknown> {
   provenance: string | null;
 }
 
-export interface DashboardConfig {
-  view_config: Record<string, unknown>;
-  threshold_overrides: Record<string, unknown>;
-}
-
 export interface ScheduleState {
   cron_expression: string | null;
   last_assessment_at?: string | null;
@@ -38,32 +33,6 @@ export function getDashboard<T = unknown>(
   slug: string,
 ): Promise<DashboardResponse<T>> {
   return _fetch(`${base}/dashboards/${slug}`) as Promise<DashboardResponse<T>>;
-}
-
-export function getConfig(slug: string): Promise<DashboardConfig> {
-  return _fetch(`${base}/dashboards/${slug}/config`) as Promise<DashboardConfig>;
-}
-
-export function putConfig(
-  slug: string,
-  body: Partial<DashboardConfig>,
-): Promise<DashboardConfig> {
-  return _fetch(`${base}/dashboards/${slug}/config`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }) as Promise<DashboardConfig>;
-}
-
-export function putThresholdOverrides(
-  slug: string,
-  threshold_overrides: Record<string, unknown>,
-): Promise<DashboardConfig> {
-  return _fetch(`${base}/dashboards/${slug}/threshold-overrides`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ threshold_overrides }),
-  }) as Promise<DashboardConfig>;
 }
 
 export interface RunAssessmentResult {

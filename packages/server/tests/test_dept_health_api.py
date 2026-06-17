@@ -206,9 +206,6 @@ def test_mr_run_assessment_returns_409_when_disabled(db_session_factory) -> None
         build_macro_research_router,
     )
 
-    dashboard_svc = MagicMock()
-    dashboard_svc.get_or_create.return_value = MagicMock(view_config={}, threshold_overrides={})
-
     def _override_auth():
         return MagicMock(id="u-1", email="a@b", is_admin=False)
 
@@ -216,7 +213,6 @@ def test_mr_run_assessment_returns_409_when_disabled(db_session_factory) -> None
     router = build_macro_research_router(
         db_session_factory=db_session_factory,
         mode="personal",
-        dashboard_service=dashboard_svc,
         require_auth_override=_override_auth,
     )
     app.include_router(router)

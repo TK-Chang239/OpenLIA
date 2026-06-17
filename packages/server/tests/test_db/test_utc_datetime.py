@@ -17,8 +17,6 @@ def _make_mr_row(db_session: Session, *, last_assessment_at: datetime | None) ->
         id="mr-utc",
         user_id="u-utc",
         dashboard="debt_cycle",
-        view_config={},
-        threshold_overrides={},
         last_assessment_at=last_assessment_at,
     )
     db_session.add(row)
