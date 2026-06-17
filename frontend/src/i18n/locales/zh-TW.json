@@ -395,7 +395,8 @@
       "password_change_failed": "變更密碼失敗。",
       "enter_current_temp_password": "請輸入您目前的（臨時）密碼。",
       "new_password_must_differ": "新密碼必須與臨時密碼不同。",
-      "enter_current_password": "請輸入目前的密碼。"
+      "enter_current_password": "請輸入目前的密碼。",
+      "new_password_must_differ_current": "新密碼必須與目前的密碼不同。"
     },
     "setup": {
       "loading": "載入中…",

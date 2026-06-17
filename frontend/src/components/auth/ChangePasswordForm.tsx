@@ -44,7 +44,7 @@ export function ChangePasswordForm() {
       errs.confirm = t("auth.errors.passwords_do_not_match");
     }
     if (newPw === current && newPw.length > 0) {
-      errs.new_password = t("auth.errors.new_password_must_differ");
+      errs.new_password = t("auth.errors.new_password_must_differ_current");
     }
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);

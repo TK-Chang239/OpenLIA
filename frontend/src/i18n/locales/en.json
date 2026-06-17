@@ -395,7 +395,8 @@
       "password_change_failed": "Password change failed.",
       "enter_current_temp_password": "Enter your current (temporary) password.",
       "new_password_must_differ": "New password must differ from the temporary one.",
-      "enter_current_password": "Enter your current password."
+      "enter_current_password": "Enter your current password.",
+      "new_password_must_differ_current": "New password must be different from your current one."
     },
     "setup": {
       "loading": "Loading…",
