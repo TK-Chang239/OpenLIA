@@ -14,6 +14,7 @@ import {
   type AuthUser,
   type LoginInput,
 } from "../api/auth";
+import { ApiError } from "../api/client";
 
 export type AuthStatus =
   | "loading"
@@ -47,24 +48,25 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     useState<boolean>(false);
 
   const refresh = useCallback(async (): Promise<void> => {
-    // Login pages disabled for the UI remake: any session-fetch outcome that
-    // is not a fully-formed authenticated payload collapses into personal
-    // mode with the synthetic local user. ProtectedRoute therefore never
-    // sees "unauthenticated" and never redirects to /login.
     try {
       const fetched = await getSession();
-      if (fetched && fetched.user) {
-        setUser(fetched.user);
-        setMustChangePasswordState(fetched.must_change_password);
-        setStatus("authenticated");
+      setUser(fetched.user);
+      setMustChangePasswordState(fetched.must_change_password);
+      setStatus("authenticated");
+    } catch (err) {
+      // 404 = auth routes unmounted => personal (single-user, no auth).
+      // Any other failure (401 = company, no session) => unauthenticated,
+      // which ProtectedRoute redirects to /login.
+      if (err instanceof ApiError && err.status === 404) {
+        setUser(LOCAL_USER);
+        setMustChangePasswordState(false);
+        setStatus("personal");
         return;
       }
-    } catch {
-      // fall through to personal mode below
+      setUser(null);
+      setMustChangePasswordState(false);
+      setStatus("unauthenticated");
     }
-    setUser(LOCAL_USER);
-    setMustChangePasswordState(false);
-    setStatus("personal");
   }, []);
 
   const login = useCallback(async (input: LoginInput): Promise<void> => {
@@ -80,11 +82,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     } catch (err) {
       console.warn("logout failed", err);
     }
-    // Login pages disabled: collapse back to personal mode rather than
-    // bouncing through /login.
-    setUser(LOCAL_USER);
+    setUser(null);
     setMustChangePasswordState(false);
-    setStatus("personal");
+    setStatus("unauthenticated");
   }, []);
 
   const setMustChangePassword = useCallback((v: boolean) => {
