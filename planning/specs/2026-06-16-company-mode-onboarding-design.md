@@ -205,3 +205,24 @@ Account → SessionsPanel → POST /api/auth/logout-all
   stay correct. Covered by the audit pass and the personal regression check.
 - Pre-existing CI red (`SettingsShellBlocker` AbortSignal in vitest; alembic
   drift in pytest) is unrelated and must not be conflated with this work.
+
+## Divergences recorded during implementation (2026-06-16)
+
+- **`AuthContext.test.tsx` already existed** (10 tests), contrary to the plan's
+  "create". The restore preserved the 7 still-valid tests and corrected the 3
+  that asserted the old disabled-login behavior (401→personal, 500→personal),
+  rather than replacing the file with a minimal 3-test suite.
+- **Desktop sidebar had no sign-out at all.** A prior test claimed it "moved to
+  Settings → Account", but `AccountSection` no longer renders one (silently
+  dropped in the remake), and the only desktop sign-out was `SessionsPanel`'s
+  heavy "sign out of all devices". Task 6 fills this real gap and gives
+  desktop/mobile parity; the stale test was corrected.
+- **Audit surfaced two more remake-era stale tests** beyond the planned three
+  files: `ProtectedRoute.test.tsx` asserted 401→render-children (now
+  401→redirect `/login`), and `useTimezoneAutoCapture.test.tsx` used a generic
+  `Error` as a proxy for personal mode (now only a 404 `ApiError` signals
+  personal mode). Both corrected.
+- **Backend onboarding loop** steps 1–4 were already covered by
+  `test_e2e_smoke_matrix.py::test_journey_company_invite_register_login`; Task 7
+  added only the missing disable→401 enforcement test
+  (`test_company_onboarding_loop`).
