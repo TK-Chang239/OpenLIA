@@ -68,8 +68,6 @@ class MRScheduleService:
                     id=str(uuid.uuid4()),
                     user_id=user_id,
                     dashboard=self.CANONICAL_DASHBOARD,
-                    view_config={},
-                    threshold_overrides={},
                 )
                 s.add(existing)
             existing.assessment_schedule = cron_expression

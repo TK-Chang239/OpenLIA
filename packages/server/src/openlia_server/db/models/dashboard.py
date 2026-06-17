@@ -148,12 +148,6 @@ class MrDashboardState(Base):
         nullable=False,
     )
     dashboard: Mapped[str] = mapped_column(String(32), nullable=False)
-    view_config: Mapped[dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict, server_default=text("'{}'")
-    )
-    threshold_overrides: Mapped[dict[str, Any]] = mapped_column(
-        JSON, nullable=False, default=dict, server_default=text("'{}'")
-    )
     assessment_schedule: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_assessment_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

@@ -4,13 +4,18 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
 import {
-  deleteSchedule,
   getDashboard,
   getSchedule,
   listDashboards,
-  putSchedule,
   type DashboardSummary,
 } from "../../api/macro_research";
+import {
+  applyCadence,
+  CADENCE_LABEL_KEY,
+  CADENCE_ORDER,
+  cronToMode,
+  type CadenceMode,
+} from "./macro_research/cadence";
 import "../../components/macro_research/_shared/styles.css";
 import SummaryView from "./macro_research/SummaryView";
 import DebtCycleView from "./macro_research/DebtCycleView";
@@ -48,32 +53,9 @@ const TCODE_BY_SLUG: Record<string, string> = {
   five_forces: "T5",
 };
 
-// Refresh cadence drives the per-user assessment schedule (a singleton cron
-// shared across every dashboard template). "weekly"/"monthly" persist a cron
-// via the schedule API so the engine regenerates on that calendar; "auto"
-// clears the cron and falls back to live in-session polling.
-type CadenceMode = "weekly" | "monthly" | "auto";
-
-const WEEKLY_CRON = "0 0 * * 0"; // Sunday 00:00
-const MONTHLY_CRON = "0 0 1 * *"; // 1st of month 00:00
-
 // In auto mode, re-fetch the active dashboard on this interval so a backend
 // regeneration shows up without a manual reload.
 const AUTO_POLL_MS = 300_000;
-
-const REFRESH_OPTION_KEYS: { key: string; mode: CadenceMode }[] = [
-  { key: "macro.refresh_weekly", mode: "weekly" },
-  { key: "macro.refresh_monthly", mode: "monthly" },
-  { key: "macro.refresh_auto", mode: "auto" },
-];
-
-function cronToMode(cron: string | null | undefined): CadenceMode {
-  if (cron === WEEKLY_CRON) return "weekly";
-  if (cron === MONTHLY_CRON) return "monthly";
-  // null (no schedule) and any unrecognized cron both present as auto; an
-  // unrecognized cron is left untouched until the user explicitly changes it.
-  return "auto";
-}
 
 const PAGE_EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -86,7 +68,7 @@ export default function MacroResearch(): JSX.Element {
   const prefersReducedMotion = useReducedMotion();
 
   const refreshOptions = useMemo(
-    () => REFRESH_OPTION_KEYS.map((o) => ({ label: t(o.key), mode: o.mode })),
+    () => CADENCE_ORDER.map((mode) => ({ label: t(CADENCE_LABEL_KEY[mode]), mode })),
     [t],
   );
 
@@ -100,9 +82,7 @@ export default function MacroResearch(): JSX.Element {
   const onChangeCadence = async (mode: CadenceMode) => {
     setCadence(mode);
     try {
-      if (mode === "weekly") await putSchedule(WEEKLY_CRON);
-      else if (mode === "monthly") await putSchedule(MONTHLY_CRON);
-      else await deleteSchedule();
+      await applyCadence(mode);
     } catch (e) {
       console.error("Failed to update macro research refresh cadence", e);
     }

@@ -2,11 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   deleteSchedule,
-  getConfig,
   getDashboard,
   getSchedule,
   listDashboards,
-  putConfig,
   putSchedule,
   runAssessment,
 } from "../macro_research";
@@ -68,29 +66,6 @@ describe("macro_research api client", () => {
       expect.objectContaining({ credentials: "include" }),
     );
     expect(result).toEqual(body);
-  });
-
-  it("getConfig GETs /dashboards/:slug/config", async () => {
-    const spy = vi.spyOn(global, "fetch").mockResolvedValue(okJson({}));
-    await getConfig("four_seasons");
-    expect(spy).toHaveBeenCalledWith(
-      "/api/departments/macro_research/dashboards/four_seasons/config",
-      expect.objectContaining({ credentials: "include" }),
-    );
-  });
-
-  it("putConfig PUTs JSON body", async () => {
-    const spy = vi.spyOn(global, "fetch").mockResolvedValue(okJson({}));
-    await putConfig("debt_cycle", { view_config: { a: 1 } });
-    expect(spy).toHaveBeenCalledWith(
-      "/api/departments/macro_research/dashboards/debt_cycle/config",
-      expect.objectContaining({
-        method: "PUT",
-        headers: expect.objectContaining({ "Content-Type": "application/json" }),
-      }),
-    );
-    const init = spy.mock.calls[0][1] as RequestInit;
-    expect(init.body).toBe(JSON.stringify({ view_config: { a: 1 } }));
   });
 
   it("runAssessment POSTs to the refresh endpoint", async () => {
