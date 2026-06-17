@@ -6,8 +6,6 @@ const apiMocks = vi.hoisted(() => ({
   listDashboards: vi.fn(),
   getDashboard: vi.fn(),
   runAssessment: vi.fn(),
-  getConfig: vi.fn(),
-  putThresholdOverrides: vi.fn(),
   getSchedule: vi.fn(),
   putSchedule: vi.fn(),
   deleteSchedule: vi.fn(),
@@ -47,7 +45,6 @@ beforeEach(() => {
     provenance: null,
   });
   apiMocks.runAssessment.mockResolvedValue({ job_run_id: "j1", status: "queued" });
-  apiMocks.getConfig.mockResolvedValue({ view_config: {}, threshold_overrides: {} });
   apiMocks.getSchedule.mockResolvedValue({ cron_expression: null, last_assessment_at: null });
   deptHealthMocks.fetchDeptHealth.mockResolvedValue([]);
 });

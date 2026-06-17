@@ -2,12 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiMocks = vi.hoisted(() => ({
-  getConfig: vi.fn(),
   runAssessment: vi.fn(),
-  putThresholdOverrides: vi.fn(),
-  getSchedule: vi.fn(),
-  putSchedule: vi.fn(),
-  deleteSchedule: vi.fn(),
 }));
 
 vi.mock("../../../../api/macro_research", () => apiMocks);
@@ -22,12 +17,7 @@ import MRSettingsPanel from "../MRSettingsPanel";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  apiMocks.getConfig.mockResolvedValue({ threshold_overrides: {} });
   apiMocks.runAssessment.mockResolvedValue(null);
-  apiMocks.putThresholdOverrides.mockResolvedValue(null);
-  apiMocks.getSchedule.mockResolvedValue({ cron_expression: null, last_assessment_at: null });
-  apiMocks.putSchedule.mockResolvedValue(null);
-  apiMocks.deleteSchedule.mockResolvedValue(null);
   deptHealthMocks.fetchDeptHealth.mockResolvedValue([
     {
       department_id: "macro_research",

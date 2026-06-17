@@ -45,13 +45,6 @@ def fake_scheduler():
 @pytest.fixture
 def client(session_factory, fake_scheduler) -> TestClient:
     app = FastAPI()
-    dashboard_svc = MagicMock()
-    dashboard_svc.list_for_user.return_value = []
-    dashboard_svc.get_or_create.return_value = MagicMock(view_config={}, threshold_overrides={})
-    dashboard_svc.update_config.return_value = MagicMock(
-        view_config={"auto_refresh": "5m"},
-        threshold_overrides={"debt_gdp_warn": 95},
-    )
 
     def _override_auth():
         return MagicMock(id="u-1", email="a@b", is_admin=False)
@@ -59,7 +52,6 @@ def client(session_factory, fake_scheduler) -> TestClient:
     router = build_macro_research_router(
         db_session_factory=session_factory,
         mode="personal",
-        dashboard_service=dashboard_svc,
         require_auth_override=_override_auth,
     )
     app.include_router(router)
@@ -116,17 +108,6 @@ def test_get_dashboard_404_for_unknown(client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_update_config(client: TestClient) -> None:
-    r = client.put(
-        "/departments/macro_research/dashboards/debt_cycle/config",
-        json={
-            "view_config": {"auto_refresh": "5m"},
-            "threshold_overrides": {"debt_gdp_warn": 95},
-        },
-    )
-    assert r.status_code == 200
-
-
 def test_refresh_enqueues(client: TestClient, session_factory, fake_scheduler) -> None:
     r = client.post("/departments/macro_research/dashboards/debt_cycle/refresh")
     assert r.status_code == 202
@@ -153,8 +134,6 @@ def test_refresh_without_scheduler_marks_cancelled(
     session_factory,
 ) -> None:
     app = FastAPI()
-    dashboard_svc = MagicMock()
-    dashboard_svc.get_or_create.return_value = MagicMock(view_config={}, threshold_overrides={})
 
     def _override_auth():
         return MagicMock(id="u-1", email="a@b", is_admin=False)
@@ -162,7 +141,6 @@ def test_refresh_without_scheduler_marks_cancelled(
     router = build_macro_research_router(
         db_session_factory=session_factory,
         mode="personal",
-        dashboard_service=dashboard_svc,
         require_auth_override=_override_auth,
     )
     app.include_router(router)
@@ -261,21 +239,3 @@ def test_refresh_409_for_unimplemented(
         rows = s.query(JobRun).filter_by(schedule_id="five_forces").all()
         assert rows == []
     fake_scheduler.run_now.assert_not_awaited()
-
-
-def test_put_threshold_overrides(client: TestClient) -> None:
-    r = client.put(
-        "/departments/macro_research/dashboards/debt_cycle/threshold-overrides",
-        json={"threshold_overrides": {"debt_gdp_warn": 95}},
-    )
-    assert r.status_code == 200
-    body = r.json()
-    assert body["threshold_overrides"] == {"debt_gdp_warn": 95}
-
-
-def test_put_threshold_overrides_404_unknown(client: TestClient) -> None:
-    r = client.put(
-        "/departments/macro_research/dashboards/not_real/threshold-overrides",
-        json={"threshold_overrides": {}},
-    )
-    assert r.status_code == 404
