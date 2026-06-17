@@ -4,6 +4,7 @@ import { AuthProvider } from './AuthContext';
 import { useTimezoneAutoCapture } from './useTimezoneAutoCapture';
 import * as settingsApi from '../api/settings';
 import * as authApi from '../api/auth';
+import { ApiError } from '../api/client';
 
 function Probe(): null {
   useTimezoneAutoCapture();
@@ -46,7 +47,7 @@ describe('useTimezoneAutoCapture', () => {
   });
 
   it('also fires in personal-mode (getSession failure -> local user)', async () => {
-    vi.spyOn(authApi, 'getSession').mockRejectedValue(new Error('no session'));
+    vi.spyOn(authApi, 'getSession').mockRejectedValue(new ApiError(404, 'no session'));
     const update = vi
       .spyOn(settingsApi, 'updateTimezone')
       .mockResolvedValue({} as never);
@@ -70,7 +71,7 @@ describe('useTimezoneAutoCapture', () => {
   });
 
   it('swallows updateTimezone failures', async () => {
-    vi.spyOn(authApi, 'getSession').mockRejectedValue(new Error('no session'));
+    vi.spyOn(authApi, 'getSession').mockRejectedValue(new ApiError(404, 'no session'));
     vi.spyOn(settingsApi, 'updateTimezone').mockRejectedValue(
       new Error('boom'),
     );
