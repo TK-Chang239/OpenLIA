@@ -18,8 +18,6 @@ def test_insert_row_with_schedule_columns(create_tables, db_session: Session) ->
         id="mrs-1",
         user_id="u-sch",
         dashboard="debt_cycle",
-        view_config={},
-        threshold_overrides={},
         assessment_schedule="0 0 * * 0",
         last_assessment_at=now,
     )
@@ -41,8 +39,6 @@ def test_schedule_columns_nullable(create_tables, db_session: Session) -> None:
         id="mrs-2",
         user_id="u-null",
         dashboard="four_seasons",
-        view_config={},
-        threshold_overrides={},
     )
     db_session.add(row)
     db_session.commit()

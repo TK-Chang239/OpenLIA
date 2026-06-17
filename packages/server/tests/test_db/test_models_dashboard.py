@@ -204,8 +204,6 @@ def test_mr_dashboard_state_columns(create_tables) -> None:
         "id",
         "user_id",
         "dashboard",
-        "view_config",
-        "threshold_overrides",
         "assessment_schedule",
         "last_assessment_at",
         "updated_at",
@@ -222,8 +220,6 @@ def test_mr_dashboard_state_user_dashboard_unique(create_tables, db_session: Ses
             id="m1",
             user_id="u1",
             dashboard="debt_cycle",
-            view_config={},
-            threshold_overrides={},
         )
     )
     db_session.commit()
@@ -233,8 +229,6 @@ def test_mr_dashboard_state_user_dashboard_unique(create_tables, db_session: Ses
             id="m2",
             user_id="u1",
             dashboard="debt_cycle",
-            view_config={},
-            threshold_overrides={},
         )
     )
     with pytest.raises(IntegrityError):

@@ -33,8 +33,6 @@ def test_insert_row_with_schedule_cols(engine) -> None:
             id="mrs-1",
             user_id="u-1",
             dashboard="world_order",
-            view_config={},
-            threshold_overrides={},
             assessment_schedule="0 0 * * 0",
             last_assessment_at=datetime.now(UTC),
         )
@@ -55,8 +53,6 @@ def test_schedule_cols_nullable(engine) -> None:
             id="mrs-2",
             user_id="u-2",
             dashboard="four_seasons",
-            view_config={},
-            threshold_overrides={},
         )
         s.add(row)
         s.commit()

@@ -27,8 +27,6 @@ async def test_accepts_mr_dashboard_state_row() -> None:
         id="mrs-1",
         user_id="u-1",
         dashboard="world_order",
-        view_config={},
-        threshold_overrides={},
         assessment_schedule="0 0 * * 0",
     )
     await svc.add_schedule(row)
@@ -44,8 +42,6 @@ async def test_rejects_mr_row_without_schedule() -> None:
         id="mrs-2",
         user_id="u-1",
         dashboard="world_order",
-        view_config={},
-        threshold_overrides={},
         assessment_schedule=None,
     )
     with pytest.raises(ValueError, match="assessment_schedule"):
