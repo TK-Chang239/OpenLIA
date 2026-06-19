@@ -146,7 +146,8 @@ def build_setup_router(
         response: Response,
         db: Session = Depends(session_dep),
     ) -> dict[str, str]:
-        if os.environ.get("OPENLIA_MODE"):
+        env_mode = os.environ.get("OPENLIA_MODE")
+        if env_mode and payload.mode != env_mode:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={"code": "env_locked", "message": "Mode is locked by OPENLIA_MODE env var."},

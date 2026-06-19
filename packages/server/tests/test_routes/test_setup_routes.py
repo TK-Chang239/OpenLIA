@@ -59,6 +59,22 @@ def test_post_mode_rejected_when_env_override_set(
     assert resp.json()["detail"]["code"] == "env_locked"
 
 
+def test_post_mode_accepts_matching_env_mode(
+    wizard_personal_client: TestClient, monkeypatch
+) -> None:
+    # When OPENLIA_MODE is set, posting the SAME mode must succeed: it advances
+    # the step and issues the wizard cookie so env-driven company onboarding
+    # (the primary company deployment path) can proceed past the mode step.
+    monkeypatch.setenv("OPENLIA_MODE", "company")
+    resp = wizard_personal_client.post("/setup/mode", json={"mode": "company"})
+    assert resp.status_code == 200
+    assert resp.json()["mode"] == "company"
+    assert "openlia_wizard_session" in resp.cookies
+
+    status = wizard_personal_client.get("/setup/status").json()
+    assert "mode" in status["completed_steps"]
+
+
 def test_post_mode_rejects_invalid_value(wizard_personal_client: TestClient) -> None:
     resp = wizard_personal_client.post("/setup/mode", json={"mode": "banana"})
     assert resp.status_code == 422
