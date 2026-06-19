@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import COOKIE_NAME
 from openlia_server.middleware.wizard_gate import build_wizard_gate
 from openlia_server.services import wizard as wizard_svc
 from openlia_server.services.wizard_models import (
@@ -31,6 +32,28 @@ def _set_wizard_cookie(response: Response, token: str) -> None:
         httponly=True,
         samesite="lax",
         secure=False,
+        path="/",
+    )
+
+
+def _auth_cookie_secure() -> bool:
+    # Mirrors routes/auth.py._cookie_secure: Secure by default in company mode,
+    # overridable via OPENLIA_COOKIE_SECURE (needed to test over plain http).
+    override = os.environ.get("OPENLIA_COOKIE_SECURE")
+    if override is not None:
+        return override.lower() in ("1", "true", "yes")
+    return os.environ.get("OPENLIA_MODE", "personal").lower() == "company"
+
+
+def _set_auth_cookie(response: Response, raw_token: str) -> None:
+    # Non-persistent auth session cookie, matching routes/auth.py._set_cookie.
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=raw_token,
+        max_age=None,
+        httponly=True,
+        secure=_auth_cookie_secure(),
+        samesite="lax",
         path="/",
     )
 
@@ -183,11 +206,16 @@ def build_setup_router(
     )
     def post_admin(
         payload: AdminIn,
+        response: Response,
         db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, str]:
+        from openlia_server.services.auth import sessions
+
         try:
-            wizard_svc.create_first_admin(db, payload.email, payload.password, payload.display_name)
+            admin = wizard_svc.create_first_admin(
+                db, payload.email, payload.password, payload.display_name
+            )
         except wizard_svc.AdminExistsError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -197,6 +225,11 @@ def build_setup_router(
                 },
             ) from exc
         wizard_svc.advance_step(db, "admin", "company")
+        # Auto-login the freshly created admin: in company mode the wizard
+        # operator IS the admin, and the remaining steps (and the app right
+        # after setup) need admin-gated endpoints such as /connectors.
+        created = sessions.create_session(db, user_id=admin.id, persistent=False)
+        _set_auth_cookie(response, created.raw_token)
         return {"email": payload.email}
 
     @router.post(

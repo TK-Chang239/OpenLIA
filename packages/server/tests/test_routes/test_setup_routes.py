@@ -163,6 +163,27 @@ def test_post_admin_creates_first_admin(wizard_company_client: TestClient, db_se
     assert user.password_hash.startswith("$argon2")
 
 
+def test_post_admin_auto_logs_in_company(wizard_company_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.auth import Session as SessionRow
+    from openlia_server.db.models.auth import User
+
+    wizard_company_client.post("/setup/mode", json={"mode": "company"})
+    resp = wizard_company_client.post(
+        "/setup/admin",
+        json={
+            "email": "boss@example.com",
+            "password": "CorrectHorseBattery9!",
+            "display_name": "Boss",
+        },
+    )
+    assert resp.status_code == 200
+    # Auto-login: an auth session cookie is issued and a session row persisted
+    # for the new admin, so admin-gated endpoints work for the rest of setup.
+    assert "openlia_session" in resp.cookies
+    admin = db_session.query(User).filter_by(email="boss@example.com").one()
+    assert db_session.query(SessionRow).filter_by(user_id=admin.id).count() == 1
+
+
 def test_post_admin_rejects_second_admin(wizard_company_client: TestClient) -> None:
     wizard_company_client.post("/setup/mode", json={"mode": "company"})
     wizard_company_client.post(
