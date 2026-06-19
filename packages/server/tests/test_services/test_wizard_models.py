@@ -26,7 +26,7 @@ def test_wizard_models_persists_providers_models_and_slots(db_session) -> None:
             )
         ],
         department_defaults={"secretary": "gpt-x"},
-        system_role_defaults={"ai_review": "gpt-x"},
+        system_role_defaults={"graph_extraction": "gpt-x"},
     )
     save_wizard_models(db_session, payload)
 
@@ -37,9 +37,9 @@ def test_wizard_models_persists_providers_models_and_slots(db_session) -> None:
     assert len(models) == 1
 
     secretary_id = get_slot_default_model_id(db_session, "department", "secretary")
-    ai_review_id = get_slot_default_model_id(db_session, "system_role", "ai_review")
+    graph_extraction_id = get_slot_default_model_id(db_session, "system_role", "graph_extraction")
     assert secretary_id == models[0].id
-    assert ai_review_id == models[0].id
+    assert graph_extraction_id == models[0].id
 
 
 def test_wizard_models_idempotent_on_replay(db_session) -> None:
