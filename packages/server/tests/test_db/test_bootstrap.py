@@ -74,6 +74,27 @@ def test_bootstrap_creates_local_user(monkeypatch: pytest.MonkeyPatch, tmp_path:
     session_mod.dispose_engine()
 
 
+def test_bootstrap_skips_local_user_in_company_mode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from cryptography.fernet import Fernet
+    from openlia_server.db import bootstrap
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.auth import User
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{tmp_path}/company.db")
+    monkeypatch.setenv("OPENLIA_MODE", "company")
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", Fernet.generate_key().decode())
+
+    bootstrap.bootstrap()
+
+    with session_mod.SessionLocal() as s:
+        assert s.get(User, "local") is None
+
+    session_mod.dispose_engine()
+
+
 def test_bootstrap_is_idempotent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from openlia_server.db import bootstrap
     from openlia_server.db import session as session_mod

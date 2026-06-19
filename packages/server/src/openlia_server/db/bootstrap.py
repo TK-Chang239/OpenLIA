@@ -79,7 +79,12 @@ def bootstrap() -> None:
     _session_mod.configure_engine(url)
 
     _run_alembic_upgrade(url)
-    _seed_local_user()
+    # The synthetic `local` user is a personal-mode construct (the single,
+    # no-auth user). In company mode it must NOT exist: it is `is_admin=True`,
+    # so it would count as a pre-existing admin and block first-admin creation
+    # in the setup wizard.
+    if os.environ.get("OPENLIA_MODE", "personal").lower() != "company":
+        _seed_local_user()
     _seed_config_store()
 
 
