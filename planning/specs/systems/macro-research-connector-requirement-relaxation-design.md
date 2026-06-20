@@ -1,5 +1,13 @@
 # Macro Research — Connector-Requirement Relaxation + Coverage Preflight (design spec)
 
+> **Amendment 2026-06-20 (further relaxation):** `WEB_SEARCH` is no longer a
+> required category for Macro Research (or Retail Sentiment). Because modern LLM
+> models ship built-in web search, the dashboard engines run on the model's
+> native web search and require **no** connector category — `WEB_SEARCH`
+> (a scraping connector such as Firecrawl), `FINANCIAL`, and `NEWS` are all
+> optional enrichment. `required_categories` is now `()`. The coverage-hint
+> design below still applies; read the "web_search required" rows as optional.
+
 - **Date:** 2026-06-04
 - **Status:** Approved design, pending implementation plan
 - **Scope:** Implements §9 of `macro-research-llm-dashboard-redesign.md`

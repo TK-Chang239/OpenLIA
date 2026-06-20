@@ -4,9 +4,9 @@ Asserts that creating one validated financial connector and one validated
 news connector lights up every chat-flow department (Secretary, Equity
 Research, Earnings Update, Morning Briefing, Panic Thermometer).
 
-Macro Research remains disabled (requires WEB_SEARCH, not created here).
-Retail Sentiment remains disabled because it requires WEB_SEARCH, which
-is not created in this scenario.
+Macro Research and Retail Sentiment are also active: both dashboard engines
+run on the model's native web search, so they require no connector category
+(WEB_SEARCH/Firecrawl is optional enrichment).
 """
 
 from __future__ import annotations
@@ -105,9 +105,10 @@ def test_wizard_happy_path_lights_up_chat_flow_depts(client: TestClient, monkeyp
             f"{dept_id} expected active, got {by_id[dept_id]}"
         )
 
-    # RS is a dashboard dept. It requires WEB_SEARCH,
-    # which was not created in this scenario, so it is disabled with a
-    # missing category.
-    rs = by_id["retail_sentiment"]
-    assert rs["status"] == "disabled"
-    assert "web_search" in rs["missing_categories"]
+    # RS and MR are dashboard depts that run on native web search. They
+    # require no connector category, so they are active even though no
+    # WEB_SEARCH connector was created in this scenario.
+    for dash_dept in ("retail_sentiment", "macro_research"):
+        row = by_id[dash_dept]
+        assert row["status"] == "active", f"{dash_dept} expected active, got {row}"
+        assert row["missing_categories"] == []

@@ -1,5 +1,11 @@
 # Macro Research — LLM-Dashboard Redesign (design spec)
 
+> **Amendment 2026-06-20:** the "web search is the macro backbone" rows (D7, §9)
+> now mean the model's **native** web search, not a `WEB_SEARCH` connector. MR
+> requires **no** connector category (`required_categories = ()`); `WEB_SEARCH`
+> (a scraping connector such as Firecrawl), `FINANCIAL`, and `NEWS` are all
+> optional enrichment.
+
 - **Date:** 2026-06-03
 - **Status:** Approved design, pending implementation plan
 - **Scope:** Macro Research (`macro_research`) only. Retail Sentiment is a sibling follow-on (separate spec).

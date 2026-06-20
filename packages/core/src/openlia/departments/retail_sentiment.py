@@ -15,15 +15,17 @@ class RetailSentimentDepartment:
     prompt_name: str = "retail_sentiment"
     department_type: str = "dashboard"
 
-    # Connector dependencies (spec §10.1, §9.5). WEB_SEARCH is the required
-    # backbone for the web-search-driven sentiment dashboard engine
-    # (report_dash_rs). FINANCIAL (live quotes + sentiment endpoints) and NEWS
-    # are optional enrichment. RS is dashboard-routed (report_dash_rs via the
-    # connector dispatcher), NOT a runner department.
-    required_categories: ClassVar[tuple[Category, ...]] = (Category.WEB_SEARCH,)
+    # Connector dependencies (spec §10.1, §9.5). The sentiment dashboard engine
+    # (report_dash_rs) runs on the model's native web search, so no connector
+    # category is required. WEB_SEARCH (a scraping connector such as Firecrawl),
+    # FINANCIAL (live quotes + sentiment endpoints), and NEWS are all optional
+    # enrichment. RS is dashboard-routed (report_dash_rs via the connector
+    # dispatcher), NOT a runner department.
+    required_categories: ClassVar[tuple[Category, ...]] = ()
     optional_categories: ClassVar[tuple[Category, ...]] = (
         Category.FINANCIAL,
         Category.NEWS,
+        Category.WEB_SEARCH,
     )
     required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = ()
 

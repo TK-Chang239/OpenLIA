@@ -84,23 +84,24 @@ def test_serialize_shape():
 
 def test_serialize_includes_registry_metadata_for_known_dept():
     """For a real dept, serialize echoes the static registry metadata so
-    the wizard can show 'required vs. alternative' category badges."""
+    the wizard can show 'required vs. optional' category badges."""
     from openlia.departments.health import DepartmentHealth
 
     h = DepartmentHealth(
         department_id="morning_briefing",
-        status="disabled",
-        reason="...",
+        status="active",
+        reason=None,
         missing_categories=[],
-        unsatisfied_any_of=[(Category.NEWS, Category.WEB_SEARCH)],
     )
     blob = dept_health.serialize(h)
+    # MB hard-requires financial; news/web_search are now optional enrichment.
     assert blob["required_categories"] == ["financial"]
-    assert blob["required_any_of"] == [["news", "web_search"]]
-    assert blob["unsatisfied_any_of"] == [["news", "web_search"]]
+    assert blob["required_any_of"] == []
+    assert "news" in blob["optional_categories"]
+    assert "web_search" in blob["optional_categories"]
 
 
-def test_serialize_macro_research_shows_web_search_required():
+def test_serialize_macro_research_web_search_optional():
     from openlia.departments.health import DepartmentHealth
 
     h = DepartmentHealth(
@@ -110,7 +111,9 @@ def test_serialize_macro_research_shows_web_search_required():
         missing_categories=[],
     )
     blob = dept_health.serialize(h)
-    assert blob["required_categories"] == ["web_search"]
+    # MR runs on native web search: no required category; all are optional.
+    assert blob["required_categories"] == []
+    assert "web_search" in blob["optional_categories"]
     assert "financial" in blob["optional_categories"]
     assert "news" in blob["optional_categories"]
     assert blob["satisfied_categories"] == []

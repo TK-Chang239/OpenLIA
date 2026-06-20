@@ -1,5 +1,12 @@
 # MR Connector-Requirement Relaxation + Coverage Preflight — Implementation Plan
 
+> **Superseded 2026-06-20:** this plan made `WEB_SEARCH` the one required MR
+> category. It is now **optional**: MR and Retail Sentiment run on the model's
+> native web search and require no connector category (`required_categories =
+> ()`); Morning Briefing requires only `FINANCIAL` (its NEWS/WEB_SEARCH
+> required-any-of group was dropped). The coverage-hint work (Tasks 2/5) still
+> stands.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Macro Research active on `WEB_SEARCH` alone (FINANCIAL/NEWS optional) by completing its de-runnerization, and surface an honest source-coverage hint — without touching the MR engine.
