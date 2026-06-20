@@ -70,7 +70,7 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
         className="grid overflow-hidden"
         style={{ gridTemplateRows: "auto 1fr" }}
       >
-        <header data-om-shell="topbar">
+        <header>
           <TopBar
             crumbs={crumbs}
             stamps={stampsForNow()}
@@ -79,12 +79,11 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
         </header>
         <main
           id="main"
-          data-om-shell="content"
           tabIndex={-1}
           className="flex overflow-y-auto pb-14 md:pb-0"
           style={{ scrollbarGutter: "stable" }}
         >
-          <div data-om-content className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0">
             {children ?? <Outlet />}
           </div>
           <FileViewer />
