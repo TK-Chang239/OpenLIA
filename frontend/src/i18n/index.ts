@@ -7,14 +7,14 @@ export type SupportedLanguage = 'en' | 'zh-TW';
 
 const STORAGE_KEY = 'openlia.displayLanguage';
 
-function detectInitialLanguage(): SupportedLanguage {
+export function detectInitialLanguage(): SupportedLanguage {
   if (typeof window === 'undefined') return 'en';
   const stored = window.localStorage.getItem(STORAGE_KEY);
   if (stored === 'en' || stored === 'zh-TW') return stored;
-  // Fall through to browser locale. zh-TW / zh-Hant / zh-HK all map to zh-TW;
-  // every other tag falls back to English so we never guess wrong silently.
-  const nav = window.navigator?.language ?? '';
-  if (/^zh(-|_)?(TW|Hant|HK|MO)/i.test(nav)) return 'zh-TW';
+  // No explicit choice yet (e.g. the pre-login screen): default to English
+  // rather than auto-detecting navigator.language. This keeps the
+  // unauthenticated experience English-first. Signed-in users still get their
+  // saved display_language, and any explicit choice persists via localStorage.
   return 'en';
 }
 

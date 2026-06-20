@@ -4,12 +4,18 @@ import { getPrefs } from '../api/settings';
 import { setUiLanguage, type SupportedLanguage } from './index';
 
 /**
- * Pull the user's `display_language` from prefs once on mount and push
- * it into i18next. Subsequent settings-page saves call setUiLanguage()
- * directly, so this hook only handles the cold-start sync.
+ * Pull the user's `display_language` from prefs and push it into i18next.
+ *
+ * Re-runs whenever auth becomes ready or the signed-in user changes, not just
+ * once on mount: a cold load lands on the login screen (unauthenticated), where
+ * `getPrefs` 401s and the browser-detected language stays in place. Without the
+ * `authReady`/`userKey` dependencies, an SPA login would never re-sync and the
+ * UI would stay in the browser language even though the user's pref says
+ * otherwise. Settings-page saves still call setUiLanguage() directly.
  */
-export function useUiLanguageSync(): void {
+export function useUiLanguageSync(authReady: boolean, userKey: string): void {
   useEffect(() => {
+    if (!authReady) return;
     let cancelled = false;
     getPrefs()
       .then((p) => {
@@ -18,13 +24,13 @@ export function useUiLanguageSync(): void {
         setUiLanguage(lng as SupportedLanguage);
       })
       .catch(() => {
-        // Unauthenticated cold start (login screen) — leave the
-        // browser-detected language in place; the layout still works.
+        // Pref fetch failed (transient/unauthenticated) — leave the current
+        // language in place; the layout still works.
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authReady, userKey]);
 }
 
 export { useTranslation };

@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { RouterProvider } from "react-router-dom";
 import type { createBrowserRouter } from "react-router-dom";
-import { AuthProvider } from "./auth/AuthContext";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { useTimezoneAutoCapture } from "./auth/useTimezoneAutoCapture";
 import { useBeforeUnloadBeacon } from "./app/useBeforeUnloadBeacon";
 import { useUiLanguageSync } from "./i18n/useUiLanguage";
@@ -15,9 +15,10 @@ interface AppProps {
 }
 
 function AuthedShell({ router }: { router: AppRouter }): JSX.Element {
+  const { status, user } = useAuth();
   useTimezoneAutoCapture();
   useBeforeUnloadBeacon();
-  useUiLanguageSync();
+  useUiLanguageSync(status !== "unauthenticated", user?.id ?? "");
   return <RouterProvider router={router} />;
 }
 
