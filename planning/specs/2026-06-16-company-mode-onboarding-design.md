@@ -226,3 +226,43 @@ Account → SessionsPanel → POST /api/auth/logout-all
   `test_e2e_smoke_matrix.py::test_journey_company_invite_register_login`; Task 7
   added only the missing disable→401 enforcement test
   (`test_company_onboarding_loop`).
+
+## Manual company-mode test — backend fixes (2026-06-18/19)
+
+The first real end-to-end company deploy (fresh DB, `OPENLIA_MODE=company`,
+`OPENLIA_COOKIE_SECURE=false`, browser-driven) surfaced bugs in pre-existing
+backend code that had never been exercised. Each is fixed on this branch with
+tests. This means the PR is no longer frontend-only.
+
+- **`POST /setup/mode` env-lock (422).** It rejected *any* request while
+  `OPENLIA_MODE` was set — even one selecting the same mode the env dictates —
+  so the primary company deploy path could never pass the mode step. Now it
+  only rejects a *conflicting* mode; a matching mode advances + issues the
+  wizard cookie. (`routes/setup.py`)
+- **Synthetic local admin blocked first-admin creation (409).** `bootstrap`
+  seeded the personal-mode `local` user (`is_admin=True`) even in company mode,
+  so `create_first_admin`'s "an admin already exists" check tripped. Now
+  bootstrap skips the local user in company mode, and `create_first_admin`
+  ignores it regardless. (`db/bootstrap.py`, `services/wizard.py`)
+- **Dead `ai_review` system-role slot removed.** It was seeded infrastructure
+  with no runtime consumer — a pointless required choice in the models step.
+  Removed the slot, its module, the frontend descriptor/panel entry, and two
+  docstring examples. (`llm/system_roles.py` + the `ai_review/` module)
+- **Admin-gated connectors unreachable during setup (401).** The wizard's
+  (mandatory) connectors step calls the `require_active_admin` `/connectors`
+  router, but the operator had no auth session mid-wizard. `post_admin` now
+  auto-logs-in the created admin (mints a session + sets the `openlia_session`
+  cookie), so the rest of the wizard and the app run as that admin. Cookie
+  `Secure` honors `OPENLIA_COOKIE_SECURE` (must be `false` over plain http).
+  (`routes/setup.py`)
+- **Invites gave a bare token with no usable entry point.** `/login` shows no
+  sign-up link without a token in the URL and `/register` redirects away
+  without `?invite=`, so a raw token was a dead end. The invite modal now
+  shows the full `<origin>/register?invite=<token>` link. (`InvitesPanel.tsx`)
+
+**Operational note:** `OPENLIA_DB_URL`, if exported in the shell, overrides
+`OPENLIA_HOME` (it's checked first in `resolve_db_url`). Local company testing
+needs `OPENLIA_MODE=company OPENLIA_COOKIE_SECURE=false` plus a writable DB and
+`OPENLIA_SECRET_KEY`. Personal-mode regression re-verified: 404 on
+`/auth/session`, no auth routes, local user still seeded, product endpoints
+resolve to the local user.
