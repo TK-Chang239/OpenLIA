@@ -24,6 +24,7 @@ services:
       OPENLIA_DB_URL: sqlite:////home/openlia/.openlia/openlia.db
       OPENLIA_SCHEDULER_ENABLED: "true"
       OPENLIA_SECRET_KEY: ${OPENLIA_SECRET_KEY:-}
+      OPENLIA_PUBLIC_URL: ${OPENLIA_PUBLIC_URL:-}
     volumes:
       - openlia_data:/home/openlia/.openlia
     expose:
