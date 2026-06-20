@@ -37,7 +37,9 @@ describe('InvitesPanel', () => {
     fireEvent.change(screen.getByLabelText(/label/i), { target: { value: 'test' } });
     fireEvent.click(screen.getByRole('button', { name: /create invite/i }));
     await waitFor(() =>
-      expect(screen.getByText(/abc123/)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/\/register\?invite=abc123/),
+      ).toBeInTheDocument(),
     );
   });
 

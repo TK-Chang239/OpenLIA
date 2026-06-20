@@ -225,8 +225,8 @@
       "status_revoked": "已撤銷",
       "status_active": "有效",
       "revoke": "撤銷",
-      "token_modal_title": "邀請碼權杖",
-      "token_modal_description": "請以安全管道分享此權杖，將無法再次查看。"
+      "token_modal_title": "邀請連結",
+      "token_modal_description": "請以安全管道分享此連結，將無法再次查看。"
     },
     "users": {
       "title": "使用者",

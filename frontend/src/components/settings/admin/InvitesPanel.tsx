@@ -4,6 +4,12 @@ import { ApiError, createInvite, InviteSummary, listInvites, revokeInvite } from
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';
 
+function inviteRegistrationUrl(token: string): string {
+  // Recipients register at /register?invite=<token>; hand the admin the full
+  // shareable link rather than a bare token they'd have to assemble by hand.
+  return `${window.location.origin}/register?invite=${encodeURIComponent(token)}`;
+}
+
 export function InvitesPanel(): JSX.Element {
   const { t } = useTranslation();
   const [items, setItems] = useState<InviteSummary[] | null>(null);
@@ -38,7 +44,7 @@ export function InvitesPanel(): JSX.Element {
         max_uses: maxUses,
         expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
       });
-      setTokenModal(r.token);
+      setTokenModal(inviteRegistrationUrl(r.token));
       setShowForm(false);
       setLabel('');
       setMaxUses(1);

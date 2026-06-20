@@ -225,8 +225,8 @@
       "status_revoked": "Revoked",
       "status_active": "Active",
       "revoke": "Revoke",
-      "token_modal_title": "Invite token",
-      "token_modal_description": "Share this token through a secure channel. You will not be able to see it again."
+      "token_modal_title": "Invite link",
+      "token_modal_description": "Share this link through a secure channel. You will not be able to see it again."
     },
     "users": {
       "title": "Users",
