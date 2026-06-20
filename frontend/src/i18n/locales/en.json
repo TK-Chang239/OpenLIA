@@ -225,8 +225,8 @@
       "status_revoked": "Revoked",
       "status_active": "Active",
       "revoke": "Revoke",
-      "token_modal_title": "Invite token",
-      "token_modal_description": "Share this token through a secure channel. You will not be able to see it again."
+      "token_modal_title": "Invite link",
+      "token_modal_description": "Share this link through a secure channel. You will not be able to see it again."
     },
     "users": {
       "title": "Users",
@@ -311,7 +311,18 @@
       "email_updated": "Email updated.",
       "change_password_section_title": "Change Password",
       "active_sessions_section_title": "Active Sessions",
-      "must_change_password_banner": "You must change your password before continuing."
+      "must_change_password_banner": "You must change your password before continuing.",
+      "change_password": {
+        "current_label": "Current Password",
+        "new_label": "New Password",
+        "confirm_label": "Confirm New Password",
+        "submit": "Change password",
+        "success": "Password changed."
+      },
+      "sessions": {
+        "description": "Signing out of all devices ends every session, including this one. You'll need to sign in again.",
+        "sign_out_all": "Sign out of all devices"
+      }
     }
   },
   "auth": {
@@ -383,7 +394,9 @@
       "reset_failed": "Reset failed. Please try again.",
       "password_change_failed": "Password change failed.",
       "enter_current_temp_password": "Enter your current (temporary) password.",
-      "new_password_must_differ": "New password must differ from the temporary one."
+      "new_password_must_differ": "New password must differ from the temporary one.",
+      "enter_current_password": "Enter your current password.",
+      "new_password_must_differ_current": "New password must be different from your current one."
     },
     "setup": {
       "loading": "Loading…",

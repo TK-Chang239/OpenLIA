@@ -151,9 +151,16 @@ def upsert_local_user(db: Session, display_name: str) -> User:
 
 
 def create_first_admin(db: Session, email: str, password: str, display_name: str) -> User:
+    from openlia_server.db.bootstrap import LOCAL_USER_ID
     from openlia_server.services.auth.passwords import hash_password
 
-    if db.query(User).filter_by(is_admin=True).first() is not None:
+    # The synthetic `local` user is `is_admin=True` but is a personal-mode
+    # artifact, not a real administrator. Ignore it so the wizard can create the
+    # first real admin even on a DB that still carries the local user.
+    existing_admin = (
+        db.query(User).filter(User.is_admin.is_(True), User.id != LOCAL_USER_ID).first()
+    )
+    if existing_admin is not None:
         raise AdminExistsError()
     user = User(
         id=str(uuid.uuid4()),

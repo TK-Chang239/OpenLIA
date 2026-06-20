@@ -90,7 +90,7 @@ def test_put_invalid_dept_400(admin_client, llm_model_factory) -> None:
 def test_put_system_role_slot(admin_client, llm_model_factory) -> None:
     m = llm_model_factory()
     r = admin_client.put(
-        "/settings/admin/llm/slot-defaults/system_role/ai_review",
+        "/settings/admin/llm/slot-defaults/system_role/graph_extraction",
         json={"model_id": m.id},
     )
     assert r.status_code == 200

@@ -19,8 +19,10 @@ def test_set_then_get_department_slot(db_session, llm_model_factory):
 
 def test_set_then_get_system_role_slot(db_session, llm_model_factory):
     model = llm_model_factory()
-    set_slot_default(db_session, slot_kind="system_role", slot_id="ai_review", model_id=model.id)
-    assert get_slot_default_model_id(db_session, "system_role", "ai_review") == model.id
+    set_slot_default(
+        db_session, slot_kind="system_role", slot_id="graph_extraction", model_id=model.id
+    )
+    assert get_slot_default_model_id(db_session, "system_role", "graph_extraction") == model.id
 
 
 def test_set_overwrites_existing(db_session, llm_model_factory):
@@ -65,13 +67,15 @@ def test_list_returns_all_defaults(db_session, llm_model_factory):
     m1 = llm_model_factory()
     m2 = llm_model_factory()
     set_slot_default(db_session, slot_kind="department", slot_id="secretary", model_id=m1.id)
-    set_slot_default(db_session, slot_kind="system_role", slot_id="ai_review", model_id=m2.id)
+    set_slot_default(
+        db_session, slot_kind="system_role", slot_id="graph_extraction", model_id=m2.id
+    )
     rows = list_slot_defaults(db_session)
     assert len(rows) == 2
     by_kv = {(r.slot_kind, r.slot_id): r.model_id for r in rows}
     assert by_kv == {
         ("department", "secretary"): m1.id,
-        ("system_role", "ai_review"): m2.id,
+        ("system_role", "graph_extraction"): m2.id,
     }
 
 

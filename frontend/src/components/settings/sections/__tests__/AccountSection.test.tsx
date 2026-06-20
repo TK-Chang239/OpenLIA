@@ -58,7 +58,7 @@ describe('AccountSection', () => {
     expect(screen.queryByRole('button', { name: /save languages/i })).toBeNull();
   });
 
-  it('does not render a Sign out button (login pages disabled)', () => {
+  it('does not render a Sign out button (sign-out lives in the sidebar)', () => {
     render(<AccountSection currentEmail="a@b.c" mustChangePassword={false} />);
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
   });

@@ -3,7 +3,7 @@
 Slot defaults map (slot_kind, slot_id) -> model_id, replacing the
 per-tier default mechanism. `slot_kind` is 'department' or 'system_role';
 `slot_id` is a department id (e.g. 'secretary') or a system role id
-(e.g. 'ai_review').
+(e.g. 'graph_extraction').
 """
 
 from __future__ import annotations

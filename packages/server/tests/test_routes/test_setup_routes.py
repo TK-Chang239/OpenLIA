@@ -59,6 +59,22 @@ def test_post_mode_rejected_when_env_override_set(
     assert resp.json()["detail"]["code"] == "env_locked"
 
 
+def test_post_mode_accepts_matching_env_mode(
+    wizard_personal_client: TestClient, monkeypatch
+) -> None:
+    # When OPENLIA_MODE is set, posting the SAME mode must succeed: it advances
+    # the step and issues the wizard cookie so env-driven company onboarding
+    # (the primary company deployment path) can proceed past the mode step.
+    monkeypatch.setenv("OPENLIA_MODE", "company")
+    resp = wizard_personal_client.post("/setup/mode", json={"mode": "company"})
+    assert resp.status_code == 200
+    assert resp.json()["mode"] == "company"
+    assert "openlia_wizard_session" in resp.cookies
+
+    status = wizard_personal_client.get("/setup/status").json()
+    assert "mode" in status["completed_steps"]
+
+
 def test_post_mode_rejects_invalid_value(wizard_personal_client: TestClient) -> None:
     resp = wizard_personal_client.post("/setup/mode", json={"mode": "banana"})
     assert resp.status_code == 422
@@ -145,6 +161,27 @@ def test_post_admin_creates_first_admin(wizard_company_client: TestClient, db_se
     user = db_session.query(User).filter_by(email="boss@example.com").one()
     assert user.is_admin is True
     assert user.password_hash.startswith("$argon2")
+
+
+def test_post_admin_auto_logs_in_company(wizard_company_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.auth import Session as SessionRow
+    from openlia_server.db.models.auth import User
+
+    wizard_company_client.post("/setup/mode", json={"mode": "company"})
+    resp = wizard_company_client.post(
+        "/setup/admin",
+        json={
+            "email": "boss@example.com",
+            "password": "CorrectHorseBattery9!",
+            "display_name": "Boss",
+        },
+    )
+    assert resp.status_code == 200
+    # Auto-login: an auth session cookie is issued and a session row persisted
+    # for the new admin, so admin-gated endpoints work for the rest of setup.
+    assert "openlia_session" in resp.cookies
+    admin = db_session.query(User).filter_by(email="boss@example.com").one()
+    assert db_session.query(SessionRow).filter_by(user_id=admin.id).count() == 1
 
 
 def test_post_admin_rejects_second_admin(wizard_company_client: TestClient) -> None:
