@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import socket
 import subprocess
 import uuid
@@ -593,6 +594,77 @@ def admin_seed_policy(
             action = "updated"
         db.commit()
         typer.echo(f"signup_policy {action}: mode={mode}")
+    finally:
+        db.close()
+
+
+# --- create-first-admin -----------------------------------------------------
+
+# Mirror the wizard's AdminIn validation (routes/setup.py:AdminIn).
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PASSWORD_MIN_LEN = 12
+
+
+@admin_app.command("create-first-admin")
+def admin_create_first_admin(
+    ctx: typer.Context,
+    email: str = typer.Option(..., "--email", help="Admin email address."),
+    display_name: str = typer.Option(..., "--display-name", help="Admin display name."),
+    password: str | None = typer.Option(
+        None,
+        "--password",
+        help=f"Admin password (min {_PASSWORD_MIN_LEN} chars). Skips the interactive prompt.",
+    ),
+) -> None:
+    """Create the first administrator without the loopback setup wizard.
+
+    The setup wizard creates the first admin but is gated to loopback
+    connections, so it is unreachable on headless container/tunnel deployments.
+    This is the headless equivalent: it creates the admin AND finalizes setup
+    (marks the wizard complete so the app stops redirecting to /setup, and seeds
+    the company-mode `invite_only` signup policy). Refuses if a real admin
+    already exists. Configure LLM providers and connectors afterward from the
+    admin Settings UI.
+    """
+    from openlia_server.services import wizard as wizard_svc
+
+    if password is None:
+        password = typer.prompt("Admin password", hide_input=True, confirmation_prompt=True)
+
+    if not _EMAIL_RE.match(email):
+        echo_error("invalid email address")
+        raise typer.Exit(code=1)
+    if not 1 <= len(display_name) <= 60:
+        echo_error("display name must be 1-60 characters")
+        raise typer.Exit(code=1)
+    if len(password) < _PASSWORD_MIN_LEN:
+        echo_error(f"password must be at least {_PASSWORD_MIN_LEN} characters")
+        raise typer.Exit(code=1)
+
+    db = build_session(ctx.obj["db_url"])
+    try:
+        try:
+            admin = wizard_svc.create_first_admin(
+                db,
+                email=email,
+                password=password,
+                display_name=display_name,
+            )
+        except wizard_svc.AdminExistsError as exc:
+            echo_error("an administrator already exists")
+            raise typer.Exit(code=1) from exc
+        # Finalize setup so the SPA stops redirecting every route to the
+        # loopback-only /setup wizard, and seed the invite_only signup policy.
+        wizard_svc.finalize(db, "company")
+        log_cli_event(
+            db,
+            event_type="admin_created",
+            user_id=admin.id,
+            metadata={"email": email},
+        )
+        db.commit()
+        typer.echo(f"Admin created: {email} ({admin.id})")
+        typer.echo("Setup finalized: wizard marked complete, signup policy = invite_only.")
     finally:
         db.close()
 
