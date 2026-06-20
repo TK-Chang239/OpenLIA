@@ -32,6 +32,7 @@ def cli_db_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
 def cli_engine(cli_db_url: str):
     """Configure the engine once per test + create every table. Yields the
     engine and disposes at teardown so state doesn't leak across tests."""
+    import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
     from openlia_server.db import session as session_mod
     from openlia_server.db.base import Base
 
