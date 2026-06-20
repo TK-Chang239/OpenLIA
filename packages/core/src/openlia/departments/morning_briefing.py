@@ -14,16 +14,16 @@ class MorningBriefingDepartment:
     display_name: str = "Morning Briefings"
     prompt_name: str = "morning_briefing"
 
-    # Connector dependencies (spec §10.1).
-    # Headlines may come from a NEWS provider OR a WEB_SEARCH provider
-    # (the LLM can scrape news pages with Firecrawl), so the headline
-    # source is expressed as a required-any-of group rather than
-    # listing NEWS as a hard requirement.
+    # Connector dependencies (spec §10.1). FINANCIAL is the sole hard
+    # requirement. Headlines come from the model's native web search by
+    # default, so a NEWS provider or a WEB_SEARCH scraping connector (e.g.
+    # Firecrawl) is optional enrichment rather than a required-any-of group.
     required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)
-    required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = (
-        (Category.NEWS, Category.WEB_SEARCH),
+    required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = ()
+    optional_categories: ClassVar[tuple[Category, ...]] = (
+        Category.NEWS,
+        Category.WEB_SEARCH,
     )
-    optional_categories: ClassVar[tuple[Category, ...]] = ()
 
     # Runtime behavior (spec §5.2).
     disable_runtime_routing: ClassVar[bool] = False

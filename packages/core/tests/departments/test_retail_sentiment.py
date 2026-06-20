@@ -10,13 +10,14 @@ def test_rs_identifies_itself():
 
 
 def test_rs_required_categories():
-    # Web-search-backbone dashboard: WEB_SEARCH is the sole required category.
-    assert RetailSentimentDepartment.required_categories == (Category.WEB_SEARCH,)
+    # Runs on the model's native web search: no connector category is required.
+    assert RetailSentimentDepartment.required_categories == ()
 
 
 def test_rs_optional_categories():
     soft = set(RetailSentimentDepartment.optional_categories)
-    assert {Category.FINANCIAL, Category.NEWS}.issubset(soft)
+    # WEB_SEARCH (scraping connector) is now optional enrichment, not required.
+    assert {Category.FINANCIAL, Category.NEWS, Category.WEB_SEARCH}.issubset(soft)
 
 
 def test_rs_disable_runtime_routing():

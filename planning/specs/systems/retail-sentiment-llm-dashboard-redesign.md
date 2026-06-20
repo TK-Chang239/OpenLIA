@@ -1,5 +1,12 @@
 # Retail Sentiment LLM-Dashboard Redesign (`report_dash_rs`)
 
+> **Amendment 2026-06-20:** "web search as the backbone" now means the model's
+> **native** web search, not a `WEB_SEARCH` connector. RS requires **no**
+> connector category (`required_categories = ()`); `WEB_SEARCH` (a scraping
+> connector such as Firecrawl), `FINANCIAL`, and `NEWS` are all optional
+> enrichment. The engine already drives `enabled_connectors.web_search` from the
+> model's native capability, so the department is active without any connector.
+
 Rebuild the Retail Sentiment (RS) department as the exact sibling of Macro Research's
 `report_dash_mr`: a single-model LLM tool-use loop (`gather -> classify -> narrate -> emit`)
 with **web search as the backbone**, producing one typed dashboard payload per ticker,

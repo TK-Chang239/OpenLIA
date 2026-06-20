@@ -14,20 +14,22 @@ def test_mb_single_mode():
 
 
 def test_mb_required_categories():
-    # MB hard-requires financial. Headline source (news vs. web_search)
-    # is expressed via required_any_of so either provider satisfies it.
+    # MB hard-requires financial only. Headlines default to native web search,
+    # so news/web_search connectors are optional rather than required-any-of.
     assert set(MorningBriefingDepartment.required_categories) == {Category.FINANCIAL}
 
 
-def test_mb_required_any_of_covers_news_or_web_search():
-    groups = MorningBriefingDepartment.required_any_of
-    assert len(groups) == 1
-    assert set(groups[0]) == {Category.NEWS, Category.WEB_SEARCH}
+def test_mb_no_required_any_of():
+    # Headline source is no longer a required-any-of group; native web search
+    # covers it, with NEWS/WEB_SEARCH connectors as optional enrichment.
+    assert MorningBriefingDepartment.required_any_of == ()
 
 
-def test_mb_optional_categories_empty():
-    # WEB_SEARCH was promoted into the required_any_of group.
-    assert MorningBriefingDepartment.optional_categories == ()
+def test_mb_optional_categories_cover_news_and_web_search():
+    assert set(MorningBriefingDepartment.optional_categories) == {
+        Category.NEWS,
+        Category.WEB_SEARCH,
+    }
 
 
 def test_mb_disable_runtime_routing():

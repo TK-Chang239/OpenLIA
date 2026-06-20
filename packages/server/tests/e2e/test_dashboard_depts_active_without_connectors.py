@@ -1,9 +1,14 @@
-"""Scenario 3 — disabled dept banner + mutating endpoint returns 409.
+"""Scenario — dashboard depts run on native web search, no connector required.
 
-With no connectors configured, `macro_research` is disabled (missing
-required `web_search` category). Hitting its mutating refresh endpoint
-must short-circuit with HTTP 409 and the structured
-`{"error": "dept_disabled", "reason": ...}` body.
+With no connectors configured, `macro_research` and `retail_sentiment` are
+ACTIVE: both dashboard engines use the model's native web search, so a
+WEB_SEARCH (scraping) connector such as Firecrawl is optional enrichment, not a
+hard requirement. This guards the connector-requirement relaxation end to end
+through the app lifespan (compute_all -> dept_health cache -> /api/dept-health).
+
+The route-level `dept_disabled` 409 gate itself is covered by
+`test_dept_health_api.py` and `test_routes/departments/test_retail_sentiment.py`
+(both drive a synthetic disabled state directly).
 """
 
 from __future__ import annotations
@@ -50,23 +55,12 @@ def client(db_session):
         yield c
 
 
-def test_dept_health_marks_macro_research_disabled(client: TestClient) -> None:
-    """Sanity: with empty DB, /api/dept-health flags MR disabled."""
+def test_dashboard_depts_active_without_connectors(client: TestClient) -> None:
+    """With an empty DB, /api/dept-health flags MR and RS active — no required
+    connector category, both run on the model's native web search."""
     by_id = {row["department_id"]: row for row in client.get("/api/dept-health").json()}
-    assert by_id["macro_research"]["status"] == "disabled"
-    # MR now requires only web_search; financial/news are optional.
-    assert "web_search" in by_id["macro_research"]["missing_categories"]
-    assert by_id["macro_research"]["missing_categories"] != []
 
-
-def test_macro_research_run_assessment_returns_409_when_disabled(
-    client: TestClient,
-) -> None:
-    resp = client.post(
-        "/departments/macro_research/dashboards/world_order/refresh",
-        json={},
-    )
-    assert resp.status_code == 409, resp.text
-    detail = resp.json()["detail"]
-    assert detail["error"] == "dept_disabled"
-    assert detail["reason"]
+    assert by_id["macro_research"]["status"] == "active"
+    assert by_id["macro_research"]["missing_categories"] == []
+    assert by_id["retail_sentiment"]["status"] == "active"
+    assert by_id["retail_sentiment"]["missing_categories"] == []

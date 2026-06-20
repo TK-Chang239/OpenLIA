@@ -75,9 +75,11 @@ def test_string_status_and_category_accepted():
 # ---------------------------------------------------------------------------
 
 
-def test_retail_sentiment_requires_only_web_search():
+def test_retail_sentiment_requires_no_connector_categories():
     dept = RetailSentimentDepartment()
-    assert dept.required_categories == (Category.WEB_SEARCH,)
+    # Runs on native web search; WEB_SEARCH/FINANCIAL/NEWS are optional.
+    assert dept.required_categories == ()
+    assert Category.WEB_SEARCH in dept.optional_categories
     assert Category.FINANCIAL in dept.optional_categories
     assert Category.NEWS in dept.optional_categories
 
@@ -89,13 +91,12 @@ def test_retail_sentiment_active_with_web_search_only():
     assert health.status == "active"
 
 
-def test_retail_sentiment_disabled_without_web_search_connector():
+def test_retail_sentiment_active_without_any_connector():
     dept = RetailSentimentDepartment()
-    # FINANCIAL alone is no longer enough — WEB_SEARCH is the one required category.
-    connectors = [_Conn(category=Category.FINANCIAL, status=ConnectorStatus.VALIDATED)]
-    health = check_dept_health(dept, validated_connectors=connectors)
-    assert health.status == "disabled"
-    assert Category.WEB_SEARCH in health.missing_categories
+    # No connector category is required — native web search is the backbone.
+    health = check_dept_health(dept, validated_connectors=[])
+    assert health.status == "active"
+    assert health.missing_categories == []
 
 
 # ---------------------------------------------------------------------------
@@ -149,9 +150,11 @@ def test_required_any_of_unrelated_category_does_not_satisfy():
     assert health.status == "disabled"
 
 
-def test_macro_research_requires_only_web_search():
+def test_macro_research_requires_no_connector_categories():
     dept = MacroResearchDepartment()
-    assert dept.required_categories == (Category.WEB_SEARCH,)
+    # Runs on native web search; WEB_SEARCH/FINANCIAL/NEWS are optional.
+    assert dept.required_categories == ()
+    assert Category.WEB_SEARCH in dept.optional_categories
     assert Category.FINANCIAL in dept.optional_categories
     assert Category.NEWS in dept.optional_categories
 
@@ -187,23 +190,33 @@ def test_morning_briefing_active_with_financial_and_web_search_only():
     assert health.status == "active"
 
 
-def test_morning_briefing_disabled_without_news_or_web_search():
+def test_morning_briefing_active_with_financial_only():
     from openlia.departments import MorningBriefingDepartment
 
     dept = MorningBriefingDepartment()
+    # FINANCIAL is the sole hard requirement; news/web_search are optional.
     connectors = [_Conn(category=Category.FINANCIAL, status=ConnectorStatus.VALIDATED)]
     health = check_dept_health(dept, validated_connectors=connectors)
+    assert health.status == "active"
+    assert health.missing_categories == []
+
+
+def test_morning_briefing_disabled_without_financial():
+    from openlia.departments import MorningBriefingDepartment
+
+    dept = MorningBriefingDepartment()
+    connectors = [_Conn(category=Category.NEWS, status=ConnectorStatus.VALIDATED)]
+    health = check_dept_health(dept, validated_connectors=connectors)
     assert health.status == "disabled"
-    assert "news" in health.reason and "web_search" in health.reason
+    assert Category.FINANCIAL in health.missing_categories
 
 
-def test_macro_research_disabled_without_web_search_connector():
+def test_macro_research_disabled_without_any_connector_is_active():
     dept = MacroResearchDepartment()
-    # FINANCIAL alone is no longer enough — WEB_SEARCH is the one required category.
-    connectors = [_Conn(category=Category.FINANCIAL, status=ConnectorStatus.VALIDATED)]
-    health = check_dept_health(dept, validated_connectors=connectors)
-    assert health.status == "disabled"
-    assert Category.WEB_SEARCH in health.missing_categories
+    # No required category — MR is active even with no validated connectors.
+    health = check_dept_health(dept, validated_connectors=[])
+    assert health.status == "active"
+    assert health.missing_categories == []
 
 
 def test_satisfied_categories_lists_validated_categories():
