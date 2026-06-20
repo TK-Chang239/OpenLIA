@@ -82,12 +82,12 @@ describe("Sidebar", () => {
     });
   });
 
-  it("does not render a sign-out button (moved to Settings → Account)", async () => {
+  it("renders a sign-out button when authenticated", async () => {
     renderAt("/");
     await waitFor(() =>
       expect(screen.getByRole("link", { name: /home/i })).toBeInTheDocument(),
     );
-    expect(screen.queryByRole("button", { name: /sign out/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeTruthy();
   });
 
   it("renders the user-chip with initials and role line", async () => {

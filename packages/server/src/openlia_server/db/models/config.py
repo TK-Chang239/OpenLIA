@@ -68,7 +68,7 @@ class LLMSlotDefault(Base):
     """Admin-assigned model per (slot_kind, slot_id) pair.
 
     slot_kind is 'department' (e.g. 'secretary', 'equity_research') or
-    'system_role' (e.g. 'ai_review', 'graph_extraction'). Replaces the
+    'system_role' (e.g. 'graph_extraction', 'graph_summarization'). Replaces the
     per-tier default model mechanism.
     """
 

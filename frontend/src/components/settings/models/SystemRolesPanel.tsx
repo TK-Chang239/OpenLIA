@@ -3,7 +3,6 @@ import { getEnabledModels, RosterEntry } from '../../../api/settings';
 import { listSlotDefaults, setSlotDefault } from '../../../api/llm_slots';
 
 const SYSTEM_ROLES: { id: string; label: string }[] = [
-  { id: 'ai_review', label: 'Wizard AI review' },
   { id: 'connector_agentic_resolver', label: 'Connector agentic resolver' },
   { id: 'connector_spec_adapter', label: 'Connector spec adapter' },
   { id: 'graph_extraction', label: 'Graph memory extraction' },

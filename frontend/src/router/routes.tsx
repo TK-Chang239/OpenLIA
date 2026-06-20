@@ -10,6 +10,10 @@ import PortfolioPage from "../pages/PortfolioPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SetupPage } from "../pages/SetupPage";
 import { MemoryPage } from "../pages/MemoryPage";
+import { LoginPage } from "../pages/LoginPage";
+import { RegisterPage } from "../pages/RegisterPage";
+import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import { useAuth } from "../auth/AuthContext";
 import { SecretaryPage } from "../pages/SecretaryPage";
 import EquityResearchV3 from "../pages/departments/EquityResearchV3";
@@ -71,11 +75,10 @@ export const routes: RouteObject[] = [
   {
     element: <SetupGate />,
     children: [
-      // Login pages disabled — redirect any attempt back to the shell.
-      { path: "/login", element: <Navigate to="/" replace /> },
-      { path: "/register", element: <Navigate to="/" replace /> },
-      { path: "/forgot-password", element: <Navigate to="/" replace /> },
-      { path: "/reset-password", element: <Navigate to="/" replace /> },
+      { path: "/login", element: <LoginPage /> },
+      { path: "/register", element: <RegisterPage /> },
+      { path: "/forgot-password", element: <ForgotPasswordPage /> },
+      { path: "/reset-password", element: <ResetPasswordPage /> },
       { path: "/setup", element: <SetupPage /> },
       // Full-bleed print/PDF page. No AppShell so backgrounds/margins are
       // controlled by the print stylesheet, and so the body of the page

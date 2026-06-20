@@ -24,7 +24,6 @@ function humanize(id: string): string {
 }
 
 const SYSTEM_ROLE_DESCRIPTIONS: Record<string, string> = {
-  ai_review: "Reviews your wizard configuration and flags risks before saving.",
   connector_agentic_resolver:
     "Multi-step agent that identifies the right connector when no spec is on file.",
   connector_spec_adapter:

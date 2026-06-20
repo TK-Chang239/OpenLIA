@@ -5,7 +5,7 @@ import { SystemRolesPanel } from '../SystemRolesPanel';
 vi.mock('../../../../api/llm_slots', () => ({
   listSlotDefaults: vi.fn().mockResolvedValue({
     defaults: [
-      { slot_kind: 'system_role', slot_id: 'ai_review', model_id: 'M1' },
+      { slot_kind: 'system_role', slot_id: 'graph_extraction', model_id: 'M1' },
     ],
   }),
   setSlotDefault: vi.fn().mockResolvedValue({}),
@@ -37,11 +37,10 @@ describe('SystemRolesPanel', () => {
     vi.clearAllMocks();
   });
 
-  it('lists all five system roles with current assignment preselected', async () => {
+  it('lists all four system roles with current assignment preselected', async () => {
     render(<SystemRolesPanel />);
-    expect(await screen.findByText(/Wizard AI review/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Connector agentic resolver/i),
+      await screen.findByText(/Connector agentic resolver/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Connector spec adapter/i)).toBeInTheDocument();
     expect(screen.getByText(/Graph memory extraction/i)).toBeInTheDocument();
@@ -49,7 +48,7 @@ describe('SystemRolesPanel', () => {
       screen.getByText(/Graph memory summarization/i),
     ).toBeInTheDocument();
     const sel = (await screen.findByLabelText(
-      /Wizard AI review model/i,
+      /Graph memory extraction model/i,
     )) as HTMLSelectElement;
     await waitFor(() => expect(sel.value).toBe('M1'));
   });

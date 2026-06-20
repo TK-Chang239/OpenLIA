@@ -225,8 +225,8 @@
       "status_revoked": "已撤銷",
       "status_active": "有效",
       "revoke": "撤銷",
-      "token_modal_title": "邀請碼權杖",
-      "token_modal_description": "請以安全管道分享此權杖，將無法再次查看。"
+      "token_modal_title": "邀請連結",
+      "token_modal_description": "請以安全管道分享此連結，將無法再次查看。"
     },
     "users": {
       "title": "使用者",
@@ -311,7 +311,18 @@
       "email_updated": "電子郵件已更新。",
       "change_password_section_title": "變更密碼",
       "active_sessions_section_title": "使用中的登入工作階段",
-      "must_change_password_banner": "請先變更密碼，再繼續使用本系統。"
+      "must_change_password_banner": "請先變更密碼，再繼續使用本系統。",
+      "change_password": {
+        "current_label": "目前密碼",
+        "new_label": "新密碼",
+        "confirm_label": "確認新密碼",
+        "submit": "變更密碼",
+        "success": "密碼已變更。"
+      },
+      "sessions": {
+        "description": "登出所有裝置會結束每個工作階段，包括目前這個。您需要重新登入。",
+        "sign_out_all": "登出所有裝置"
+      }
     }
   },
   "auth": {
@@ -383,7 +394,9 @@
       "reset_failed": "重設失敗，請再試一次。",
       "password_change_failed": "變更密碼失敗。",
       "enter_current_temp_password": "請輸入您目前的（臨時）密碼。",
-      "new_password_must_differ": "新密碼必須與臨時密碼不同。"
+      "new_password_must_differ": "新密碼必須與臨時密碼不同。",
+      "enter_current_password": "請輸入目前的密碼。",
+      "new_password_must_differ_current": "新密碼必須與目前的密碼不同。"
     },
     "setup": {
       "loading": "載入中…",

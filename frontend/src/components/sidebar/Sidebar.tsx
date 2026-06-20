@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import type { JSX } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, Settings } from "lucide-react";
 import { CORE_NAV, DEPARTMENT_NAV } from "./navData";
 import { NavItem } from "./NavItem";
 import { useCollapsed } from "./useCollapsed";
@@ -33,7 +33,8 @@ export function Sidebar(): JSX.Element {
   const { unreadByDepartment, markRead } = useNotificationPoll();
   const healths = useDeptHealth((s) => s.healths);
   const location = useLocation();
-  const { status, user } = useAuth();
+  const { status, user, logout } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const match = DEPARTMENT_NAV.find((entry) => entry.path === location.pathname);
@@ -41,6 +42,11 @@ export function Sidebar(): JSX.Element {
       void markRead(match.departmentId);
     }
   }, [location.pathname, markRead, unreadByDepartment]);
+
+  async function handleSignOut() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   const initials = deriveInitials(user?.display_name ?? null, user?.email ?? null);
   const displayName = deriveDisplayName(user?.display_name ?? null, user?.email ?? null);
@@ -162,6 +168,29 @@ export function Sidebar(): JSX.Element {
           collapsed={collapsed}
           hasUnread={false}
         />
+
+        {status === "authenticated" && (
+          <button
+            type="button"
+            onClick={() => {
+              void handleSignOut();
+            }}
+            aria-label={t("shell.sign_out")}
+            className={[
+              "flex items-center gap-[10px] rounded-md w-full",
+              "transition-colors duration-normal ease-out",
+              collapsed ? "justify-center px-0 py-[9px]" : "px-[10px] py-[9px]",
+            ].join(" ")}
+            style={{ color: "var(--color-sidebar-text)" }}
+          >
+            <LogOut size={16} strokeWidth={1.5} />
+            {!collapsed && (
+              <span className="text-[13px] font-display truncate">
+                {t("shell.sign_out")}
+              </span>
+            )}
+          </button>
+        )}
 
         <button
           type="button"

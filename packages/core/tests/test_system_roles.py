@@ -8,7 +8,6 @@ from openlia.llm.system_roles import (
 
 def test_system_role_ids_contains_locked_set():
     assert SYSTEM_ROLE_IDS == (
-        "ai_review",
         "connector_agentic_resolver",
         "connector_spec_adapter",
         "graph_extraction",
@@ -21,7 +20,7 @@ def test_system_role_enum_matches_ids():
 
 
 def test_get_system_role_label_returns_human_string():
-    assert get_system_role_label("ai_review") == "Wizard AI review"
+    assert get_system_role_label("graph_extraction") == "Graph memory extraction"
 
 
 def test_get_system_role_label_unknown_raises():

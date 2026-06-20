@@ -125,6 +125,61 @@ class TestRegisterLoginLogout:
         assert new_cookie != stale.raw_token
 
 
+def test_company_onboarding_loop(company_client: TestClient, db_session, make_user):
+    """End-to-end: admin mints invite -> user registers -> logs in -> admin disables -> 401."""
+    from openlia_server.services.auth import sessions
+
+    # Admin exists and is authenticated via a session cookie.
+    admin = make_user(email="admin@example.com", is_admin=True)
+    admin_session = sessions.create_session(db_session, user_id=admin.id, persistent=True)
+    company_client.cookies.set(COOKIE_NAME, admin_session.raw_token)
+
+    # 1) Admin creates a signup invite and we capture the raw token.
+    invite_resp = company_client.post("/admin/invites", json={"label": "onboarding"})
+    assert invite_resp.status_code == 201
+    invite_token = invite_resp.json()["token"]
+
+    # Drop the admin cookie so the new user starts a clean session.
+    company_client.cookies.clear()
+
+    # 2) New user registers with the invite token.
+    reg = company_client.post(
+        "/auth/register",
+        json={
+            "email": "newhire@example.com",
+            "password": "CorrectHorseBattery9!",
+            "display_name": "New Hire",
+            "invite_token": invite_token,
+        },
+    )
+    assert reg.status_code == 201
+    new_user_id = reg.json()["user_id"]
+
+    # 3) New user logs in and receives a session cookie.
+    company_client.cookies.clear()
+    login = company_client.post(
+        "/auth/login",
+        json={
+            "email": "newhire@example.com",
+            "password": "CorrectHorseBattery9!",
+            "persistent": False,
+        },
+    )
+    assert login.status_code == 200
+    assert COOKIE_NAME in login.cookies
+    assert company_client.get("/auth/session").status_code == 200
+
+    # 4) Admin disables the new user; their session can no longer authenticate.
+    company_client.cookies.clear()
+    company_client.cookies.set(COOKIE_NAME, admin_session.raw_token)
+    disable = company_client.post(f"/admin/users/{new_user_id}/disable")
+    assert disable.status_code == 204
+
+    company_client.cookies.clear()
+    company_client.cookies.set(COOKIE_NAME, login.cookies[COOKIE_NAME])
+    assert company_client.get("/auth/session").status_code == 401
+
+
 class TestSignupPolicyEndpoint:
     def test_returns_mode(self, company_client: TestClient):
         resp = company_client.get("/auth/signup-policy")

@@ -2,8 +2,45 @@
 
 from __future__ import annotations
 
+import pytest
 from openlia_server.services import wizard as svc
 from sqlalchemy.orm import Session
+
+
+def test_create_first_admin_ignores_synthetic_local_user(
+    create_tables, db_session: Session
+) -> None:
+    from openlia_server.db.models.auth import User
+
+    # A fresh personal-mode DB carries the synthetic `local` admin. The wizard
+    # must still be able to create the first real admin over it.
+    db_session.add(
+        User(
+            id="local",
+            email="local@openlia.local",
+            display_name="Local",
+            password_hash=None,
+            is_admin=True,
+            is_disabled=False,
+        )
+    )
+    db_session.commit()
+
+    admin = svc.create_first_admin(db_session, "admin@corp.com", "S3curePass12!", "Admin")
+    db_session.commit()
+
+    assert admin.is_admin is True
+    assert admin.id != "local"
+
+
+def test_create_first_admin_rejects_when_real_admin_exists(
+    create_tables, db_session: Session
+) -> None:
+    svc.create_first_admin(db_session, "a@corp.com", "S3curePass12!", "A")
+    db_session.commit()
+
+    with pytest.raises(svc.AdminExistsError):
+        svc.create_first_admin(db_session, "b@corp.com", "S3curePass12!", "B")
 
 
 def test_get_status_fresh_install_returns_personal_step_mode(

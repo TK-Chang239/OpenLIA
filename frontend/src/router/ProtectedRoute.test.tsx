@@ -35,7 +35,7 @@ describe("ProtectedRoute", () => {
     global.fetch = originalFetch;
   });
 
-  it("renders children on a 401 (login pages disabled — collapse to personal)", async () => {
+  it("redirects to /login on a 401 (company mode, no session)", async () => {
     global.fetch = vi
       .fn()
       .mockResolvedValue(new Response(null, { status: 401 })) as unknown as typeof fetch;
@@ -43,8 +43,9 @@ describe("ProtectedRoute", () => {
     render(wrap("/"));
 
     await waitFor(() =>
-      expect(screen.getByText("Protected content")).toBeInTheDocument(),
+      expect(screen.getByText("Login page")).toBeInTheDocument(),
     );
+    expect(screen.queryByText("Protected content")).toBeNull();
   });
 
   it("renders children when authenticated", async () => {

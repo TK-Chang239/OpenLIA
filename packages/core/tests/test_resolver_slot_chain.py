@@ -82,14 +82,14 @@ def test_no_chain_match_raises_model_not_configured():
 
 def test_resolve_system_role_uses_system_role_default():
     default = _row("R")
-    reg = FakeRegistry(system_role_default={"ai_review": default})
-    out = resolve_system_role(role_id="ai_review", registry=reg)
+    reg = FakeRegistry(system_role_default={"graph_extraction": default})
+    out = resolve_system_role(role_id="graph_extraction", registry=reg)
     assert out.model_id == "R"
 
 
 def test_resolve_system_role_missing_raises():
     reg = FakeRegistry()
     with pytest.raises(ModelNotConfiguredError) as ei:
-        resolve_system_role(role_id="ai_review", registry=reg)
+        resolve_system_role(role_id="graph_extraction", registry=reg)
     assert ei.value.slot_kind == "system_role"
-    assert ei.value.slot_id == "ai_review"
+    assert ei.value.slot_id == "graph_extraction"

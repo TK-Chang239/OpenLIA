@@ -44,7 +44,7 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("user-id").textContent).toBe("u1");
   });
 
-  it("401 → personal mode (login pages disabled)", async () => {
+  it("401 → unauthenticated (company mode, no session)", async () => {
     global.fetch = vi
       .fn()
       .mockResolvedValue(new Response(null, { status: 401 })) as unknown as typeof fetch;
@@ -56,9 +56,9 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("personal"),
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated"),
     );
-    expect(screen.getByTestId("user-id").textContent).toBe("local");
+    expect(screen.getByTestId("user-id").textContent).toBe("");
   });
 
   it("404 → personal mode with synthetic local user", async () => {
@@ -121,7 +121,7 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("personal"),
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated"),
     );
 
     await act(async () => {
@@ -133,7 +133,7 @@ describe("AuthProvider", () => {
     );
   });
 
-  it("treats unexpected ApiError as personal mode (login pages disabled)", async () => {
+  it("treats an unexpected ApiError (500) as unauthenticated", async () => {
     global.fetch = vi.fn().mockRejectedValue(new ApiError(500, "boom")) as unknown as typeof fetch;
 
     render(
@@ -143,7 +143,7 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("personal"),
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated"),
     );
   });
 
@@ -183,7 +183,7 @@ describe("AuthProvider", () => {
       wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
     });
 
-    await waitFor(() => expect(result.current.status).toBe("personal"));
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
 
     await act(async () => {
       await result.current.login({
@@ -197,7 +197,7 @@ describe("AuthProvider", () => {
     expect(result.current.mustChangePassword).toBe(true);
   });
 
-  it("logout() then refresh() on 401 clears mustChangePassword", async () => {
+  it("logout() then refresh() on 401 leaves unauthenticated and clears mustChangePassword", async () => {
     let callIdx = 0;
     global.fetch = vi.fn().mockImplementation(() => {
       callIdx += 1;
@@ -234,14 +234,14 @@ describe("AuthProvider", () => {
       await result.current.logout();
     });
     expect(result.current.mustChangePassword).toBe(false);
-    expect(result.current.status).toBe("personal");
+    expect(result.current.status).toBe("unauthenticated");
 
-    // Now an explicit refresh resolving 401 keeps the flag cleared.
+    // An explicit refresh resolving 401 keeps the flag cleared and stays unauthenticated.
     await act(async () => {
       await result.current.refresh();
     });
     expect(result.current.mustChangePassword).toBe(false);
-    expect(result.current.status).toBe("personal");
+    expect(result.current.status).toBe("unauthenticated");
   });
 
   it("clearMustChangePassword() resets the flag", async () => {
