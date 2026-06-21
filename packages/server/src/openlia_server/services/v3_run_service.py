@@ -436,13 +436,14 @@ _load_report = get_report_row
 def _default_runner(transports: DataTransports | None) -> Runner:
     """Build a Runner with env-tunable budgets.
 
-    ``REPORT_V3_MAX_WALL_TIME_SECONDS`` and ``REPORT_V3_MAX_TURNS``
-    override the dataclass defaults when set; bad values fall back to
-    the defaults rather than crashing the request. Lets ops widen the
-    cap for long-running research (e.g. elaborative reports against a
-    slower provider) without a code change.
+    ``REPORT_V3_MAX_WALL_TIME_SECONDS``, ``REPORT_V3_MAX_TURNS`` and
+    ``REPORT_V3_TOOL_TIMEOUT_SECONDS`` override the dataclass defaults
+    when set; bad values fall back to the defaults rather than crashing
+    the request. Lets ops widen the cap for long-running research (e.g.
+    elaborative reports against a slower provider) without a code
+    change.
     """
-    kwargs: dict[str, int] = {}
+    kwargs: dict[str, int | float] = {}
     raw_wall = os.environ.get("REPORT_V3_MAX_WALL_TIME_SECONDS", "").strip()
     if raw_wall:
         try:
@@ -457,6 +458,14 @@ def _default_runner(transports: DataTransports | None) -> Runner:
             value = int(raw_turns)
             if value > 0:
                 kwargs["max_turns"] = value
+        except ValueError:
+            pass
+    raw_tool = os.environ.get("REPORT_V3_TOOL_TIMEOUT_SECONDS", "").strip()
+    if raw_tool:
+        try:
+            tool_value = float(raw_tool)
+            if tool_value > 0:
+                kwargs["tool_timeout_seconds"] = tool_value
         except ValueError:
             pass
     if transports is None:

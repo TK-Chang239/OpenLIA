@@ -17,6 +17,7 @@ that produces a populated ``RunResult``.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -91,6 +92,12 @@ class Runner:
     # model latency compound). Override via env in
     # ``v3_run_service._default_runner`` when ops needs more headroom.
     max_wall_time_seconds: int = 30 * 60
+    # Per-tool-call cap. Tools run a synchronous SDK (the EODHD client
+    # issues un-timed HTTP); a single hung call would otherwise block
+    # the event loop and stall the run past the wall-time guard, which
+    # only checks between turns. 120s is generous for one EODHD GET.
+    # Override via env in ``v3_run_service._default_runner``.
+    tool_timeout_seconds: float = 120.0
     transports_factory: Callable[[], DataTransports] = field(
         default=lambda: _null_transports(
             "EODHD transports not wired — set EODHD_API_KEY and rebuild the runner."
@@ -279,7 +286,9 @@ class Runner:
                         "args_summary": _summarize_args(call.arguments),
                     },
                 )
-                result_message = _dispatch_one(call, tools_by_name)
+                result_message = await _dispatch_one_async(
+                    call, tools_by_name, timeout_seconds=self.tool_timeout_seconds
+                )
                 messages.append(result_message)
                 _emit_tool_completion(
                     emitter,
@@ -414,6 +423,44 @@ def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) -> Mes
         return Message(role="tool", content=body, tool_call_id=call.id)
 
     return Message(role="tool", content=_serialize_result(result), tool_call_id=call.id)
+
+
+async def _dispatch_one_async(
+    call: ToolCall,
+    tools_by_name: dict[str, ResearchTool],
+    *,
+    timeout_seconds: float,
+) -> Message:
+    """Run one tool off the event loop, bounded by a timeout.
+
+    Tools execute a synchronous SDK (the EODHD client issues blocking,
+    un-timed HTTP). Calling it inline would freeze the whole asyncio
+    worker and let a single hung request hang the run indefinitely. We
+    run each tool in a worker thread and cap it: a tool that overruns
+    surfaces a structured timeout error to the model, exactly like any
+    other tool failure, so the loop continues instead of stalling.
+    """
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_dispatch_one, call, tools_by_name),
+            timeout=timeout_seconds,
+        )
+    except TimeoutError:
+        log.warning(
+            "v3 tool %s exceeded %.0fs cap; surfacing as a tool error",
+            call.name,
+            timeout_seconds,
+        )
+        body = json.dumps(
+            {
+                "error": (
+                    f"Tool {call.name!r} timed out after {timeout_seconds:.0f}s. "
+                    f"The data source may be slow or unreachable; try a "
+                    f"different tool or proceed without this data."
+                )
+            }
+        )
+        return Message(role="tool", content=body, tool_call_id=call.id)
 
 
 def _serialize_result(result: ToolResult) -> str:
