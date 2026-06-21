@@ -100,15 +100,6 @@ def client_eu_v2(tmp_path, monkeypatch):
         session_mod.dispose_engine()
 
 
-@pytest.fixture
-def client_eu_v2_disabled(tmp_path, monkeypatch):
-    app = _build_app(tmp_path, monkeypatch, enabled=False)
-    try:
-        yield TestClient(app)
-    finally:
-        session_mod.dispose_engine()
-
-
 def test_instructions_crud_roundtrip(client_eu_v2):
     # POST multipart: name + a text/plain file.
     r = client_eu_v2.post(
@@ -152,8 +143,3 @@ def test_instructions_crud_roundtrip(client_eu_v2):
     # DELETE -> 204.
     r = client_eu_v2.delete(f"{_BASE}/instructions/{instructions_id}")
     assert r.status_code == 204
-
-
-def test_instructions_503_when_disabled(client_eu_v2_disabled):
-    r = client_eu_v2_disabled.get(f"{_BASE}/instructions")
-    assert r.status_code == 503

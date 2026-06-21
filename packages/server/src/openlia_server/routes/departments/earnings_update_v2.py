@@ -1,9 +1,9 @@
 """Earnings Update v2 HTTP router — single-model engine.
 
-Mirrors ``equity_research_v3.py``: a factory-built ``APIRouter`` whose
-every handler self-gates on ``eu_v2_enabled()`` (503 when the
-``EARNINGS_ENGINE_VERSION=v2`` flag is off) so v1 stays the only live
-Earnings Update surface until v2 is proven.
+Mirrors ``equity_research_v3.py``: a factory-built ``APIRouter``. v2 is
+now the sole live Earnings Update engine; the ``EARNINGS_ENGINE_VERSION``
+gate is retired (``eu_v2_enabled()`` is always true) and the per-handler
+gate checks remain only as inert backward-compat guards.
 
 Endpoints (prefix ``/departments/earnings-update/v2``):
 
