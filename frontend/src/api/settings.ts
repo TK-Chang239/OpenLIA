@@ -68,7 +68,10 @@ export const updatePrefs = (patch: PrefsPatch) =>
 export const updateEmail = (body: EmailUpdateIn) =>
   request<{ email: string }>('/api/settings/email', { method: 'PATCH', body: JSON.stringify(body) });
 
-export const getEnabledModels = () => request<RosterEntry[]>('/api/settings/models');
+// Path is "/enabled-models", not "/models": the bare "/settings/models" path
+// collides with the SPA page route of the same name (see settings_general.py).
+export const getEnabledModels = () =>
+  request<RosterEntry[]>('/api/settings/enabled-models');
 
 export const getEffectiveModel = (departmentId: string) =>
   request<EffectiveModel>(`/api/settings/models/effective/${departmentId}`);
