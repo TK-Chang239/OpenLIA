@@ -149,7 +149,9 @@ def build_secretary_router(
             # Auto-title the session from the first user message — no-op once
             # the title is something other than the default "New chat".
             try:
-                chat_sessions_svc.ensure_titled(db, session_id=session_id, first_user_text=message)
+                chat_sessions_svc.ensure_titled(
+                    db, session_id=session_id, user_id=user.id, first_user_text=message
+                )
             except Exception:
                 log.warning("ensure_titled failed", exc_info=True)
 

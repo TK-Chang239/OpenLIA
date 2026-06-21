@@ -9,8 +9,8 @@ export async function getUnread(): Promise<UnreadResponse> {
   return fetchJson<UnreadResponse>("/api/notifications/unread");
 }
 
-export async function markRead(department: string): Promise<null> {
-  return fetchJson<null>("/api/notifications/read", {
+export async function markRead(department: string): Promise<{ marked_read: number }> {
+  return fetchJson<{ marked_read: number }>("/api/notifications/read", {
     method: "POST",
     json: { department },
   });

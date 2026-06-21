@@ -42,6 +42,10 @@ _LEGACY_ORPHANED_TABLES = frozenset(
         "er_v2_model_assignments",
         "er_v2_3_model_assignments",
         "er_v2_3_run_state",
+        # v1/v2 equity-research config + templates; ORM models removed with
+        # the engine, tables retained on disk for rollback / data preservation.
+        "er_user_configs",
+        "er_templates",
     }
 )
 

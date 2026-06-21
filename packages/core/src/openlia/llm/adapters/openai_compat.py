@@ -4,8 +4,6 @@ import json
 import time
 from collections.abc import AsyncIterator
 
-import httpx
-
 from openlia.llm.adapters._content import render_openai_messages, strip_cache_breakpoint
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
@@ -66,8 +64,10 @@ class OpenAICompatAdapter(LLMProvider):
         async with make_client(base_url=base, headers=self._headers()) as client:
             try:
                 resp = await client.get("/models")
-            except httpx.HTTPError:
-                return []
+            except TRANSIENT_NETWORK_ERRORS as exc:
+                raise wrap_httpx_error(exc) from exc
+            # Some OpenAI-compatible servers do not implement /models; a
+            # 404 is a legitimate "no listing available", not a failure.
             if resp.status_code == 404:
                 return []
             if resp.status_code != 200:

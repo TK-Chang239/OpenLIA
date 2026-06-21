@@ -7,6 +7,7 @@ DELETE /api/cache/documents — flush all or per-ticker cached documents.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
@@ -14,13 +15,23 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.cache import CachedDocument
+from openlia_server.middleware.auth import build_require_active_admin
 
 
 def build_cache_router(
     *,
     db_session_factory: Callable[[], DBSession],
+    mode: Literal["personal", "company"] = "personal",
 ) -> APIRouter:
-    router = APIRouter(prefix="/cache", tags=["cache"])
+    """Mount the cache admin API under /cache.
+
+    The router is gated by `require_active_admin`: GET /cache/stats and the
+    destructive DELETE /cache/documents must never be reachable unauthenticated.
+    In personal mode the dependency resolves to the synthetic `local` user; in
+    company mode it requires a session cookie tied to an admin user.
+    """
+    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode=mode)
+    router = APIRouter(prefix="/cache", tags=["cache"], dependencies=[require_admin])
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/stats")

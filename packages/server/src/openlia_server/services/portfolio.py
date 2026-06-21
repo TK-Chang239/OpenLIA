@@ -155,13 +155,6 @@ def list_holdings(
     return [d for d in dtos if classify_market(d.ticker) == market]
 
 
-def get_holding(session: Session, *, user_id: str, holding_id: str) -> HoldingDTO:
-    row = session.query(PortfolioHolding).filter_by(user_id=user_id, id=holding_id).one_or_none()
-    if row is None:
-        raise HoldingNotFoundError("holding not found")
-    return _row_to_dto(row)
-
-
 def update_holding(
     session: Session,
     *,

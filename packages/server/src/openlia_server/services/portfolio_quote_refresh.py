@@ -57,24 +57,6 @@ class RefreshResult:
     failed: int
 
 
-def union_of_tracked_tickers(session: Session) -> list[str]:
-    """Distinct, upper-cased tickers across every user's holdings.
-
-    The hidden ``__GROUPS__`` pseudo-row used to persist group ordering is
-    excluded. Returned in sorted order for deterministic test output.
-    """
-    rows = (
-        session.execute(
-            select(PortfolioHolding.ticker)
-            .where(PortfolioHolding.ticker != _GROUPS_META_TICKER)
-            .distinct()
-        )
-        .scalars()
-        .all()
-    )
-    return sorted({t.upper() for t in rows if t})
-
-
 def scheduler_union(session: Session) -> list[tuple[str, int]]:
     """Return ``[(ticker, min_cadence_s), ...]`` for every ticker held by at
     least one user with a polling cadence.

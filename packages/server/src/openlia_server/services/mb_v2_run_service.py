@@ -179,7 +179,14 @@ def _resolve_macro_snapshot(user_id: str) -> MacroSnapshotContext | None:
     dept = get_department("macro_research")
     if dept is None:
         return None
-    snap = dept.get_current_snapshot(user_id)
+    try:
+        snap = dept.get_current_snapshot(user_id)
+    except Exception:
+        # The macro snapshot is a best-effort enrichment block. If its reader
+        # is unavailable or misconfigured, omit the block rather than failing
+        # the entire morning briefing (per this function's documented contract).
+        log.warning("macro snapshot unavailable; omitting from briefing", exc_info=True)
+        return None
     ctx = MacroSnapshotContext(
         debt_cycle_phase=snap.debt_cycle_phase,
         economic_season=snap.economic_season,

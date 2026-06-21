@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openlia_server.db.models.auth import User
 from openlia_server.db.models.cache import CachedDocument
 
 
@@ -30,9 +31,48 @@ def _make_doc(cache_key: str, ticker: str | None = None, bytes_size: int = 10) -
 def cache_client(db_session_factory):
     from openlia_server.routes.cache import build_cache_router
 
+    # The router is admin-gated. In personal mode the gate resolves to the
+    # synthetic `local` user, so seed it so the admin dependency succeeds.
+    with db_session_factory() as s:
+        s.add(
+            User(
+                id="local",
+                email="local@openlia.local",
+                display_name="Local",
+                is_admin=True,
+                is_disabled=False,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        s.commit()
+
     app = FastAPI()
-    app.include_router(build_cache_router(db_session_factory=db_session_factory), prefix="/api")
+    app.include_router(
+        build_cache_router(db_session_factory=db_session_factory, mode="personal"),
+        prefix="/api",
+    )
     return TestClient(app)
+
+
+@pytest.fixture()
+def company_cache_client(db_session_factory):
+    """Company-mode client with no session cookie — used to prove the gate."""
+    from openlia_server.routes.cache import build_cache_router
+
+    app = FastAPI()
+    app.include_router(
+        build_cache_router(db_session_factory=db_session_factory, mode="company"),
+        prefix="/api",
+    )
+    return TestClient(app)
+
+
+def test_cache_routes_require_auth_in_company_mode(company_cache_client):
+    # P0-1 regression: the destructive DELETE and stats must never be reachable
+    # unauthenticated. Company mode with no cookie must reject both.
+    assert company_cache_client.get("/api/cache/stats").status_code in (401, 403)
+    assert company_cache_client.delete("/api/cache/documents").status_code in (401, 403)
 
 
 # ---------------------------------------------------------------------------

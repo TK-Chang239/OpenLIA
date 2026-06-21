@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-import openlia_server.db.models  # noqa: F401 — register all models
+import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
 import pytest
 from _scheduler_fakes import (
     FakeAPScheduler,
