@@ -73,7 +73,24 @@ describe('SettingsPage', () => {
     expect(screen.queryByRole('link', { name: /admin/i })).toBeNull();
   });
 
-  it('renders Connectors at its top-level route for a non-admin user', async () => {
+  it('renders Connectors at its top-level route for an admin user', async () => {
+    vi.spyOn(currentUserModule, 'useCurrentUser').mockReturnValue({
+      id: 'u-admin',
+      email: 'admin@example.com',
+      display_name: 'Admin',
+      role: 'admin',
+      must_change_password: false,
+    });
+    renderAt('/settings/connectors');
+    await waitFor(() => screen.getByText('connectors body'));
+    expect(screen.getByText('connectors body')).toBeInTheDocument();
+  });
+
+  it('redirects a non-admin away from the admin-only Connectors route', async () => {
+    // The server connectors router is gated by require_active_admin, so the
+    // frontend admin-gates the route too. A non-admin hitting it falls through
+    // to the catch-all redirect to General rather than seeing the connectors
+    // body (which would only fire 403-bound requests).
     vi.spyOn(currentUserModule, 'useCurrentUser').mockReturnValue({
       id: 'u-1',
       email: 'user@example.com',
@@ -82,8 +99,8 @@ describe('SettingsPage', () => {
       must_change_password: false,
     });
     renderAt('/settings/connectors');
-    await waitFor(() => screen.getByText('connectors body'));
-    expect(screen.getByText('connectors body')).toBeInTheDocument();
+    await waitFor(() => screen.getByText('general body'));
+    expect(screen.queryByText('connectors body')).toBeNull();
   });
 
   it('shows Loading... when no current user yet', () => {

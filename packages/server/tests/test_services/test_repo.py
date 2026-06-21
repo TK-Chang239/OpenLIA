@@ -89,6 +89,16 @@ def test_save_raises_on_missing_report(db_session):
         svc.save_to_repo(db_session, user_id=u.id, report_id="nonexistent")
 
 
+def test_save_rejects_other_users_report(db_session):
+    owner = _user(db_session, "repo-owner")
+    other = _user(db_session, "repo-other")
+    r = _report(db_session, owner.id)
+    # Another user must not be able to create a repo pointer at this report.
+    with pytest.raises(LookupError):
+        svc.save_to_repo(db_session, user_id=other.id, report_id=r.id)
+    assert svc.list_items(db_session, user_id=other.id) == []
+
+
 # ---------------------------------------------------------------------------
 # v3 polymorphic target
 # ---------------------------------------------------------------------------

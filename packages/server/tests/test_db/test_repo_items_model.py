@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 @pytest.fixture
 def create_tables(engine):
-    import openlia_server.db.models  # noqa: F401 — register all models
+    import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
     from openlia_server.db.base import Base
 
     Base.metadata.create_all(engine)

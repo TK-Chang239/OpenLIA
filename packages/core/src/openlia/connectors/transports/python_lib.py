@@ -12,12 +12,34 @@ the cached instance.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import inspect
+import os
 from inspect import getdoc
 from typing import Any
 
 from openlia.connectors.types import InstanceFactory
+
+_DEFAULT_CALL_TIMEOUT_SECONDS = 120.0
+
+
+def _call_timeout_seconds() -> float:
+    """Per-call wall cap for connector tool dispatch (ops-tunable).
+
+    A no-timeout SDK (e.g. EODHD) must never pin the event loop forever; the
+    call runs off-loop and is bounded so an overrun surfaces as a tool error
+    the model can recover from instead of freezing every concurrent stream.
+    """
+    raw = os.environ.get("OPENLIA_CONNECTOR_TOOL_TIMEOUT_SECONDS")
+    if not raw:
+        return _DEFAULT_CALL_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_CALL_TIMEOUT_SECONDS
+    return value if value > 0 else _DEFAULT_CALL_TIMEOUT_SECONDS
+
 
 _PRIMITIVE_TYPE_MAP: dict[type, str] = {
     str: "string",
@@ -167,13 +189,24 @@ class PythonLibTransport:
         # ("Connection lost" in the browser). Convert it to a regular
         # RuntimeError at this boundary so the chat runtime can surface
         # a tool-error to the model and the turn continues.
+        # Sync SDKs block the calling thread for the entire network round-trip.
+        # Run them off the event loop via to_thread and bound them with wait_for
+        # so a hung endpoint frees the loop instead of stalling every concurrent
+        # SSE stream/runner in the process (root cause of the 54-min EODHD hang).
+        # For async SDKs the to_thread call just builds the coroutine cheaply;
+        # the actual await still runs on the loop, also bounded.
+        timeout = _call_timeout_seconds()
         try:
-            result = method(**bound)
+            result = await asyncio.wait_for(asyncio.to_thread(method, **bound), timeout)
             if inspect.isawaitable(result):
-                result = await result
+                result = await asyncio.wait_for(result, timeout)
         except SystemExit as exc:
             raise RuntimeError(
                 f"SDK called sys.exit({exc.code!r}) during {name!r}; treat as tool failure"
+            ) from exc
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"SDK call {name!r} exceeded {timeout:g}s timeout; treat as tool failure"
             ) from exc
         return result
 

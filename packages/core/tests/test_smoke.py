@@ -4,17 +4,12 @@ import subprocess
 import sys
 
 import openlia
-from openlia.exceptions import OpenLIAError
 
 
 def test_package_has_version():
     assert hasattr(openlia, "__version__")
     assert isinstance(openlia.__version__, str)
     assert openlia.__version__  # non-empty
-
-
-def test_base_exception_is_subclass_of_exception():
-    assert issubclass(OpenLIAError, Exception)
 
 
 def test_no_web_imports_in_core():

@@ -1,4 +1,9 @@
 export type Theme = 'system' | 'light' | 'dark';
+// UI / chat languages are single-language only — the server rejects 'both'
+// for display_language and response_language. Only report_language accepts
+// 'both' (a bilingual report). Keep LangCode as the report-language union so
+// existing report-language consumers stay unchanged.
+export type UiLangCode = 'en' | 'zh-TW';
 export type LangCode = 'en' | 'zh-TW' | 'both';
 export type TimezoneSource = 'auto' | 'manual';
 
@@ -7,8 +12,8 @@ export interface Prefs {
   theme: Theme;
   notify_inapp: boolean;
   notify_email: boolean;
-  display_language: LangCode;
-  response_language: LangCode;
+  display_language: UiLangCode;
+  response_language: UiLangCode;
   report_language: LangCode;
   preferred_model_id?: string | null;
   timezone: string;
@@ -21,8 +26,8 @@ export interface PrefsPatch {
   theme?: Theme;
   notify_inapp?: boolean;
   notify_email?: boolean;
-  display_language?: LangCode;
-  response_language?: LangCode;
+  display_language?: UiLangCode;
+  response_language?: UiLangCode;
   report_language?: LangCode;
   preferred_model_id?: string | null;
 }
@@ -50,13 +55,6 @@ export interface RosterEntry {
   is_enabled: boolean;
 }
 
-export interface EffectiveModel {
-  model_ref: string;
-  provider_kind: string;
-  model_id: string;
-  provider_id: string;
-}
-
 export { ApiError } from './_request';
 import { request } from './_request';
 
@@ -72,9 +70,6 @@ export const updateEmail = (body: EmailUpdateIn) =>
 // collides with the SPA page route of the same name (see settings_general.py).
 export const getEnabledModels = () =>
   request<RosterEntry[]>('/api/settings/enabled-models');
-
-export const getEffectiveModel = (departmentId: string) =>
-  request<EffectiveModel>(`/api/settings/models/effective/${departmentId}`);
 
 export const getRegisteredDepartmentIds = () =>
   request<{ departments: string[] }>('/api/settings/departments').then((r) => r.departments);
