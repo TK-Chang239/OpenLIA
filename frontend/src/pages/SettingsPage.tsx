@@ -30,7 +30,9 @@ export function SettingsPage(): JSX.Element {
         <Route index element={<Navigate to="general" replace />} />
         <Route path="general" element={<GeneralSection />} />
         <Route path="models" element={<ModelsSection userRole={user.role} />} />
-        <Route path="connectors" element={<ConnectorsSection />} />
+        {isAdmin ? (
+          <Route path="connectors" element={<ConnectorsSection />} />
+        ) : null}
         <Route path="timezone" element={<TimezoneSection />} />
         <Route
           path="account"

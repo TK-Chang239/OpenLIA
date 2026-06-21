@@ -52,7 +52,7 @@ describe('settings api', () => {
     });
   });
 
-  it('GET /settings/models returns flat enabled models', async () => {
+  it('GET /settings/enabled-models returns flat enabled models', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => [
@@ -67,6 +67,12 @@ describe('settings api', () => {
       ],
     });
     const models = await getEnabledModels();
+    // Path must NOT be /api/settings/models: that collides with the SPA page
+    // route of the same name and would render raw JSON on navigation.
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/settings/enabled-models',
+      expect.anything(),
+    );
     expect(models).toHaveLength(1);
     expect(models[0].model_ref).toBe('gpt-4o');
   });
