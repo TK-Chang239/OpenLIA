@@ -480,23 +480,16 @@ def _make_lifespan(
 
             report_store_impl = ReportStoreImpl()
 
-            # EU v2 scheduler jobs are additive behind the engine gate:
-            # when EARNINGS_ENGINE_VERSION != v2, leave the syncer/dispatcher
-            # unset so build_scheduler_service skips registering the
-            # EU_V2_SYNC / EU_V2_DISPATCH executors and cadences entirely
-            # (mirrors the routes' per-request 503 gate).
-            from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
+            # EU v2 is the sole live Earnings Update engine, so its scheduler
+            # jobs (EU_V2_SYNC / EU_V2_DISPATCH executors and cadences) are
+            # always registered. The EARNINGS_ENGINE_VERSION gate is retired.
+            from openlia_server.services.eu_v2_scheduler_impl import (
+                EuV2CalendarSyncerImpl,
+                EuV2DispatcherImpl,
+            )
 
-            eu_v2_syncer = None
-            eu_v2_dispatcher = None
-            if eu_v2_enabled():
-                from openlia_server.services.eu_v2_scheduler_impl import (
-                    EuV2CalendarSyncerImpl,
-                    EuV2DispatcherImpl,
-                )
-
-                eu_v2_syncer = EuV2CalendarSyncerImpl()
-                eu_v2_dispatcher = EuV2DispatcherImpl(session_factory=_sm)
+            eu_v2_syncer = EuV2CalendarSyncerImpl()
+            eu_v2_dispatcher = EuV2DispatcherImpl(session_factory=_sm)
 
             async with adapter:
                 scheduler_svc = build_scheduler_service(

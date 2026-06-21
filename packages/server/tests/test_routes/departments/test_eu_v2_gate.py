@@ -3,9 +3,12 @@
 from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 
 
-def test_disabled_by_default(monkeypatch):
+def test_enabled_when_flag_unset(monkeypatch):
+    # v2 is the sole live Earnings Update engine; the gate is retired and
+    # any value (including unset) keeps it on. Captures the production 503
+    # regression where deploy configs never set EARNINGS_ENGINE_VERSION.
     monkeypatch.delenv("EARNINGS_ENGINE_VERSION", raising=False)
-    assert eu_v2_enabled() is False
+    assert eu_v2_enabled() is True
 
 
 def test_enabled_when_v2(monkeypatch):
@@ -13,6 +16,6 @@ def test_enabled_when_v2(monkeypatch):
     assert eu_v2_enabled() is True
 
 
-def test_case_insensitive(monkeypatch):
-    monkeypatch.setenv("EARNINGS_ENGINE_VERSION", "V2")
+def test_enabled_for_any_value(monkeypatch):
+    monkeypatch.setenv("EARNINGS_ENGINE_VERSION", "anything")
     assert eu_v2_enabled() is True

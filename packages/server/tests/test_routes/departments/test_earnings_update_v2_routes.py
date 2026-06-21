@@ -109,20 +109,6 @@ def client_eu_v2(tmp_path, monkeypatch):
         session_mod.dispose_engine()
 
 
-@pytest.fixture
-def client_eu_v2_disabled(tmp_path, monkeypatch):
-    app = _build_app(tmp_path, monkeypatch, enabled=False)
-    try:
-        yield TestClient(app)
-    finally:
-        session_mod.dispose_engine()
-
-
-def test_routes_503_when_disabled(client_eu_v2_disabled):
-    r = client_eu_v2_disabled.get(f"{_BASE}/settings")
-    assert r.status_code == 503
-
-
 def test_settings_get_returns_defaults(client_eu_v2):
     r = client_eu_v2.get(f"{_BASE}/settings")
     assert r.status_code == 200
@@ -363,11 +349,6 @@ def test_run_start_handler_is_async():
     assert any(
         inspect.iscoroutinefunction(getattr(mod, n, None)) for n in dir(mod) if "start" in n.lower()
     )
-
-
-def test_data_sources_503_when_disabled(client_eu_v2_disabled):
-    r = client_eu_v2_disabled.get(f"{_BASE}/data-sources")
-    assert r.status_code == 503
 
 
 def _ds_by_key(body):
