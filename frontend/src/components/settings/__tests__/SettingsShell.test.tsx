@@ -37,8 +37,13 @@ describe('SettingsShell', () => {
     expect(screen.getByRole('link', { name: /admin/i })).toBeInTheDocument();
   });
 
-  it('renders the Connectors nav item for a regular user', () => {
+  it('hides the Connectors nav item from a regular user (admin-only)', () => {
     renderAt('/settings/general');
+    expect(screen.queryByRole('link', { name: /connectors/i })).toBeNull();
+  });
+
+  it('renders the Connectors nav item for an admin', () => {
+    renderAt('/settings/general', 'admin');
     expect(
       screen.getByRole('link', { name: /connectors/i }),
     ).toBeInTheDocument();

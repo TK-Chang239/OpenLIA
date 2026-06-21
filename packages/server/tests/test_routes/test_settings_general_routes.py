@@ -74,7 +74,7 @@ def test_get_enabled_models_returns_flat_list(
     )
     db_session.commit()
 
-    resp = company_client.get("/settings/models")
+    resp = company_client.get("/settings/enabled-models")
     assert resp.status_code == 200
     body = resp.json()
     assert isinstance(body, list)
@@ -90,5 +90,15 @@ def test_get_enabled_models_returns_flat_list(
 
 
 def test_get_enabled_models_requires_auth(company_client_anon: TestClient) -> None:
-    resp = company_client_anon.get("/settings/models")
+    resp = company_client_anon.get("/settings/enabled-models")
     assert resp.status_code == 401
+
+
+def test_bare_settings_models_path_is_not_an_api_route(company_client: TestClient) -> None:
+    """`/settings/models` is the SPA page route. It must NOT be served by the
+    enabled-models API (which lives at `/settings/enabled-models`), otherwise a
+    browser navigation to the Models page renders raw JSON instead of the app.
+    With no SPA dist mounted in tests this 404s; in production it falls through
+    to the index.html catch-all."""
+    resp = company_client.get("/settings/models")
+    assert resp.status_code == 404

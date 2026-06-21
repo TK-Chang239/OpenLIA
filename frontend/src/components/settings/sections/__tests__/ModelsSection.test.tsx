@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { ModelsSection } from '../ModelsSection';
+import { listAdminProviders } from '../../../../api/llm_admin';
 
 vi.mock('../../../../api/department-model-pref', () => ({
   getDepartmentModelPref: vi.fn().mockResolvedValue({
@@ -35,6 +36,10 @@ vi.mock('../../../../api/llm_slots', () => ({
 }));
 
 describe('ModelsSection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders user overrides, catalog, system roles for admin', async () => {
     render(<ModelsSection userRole="admin" />);
     await waitFor(() =>
@@ -46,7 +51,7 @@ describe('ModelsSection', () => {
     expect(screen.getByText(/System roles/i)).toBeInTheDocument();
   });
 
-  it('hides system roles for non-admin', async () => {
+  it('hides the admin catalog for non-admin and never calls the admin endpoint', async () => {
     render(<ModelsSection userRole="user" />);
     await waitFor(() =>
       expect(
@@ -54,5 +59,9 @@ describe('ModelsSection', () => {
       ).toBeInTheDocument(),
     );
     expect(screen.queryByText(/System roles/i)).not.toBeInTheDocument();
+    // The provider catalog (admin-only fetch) must not render for non-admins,
+    // otherwise listAdminProviders 403s and shows an error banner.
+    expect(screen.queryByText(/Providers and models/i)).not.toBeInTheDocument();
+    expect(listAdminProviders).not.toHaveBeenCalled();
   });
 });

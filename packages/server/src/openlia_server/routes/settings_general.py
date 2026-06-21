@@ -153,7 +153,13 @@ def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter
 
         return {"departments": get_registered_department_ids()}
 
-    @router.get("/models")
+    # NOTE: path is "/enabled-models", NOT "/models". The bare path
+    # "/settings/models" (reachable because the /api prefix is stripped at
+    # runtime) collides with the SPA page route of the same name, so a browser
+    # navigation to /settings/models would hit this API and render raw JSON
+    # instead of the app. Keeping the roster on a distinct path lets that
+    # navigation fall through to the SPA index.html.
+    @router.get("/enabled-models")
     def list_enabled_models(
         db: Session = Depends(session_dep),
         _user: User = require_auth,
