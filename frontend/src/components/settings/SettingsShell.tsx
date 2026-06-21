@@ -13,7 +13,10 @@ interface NavItem {
 const ITEMS: NavItem[] = [
   { to: '/settings/general', labelKey: 'settings.tabs.general' },
   { to: '/settings/models', labelKey: 'settings.tabs.models' },
-  { to: '/settings/connectors', labelKey: 'settings.tabs.connectors' },
+  // Connectors are managed entirely through admin-only endpoints
+  // (GET /api/connectors etc.), so the tab is admin-only — otherwise a
+  // non-admin opening it fires those requests and gets a 403 error banner.
+  { to: '/settings/connectors', labelKey: 'settings.tabs.connectors', adminOnly: true },
   { to: '/settings/timezone', labelKey: 'settings.tabs.timezone' },
   { to: '/settings/account', labelKey: 'settings.tabs.account' },
   { to: '/settings/disclaimer', labelKey: 'settings.tabs.disclaimer' },

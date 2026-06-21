@@ -27,19 +27,25 @@ export function ModelsSection({ userRole }: Props): JSX.Element {
         </p>
       </header>
       <UserOverridesPanel departments={departments} />
-      <section className="space-y-3">
-        <header>
-          <h2 className="text-lg font-semibold text-text-primary">
-            {t('settings.models.catalog_title')}
-          </h2>
-          <p className="text-sm text-text-secondary">
-            {isAdmin
-              ? t('settings.models.catalog_description_admin')
-              : t('settings.models.catalog_description_user')}
-          </p>
-        </header>
-        <ProviderCatalog departments={departments} isAdmin={isAdmin} />
-      </section>
+      {/* The provider/model catalog is fetched from an admin-only endpoint
+          (GET /settings/admin/llm/providers). Render it for admins only —
+          otherwise a non-admin viewing this page fires that request and gets
+          a 403 error banner. Non-admins pick their per-department model in
+          UserOverridesPanel above, which uses the non-admin enabled-models
+          endpoint. */}
+      {isAdmin ? (
+        <section className="space-y-3">
+          <header>
+            <h2 className="text-lg font-semibold text-text-primary">
+              {t('settings.models.catalog_title')}
+            </h2>
+            <p className="text-sm text-text-secondary">
+              {t('settings.models.catalog_description_admin')}
+            </p>
+          </header>
+          <ProviderCatalog departments={departments} isAdmin={isAdmin} />
+        </section>
+      ) : null}
       {isAdmin ? <SystemRolesPanel /> : null}
     </div>
   );
