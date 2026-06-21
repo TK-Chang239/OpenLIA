@@ -344,6 +344,15 @@ def _make_lifespan(
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher
 
+        # The eodhd SDK issues un-timed HTTP; a hung endpoint would block
+        # a report run indefinitely (the engine's wall-time guard only
+        # checks between turns). Inject a process-wide network timeout so
+        # every EODHD call (v3 / Earnings Update / Morning Briefing) is
+        # bounded. Must run before any report background task fires.
+        from openlia_server.services.eodhd_hardening import harden_eodhd_timeout
+
+        harden_eodhd_timeout()
+
         # v3 streaming infrastructure: in-memory broker fanned out to
         # SSE subscribers + per-run cancel-token registry. Lives for
         # the lifetime of the process; nothing persisted here.
