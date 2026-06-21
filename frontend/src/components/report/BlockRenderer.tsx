@@ -101,9 +101,8 @@ function renderInner(block: any, renderChild?: (child: any, forced: ForcedHeight
       return <TreemapBlock {...block} />;
     case 'combo_chart':
       return <ComboChartBlock {...block} />;
-    // v2.2 block types — emitted by RunnerV2 helpers. The v2 adapter
-    // (adapters/v2BlockAdapter.ts) maps `chart`→`chart_image`,
-    // `skip_banner`/`degraded_banner`/`excel_attachment` straight through.
+    // v2.2 block types — emitted by RunnerV2 helpers and rendered straight
+    // through for repo-saved legacy reports.
     case 'skip_banner':
       return <SkipBannerBlock {...block} />;
     case 'degraded_banner':

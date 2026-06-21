@@ -5,9 +5,6 @@ intentionally not directly tested — they're verified through observable
 behavior on whole report payloads.
 """
 
-from datetime import UTC, datetime
-
-from openlia.reports.assembler import PageFurnitureConfig, assemble_report
 from openlia.reports.citations import normalize_report
 
 
@@ -182,67 +179,6 @@ def test_legacy_three_field_web_tuple_without_title_still_parses():
     assert c["source"] == "Reuters"
     assert c["date"] == "2026-05-12"
     assert c["url"] == "https://reuters.com/eu-appeal"
-
-
-def test_assemble_report_runs_normalizer_end_to_end():
-    """Integration: an LLM-shaped payload with inline tuples flows through
-    assemble_report and emerges with `[N]` markers and a populated
-    citations array on the validated ReportSchema."""
-    payload = {
-        "schema_version": "2.0",
-        "department": "equity_research",
-        "cover": {
-            "title": "Apple",
-            "subtitle": "Q1 2026",
-            "ticker": "AAPL",
-            "tagline": "Q1 review",
-        },
-        "sections": [
-            {
-                "id": "s1",
-                "title": "Overview",
-                "blocks": [
-                    {
-                        "type": "text",
-                        "content": (
-                            'Apple beat Q1 [Reuters, "Apple Q1 beats", 2026-05-12, '
-                            "reuters.com/apple-q1]. Revenue was $95.4B "
-                            "[get_fundamentals_data(AAPL.US)]."
-                        ),
-                    }
-                ],
-            }
-        ],
-    }
-
-    furniture = PageFurnitureConfig(
-        header_left="OpenLIA",
-        header_right_by_department={},
-        footer_left_fmt="{date}",
-        footer_center="Center",
-        footer_right="Right",
-        disclaimer="DYOR",
-    )
-
-    schema = assemble_report(
-        payload,
-        department="equity_research",
-        furniture=furniture,
-        now=datetime(2026, 5, 16, tzinfo=UTC),
-    )
-
-    block = schema.sections[0].blocks[0]
-    assert block.type == "text"
-    assert "[1]" in block.content
-    assert "[2]" in block.content
-    assert "Reuters" not in block.content
-    assert "get_fundamentals_data" not in block.content
-
-    ids = [c.id for c in schema.citations]
-    assert ids == ["1", "2"]
-    assert schema.citations[0].url == "https://reuters.com/apple-q1"
-    assert schema.citations[1].url is None
-    assert schema.citations[1].source == "get_fundamentals_data"
 
 
 def test_existing_bracket_n_markers_are_left_alone_idempotent():

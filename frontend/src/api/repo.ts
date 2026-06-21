@@ -2,7 +2,14 @@ import { fetchJson } from "./client";
 
 export interface RepoItem {
   id: string;
-  report_id: string;
+  // Polymorphic pointer set. The server's RepoItemOut populates exactly one
+  // of these per row depending on which engine wrote the artifact; the rest
+  // are null. ``report_id`` is the v1 pointer and is null for non-v1 saves.
+  report_id: string | null;
+  pipeline_run_id?: string | null;
+  v3_report_id?: string | null;
+  eu_v2_report_id?: string | null;
+  mb_v2_report_id?: string | null;
   created_at: string;
 }
 

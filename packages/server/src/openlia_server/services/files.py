@@ -41,13 +41,6 @@ def _safe_filename(name: str) -> str:
 
 
 @dataclass(frozen=True)
-class InMemoryFile:
-    content: bytes
-    media_type: str
-    filename: str
-
-
-@dataclass(frozen=True)
 class StoredFile:
     path: Path
     media_type: str

@@ -107,16 +107,23 @@ def list_sessions(
 
 
 def ensure_titled(
-    db: Session, *, session_id: str, first_user_text: str, default_title: str = "New chat"
+    db: Session,
+    *,
+    session_id: str,
+    user_id: str,
+    first_user_text: str,
+    default_title: str = "New chat",
 ) -> None:
     """If the session still has the default title, replace it with the
     first 48 characters of the first user message.
 
     Idempotent — safe to call after every user message; it only mutates
-    when ``title == default_title``.
+    when ``title == default_title``. Owner-scoped: a session that is not
+    ``user_id``'s is treated as absent, so this can never retitle another
+    user's chat.
     """
     row = db.get(ChatSession, session_id)
-    if row is None:
+    if row is None or row.user_id != user_id:
         return
     if row.title != default_title:
         return

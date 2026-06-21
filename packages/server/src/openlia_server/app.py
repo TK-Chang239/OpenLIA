@@ -885,7 +885,7 @@ def create_app(
 
     from openlia_server.routes.cache import build_cache_router
 
-    app.include_router(build_cache_router(db_session_factory=factory))
+    app.include_router(build_cache_router(db_session_factory=factory, mode=mode))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

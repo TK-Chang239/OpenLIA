@@ -33,10 +33,6 @@ def pack_vector(vec: list[float]) -> bytes:
     return struct.pack(f"<{len(vec)}f", *vec)
 
 
-def unpack_vector(blob: bytes, dim: int) -> list[float]:
-    return list(struct.unpack(f"<{dim}f", blob))
-
-
 def embed_and_store_construct(
     db: Session,
     *,

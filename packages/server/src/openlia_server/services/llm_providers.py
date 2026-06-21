@@ -210,10 +210,6 @@ def list_models_for_provider(session: Session, provider_id: str) -> list[LLMMode
     return list(session.scalars(select(LLMModel).where(LLMModel.provider_id == provider_id)).all())
 
 
-def list_all_models(session: Session) -> list[LLMModel]:
-    return list(session.scalars(select(LLMModel)).all())
-
-
 def update_model(
     session: Session,
     model_id: str,

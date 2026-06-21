@@ -239,6 +239,19 @@ export interface SpotlightChart {
 
 export function SpotlightAreaChart({ data }: { data: SpotlightChart }): JSX.Element {
   const t = useChartTokens();
+  // Guard against an empty series — the xAxis min/max below index data.data[0]
+  // and data.data[length - 1], which throws on an empty array. Render a safe
+  // placeholder instead of crashing the whole dashboard.
+  if (data.data.length === 0) {
+    return (
+      <div
+        style={{ height: 110, width: "100%" }}
+        className="flex items-center justify-center text-xs text-text-tertiary"
+      >
+        No data
+      </div>
+    );
+  }
   const unit = data.yUnit ?? "";
   const option = {
     animation: false,

@@ -52,3 +52,9 @@ build/
 
 # Extraction pipeline output (contains content from proprietary reports)
 scripts/extraction/output/
+
+# Proprietary / copyrighted source research (third-party sell-side PDFs and
+# reference docs — keep out of version control; legal/IP risk + repo bloat)
+個股報告/
+產業報告/
+*.pdf

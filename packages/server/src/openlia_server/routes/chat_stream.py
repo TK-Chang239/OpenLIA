@@ -95,7 +95,7 @@ def build_chat_stream_router(
         # Auto-title the session from the first user message — no-op when
         # the title has already been set to anything other than "New chat".
         try:
-            svc.ensure_titled(db, session_id=session_id, first_user_text=q)
+            svc.ensure_titled(db, session_id=session_id, user_id=user.id, first_user_text=q)
         except Exception:
             # auto-title is best-effort; never fail user request on title bug.
             log.warning("ensure_titled failed", exc_info=True)

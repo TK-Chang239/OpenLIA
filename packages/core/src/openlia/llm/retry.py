@@ -26,11 +26,19 @@ async def with_retries[T](
             if attempt >= max_attempts:
                 break
 
-            schedule = _BACKOFFS[min(attempt - 1, len(_BACKOFFS) - 1)] * base_delay_s
+            # Exponential backoff is scaled by base_delay_s, so setting
+            # base_delay_s=0 disables the synthetic wait (e.g. in tests).
+            backoff = _BACKOFFS[min(attempt - 1, len(_BACKOFFS) - 1)] * base_delay_s
+            jitter = backoff * random.uniform(-0.2, 0.2)
+            delay = max(0.0, backoff + jitter) if base_delay_s > 0 else 0.0
+
+            # A genuine server-provided Retry-After is an explicit
+            # instruction and is honored at face value regardless of
+            # base_delay_s, so a real 429 never retries instantly.
             if isinstance(exc, RateLimitError) and exc.retry_after_seconds is not None:
-                schedule = max(schedule, float(exc.retry_after_seconds) * base_delay_s)
-            if base_delay_s > 0:
-                jitter = schedule * random.uniform(-0.2, 0.2)
-                await asyncio.sleep(max(0.0, schedule + jitter))
+                delay = max(delay, float(exc.retry_after_seconds))
+
+            if delay > 0:
+                await asyncio.sleep(delay)
     assert last_exc is not None
     raise last_exc
