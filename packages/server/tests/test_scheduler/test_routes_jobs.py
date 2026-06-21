@@ -4,7 +4,7 @@ import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-import openlia_server.db.models  # noqa: F401 — register all models
+import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 
@@ -13,6 +13,10 @@ def _add_aapl_daily(uid: str) -> None:
         PortfolioQuoteDaily,
     )
 
+    # Anchor seed dates to "now" so the rows always fall inside the 1m
+    # (30-day) window the route derives from datetime.now(UTC); hardcoded
+    # calendar dates silently age out of the window and yield 0 points.
+    today = datetime.now(UTC).date()
     with session_mod.SessionLocal() as s:
         s.add(
             PortfolioHolding(
@@ -21,12 +25,12 @@ def _add_aapl_daily(uid: str) -> None:
                 ticker="AAPL",
                 shares=Decimal("10"),
                 currency="USD",
-                added_at=datetime(2026, 5, 1, tzinfo=UTC),
+                added_at=datetime.now(UTC) - timedelta(days=21),
             )
         )
         for d, c in (
-            (date(2026, 5, 1), Decimal("100")),
-            (date(2026, 5, 8), Decimal("110")),
+            (today - timedelta(days=14), Decimal("100")),
+            (today - timedelta(days=7), Decimal("110")),
         ):
             s.add(PortfolioQuoteDaily(ticker="AAPL", trade_date=d, close=c))
         s.commit()

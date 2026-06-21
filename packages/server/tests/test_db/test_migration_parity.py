@@ -79,6 +79,8 @@ def test_metadata_matches_alembic_head(tmp_path: Path) -> None:
         "er_v2_model_assignments",
         "er_v2_3_model_assignments",
         "er_v2_3_run_state",
+        "er_user_configs",
+        "er_templates",
     }
     db_tables -= _LEGACY_ORPHANED
 

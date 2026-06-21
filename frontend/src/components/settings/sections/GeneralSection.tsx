@@ -7,6 +7,7 @@ import {
   Theme,
   ApiError,
   type LangCode,
+  type UiLangCode,
 } from '../../../api/settings';
 import { setUiLanguage } from '../../../i18n';
 import { useDirtyForm } from '../useDirtyForm';
@@ -17,7 +18,7 @@ import { InlineFeedback } from '../InlineFeedback';
 
 const THEMES: Theme[] = ['system', 'light', 'dark'];
 
-const UI_LANGUAGES: { code: LangCode; label: string }[] = [
+const UI_LANGUAGES: { code: UiLangCode; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'zh-TW', label: '繁體中文 (Traditional Chinese)' },
 ];
@@ -201,7 +202,7 @@ export function GeneralSection(): JSX.Element {
           </span>
           <select
             value={form.values.display_language}
-            onChange={(e) => form.setField('display_language', e.target.value as LangCode)}
+            onChange={(e) => form.setField('display_language', e.target.value as UiLangCode)}
             className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary focus:border-border-secondary focus:outline-none"
           >
             {UI_LANGUAGES.map((l) => (
@@ -221,7 +222,7 @@ export function GeneralSection(): JSX.Element {
           </span>
           <select
             value={form.values.response_language}
-            onChange={(e) => form.setField('response_language', e.target.value as LangCode)}
+            onChange={(e) => form.setField('response_language', e.target.value as UiLangCode)}
             className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary focus:border-border-secondary focus:outline-none"
           >
             {UI_LANGUAGES.map((l) => (

@@ -7,6 +7,40 @@ import { afterEach } from "vitest";
 // localStorage is empty and jsdom's navigator.language is "en-US".
 import "./i18n";
 
+// jsdom + undici realm mismatch on AbortSignal.
+//
+// react-router's createClientSideRequest builds `new Request(url, {signal})`
+// using the AbortSignal from a global AbortController. Under jsdom, the global
+// AbortController/AbortSignal are jsdom's own implementations, but the global
+// Request is Node's bundled-undici Request. undici validates
+// `signal instanceof <its own AbortSignal>` and the jsdom signal fails that
+// check, throwing an unhandled "Expected signal to be an instance of
+// AbortSignal" rejection that fails the whole vitest run (SettingsShellBlocker
+// and SettingsPage navigate during their tests). Node's native classes that
+// undici accepts are not recoverable here (jsdom has already replaced the
+// globals), so wrap the global Request so a foreign-realm signal is dropped
+// before it reaches undici's validator. Tests never assert on signal-driven
+// aborts, so dropping the signal is behavior-preserving for them; requests
+// without a signal validate cleanly.
+{
+  const OriginalRequest = globalThis.Request;
+  if (typeof OriginalRequest === "function") {
+    class RealmSafeRequest extends OriginalRequest {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        if (init && "signal" in init) {
+          const safeInit = { ...init };
+          delete safeInit.signal;
+          super(input, safeInit);
+        } else {
+          super(input, init);
+        }
+      }
+    }
+    (globalThis as { Request: typeof Request }).Request =
+      RealmSafeRequest as typeof Request;
+  }
+}
+
 // jsdom does not implement EventSource. Several components (notifications
 // stream, report stream) construct one on mount, which crashes any test that
 // renders them without a per-test mock. Provide a no-op stub so those tests

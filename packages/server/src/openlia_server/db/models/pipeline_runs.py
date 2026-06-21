@@ -6,9 +6,8 @@ caller persists ``composer_inputs`` and the raw template source so a
 fresh worker can rebuild the inputs to ``RunnerV2.execute()`` after a
 restart.
 
-States mirror :class:`openlia.llm.runtime.report_v2.runner_v2.RunState`
-verbatim; they are stored as plain strings to stay decoupled from the
-core enum.
+``state`` values are stored as plain strings to stay decoupled from
+any core enum.
 """
 
 from __future__ import annotations

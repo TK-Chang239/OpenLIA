@@ -281,7 +281,9 @@ def test_get_session_not_found_raises(db_session):
 def test_ensure_titled_replaces_default(db_session):
     u = _make_user(db_session, "auto-title@example.com")
     s = svc.create_session(db_session, user_id=u.id, department="secretary", title="New chat")
-    svc.ensure_titled(db_session, session_id=s.id, first_user_text="What moved markets today?")
+    svc.ensure_titled(
+        db_session, session_id=s.id, user_id=u.id, first_user_text="What moved markets today?"
+    )
     db_session.refresh(s)
     assert s.title == "What moved markets today?"
 
@@ -290,7 +292,7 @@ def test_ensure_titled_truncates_to_48(db_session):
     u = _make_user(db_session, "auto-title-long@example.com")
     s = svc.create_session(db_session, user_id=u.id, department="secretary", title="New chat")
     long = "x" * 200
-    svc.ensure_titled(db_session, session_id=s.id, first_user_text=long)
+    svc.ensure_titled(db_session, session_id=s.id, user_id=u.id, first_user_text=long)
     db_session.refresh(s)
     assert s.title == "x" * 48
 
@@ -298,9 +300,21 @@ def test_ensure_titled_truncates_to_48(db_session):
 def test_ensure_titled_no_op_when_title_already_set(db_session):
     u = _make_user(db_session, "auto-title-set@example.com")
     s = svc.create_session(db_session, user_id=u.id, department="secretary", title="Already named")
-    svc.ensure_titled(db_session, session_id=s.id, first_user_text="should not replace")
+    svc.ensure_titled(
+        db_session, session_id=s.id, user_id=u.id, first_user_text="should not replace"
+    )
     db_session.refresh(s)
     assert s.title == "Already named"
+
+
+def test_ensure_titled_ignores_other_users_session(db_session):
+    owner = _make_user(db_session, "auto-title-owner@example.com")
+    other = _make_user(db_session, "auto-title-other@example.com")
+    s = svc.create_session(db_session, user_id=owner.id, department="secretary", title="New chat")
+    # A different user must not be able to retitle the owner's session.
+    svc.ensure_titled(db_session, session_id=s.id, user_id=other.id, first_user_text="hijacked")
+    db_session.refresh(s)
+    assert s.title == "New chat"
 
 
 def test_list_sessions_filters_by_department(db_session):

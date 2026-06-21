@@ -2,8 +2,7 @@
 
 Mirrors ``equity_research_v3.py``: a factory-built ``APIRouter``. v2 is
 now the sole live Earnings Update engine; the ``EARNINGS_ENGINE_VERSION``
-gate is retired (``eu_v2_enabled()`` is always true) and the per-handler
-gate checks remain only as inert backward-compat guards.
+gate is retired and the engine is always on.
 
 Endpoints (prefix ``/departments/earnings-update/v2``):
 
@@ -60,7 +59,6 @@ from openlia_server.db.models.report_eu import (
     ReportEuSection,
 )
 from openlia_server.middleware.auth import build_require_auth
-from openlia_server.routes.departments._eu_v2_gate import eu_v2_enabled
 from openlia_server.services import eu_v2_calendar_sync as calendar_sync
 from openlia_server.services import eu_v2_data_sources
 from openlia_server.services import eu_v2_instructions_service as instructions_svc
@@ -367,18 +365,8 @@ def _card_highlights(raw: str | None) -> CardHighlightsOut | None:
 
 
 # ---------------------------------------------------------------------------
-# Gate + streaming-state helpers
+# Streaming-state helpers
 # ---------------------------------------------------------------------------
-
-
-def _engine_disabled() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail=(
-            "Earnings Update v2 engine disabled. Set EARNINGS_ENGINE_VERSION=v2 "
-            "to enable. Default surface is v1 at /departments/earnings-update."
-        ),
-    )
 
 
 def _streaming_state(request: Request) -> tuple[EventBroker, dict[str, CancelToken]]:
@@ -477,8 +465,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> SettingsOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         dto = settings_svc.get_settings(db, user_id=user.id)
         return SettingsOut(
             provider_kind=dto.provider_kind,
@@ -500,8 +486,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> DataSourcesOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         ds = eu_v2_data_sources.compute_data_sources(
             db, user_id=user.id, provider_kind=provider_kind, model=model
         )
@@ -513,8 +497,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> SettingsOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         if payload.template_id == "freeform" and not payload.instructions_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -559,8 +541,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> WatchlistListOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         rows = watchlist_svc.list_entries(db, user_id=user.id)
         return WatchlistListOut(
             entries=[
@@ -584,8 +564,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> WatchlistEntryOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         try:
             dto = watchlist_svc.add_entry(
                 db, user_id=user.id, ticker=payload.ticker, company_name=None
@@ -628,8 +606,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> None:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         try:
             watchlist_svc.remove_entry(db, user_id=user.id, entry_id=entry_id)
         except watchlist_svc.WatchlistEntryNotFoundError as exc:
@@ -640,8 +616,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> SyncResultOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         transports = _resolve_eu_transports(db)
         if transports is None:
             # EODHD not configured — no data source to sync against. A
@@ -663,8 +637,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> TemplateListOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         rows = templates_svc.list_templates(db, user_id=user.id)
         return TemplateListOut(
             templates=[
@@ -689,8 +661,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> TemplateOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         try:
             row = templates_svc.create_template_from_markdown(
                 db=db,
@@ -715,8 +685,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         try:
             templates_svc.soft_delete_template(db=db, user_id=user.id, template_id=template_id)
         except templates_svc.TemplateNotFoundError as exc:
@@ -731,8 +699,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> list[InstructionsOut]:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         rows = instructions_svc.list_instructions(db=db, user_id=user.id)
         return [
             InstructionsOut(
@@ -756,8 +722,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> InstructionsOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         content = await file.read()
         upload = FileUpload(
             filename=file.filename or "unnamed",
@@ -799,8 +763,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         try:
             instructions_svc.soft_delete_instructions(
                 db=db, user_id=user.id, instructions_id=instructions_id
@@ -817,8 +779,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> ScheduleListOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         rows = (
             db.execute(
                 select(EuV2EarningsSchedule)
@@ -867,8 +827,6 @@ def build_earnings_update_v2_router(
         where no loop is bound and ``create_task`` raises ``RuntimeError:
         no running event loop`` (the exact bug that broke v3).
         """
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         broker, cancel_registry = _streaming_state(request)
 
         try:
@@ -904,8 +862,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> list[RunSummaryOut]:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         stmt = select(ReportEu).where(ReportEu.user_id == user.id)
         if status_filter is not None:
             stmt = stmt.where(ReportEu.status == status_filter)
@@ -919,8 +875,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> RunDetailOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         row = _load_owned_run(db, user_id=user.id, report_id=report_id)
         sections = (
             db.execute(
@@ -960,8 +914,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> None:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         row = _load_owned_run(db, user_id=user.id, report_id=report_id)
         db.delete(row)
         db.commit()
@@ -973,8 +925,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> CancelOut:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         _load_owned_run(db, user_id=user.id, report_id=report_id)
         _, cancel_registry = _streaming_state(request)
         cancelled = run_svc.cancel_run(cancel_registry=cancel_registry, report_id=report_id)
@@ -993,8 +943,6 @@ def build_earnings_update_v2_router(
         A late subscriber (run already finished) gets a single
         ``run.snapshot`` frame and the stream closes immediately.
         """
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         row = _load_owned_run(db, user_id=user.id, report_id=report_id)
         terminal_snapshot: dict[str, Any] | None = None
         if row.status in ("completed", "failed", "cancelled"):
@@ -1017,8 +965,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> HTMLResponse:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         try:
             row = run_svc.get_report_row(db=db, user_id=user.id, report_id=report_id)
             rendered = render_svc.render_html(db=db, user_id=user.id, report_id=report_id)
@@ -1037,8 +983,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         launcher = getattr(request.app.state, "browser_launcher", None)
         if launcher is None:
             raise HTTPException(
@@ -1068,8 +1012,6 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        if not eu_v2_enabled():
-            raise _engine_disabled()
         try:
             row = run_svc.get_report_row(db=db, user_id=user.id, report_id=report_id)
             docx_bytes = render_svc.render_docx(db=db, user_id=user.id, report_id=report_id)

@@ -62,7 +62,7 @@ async def await_with_grace[T](
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 pass
             raise asyncio.CancelledError() from None
     finally:

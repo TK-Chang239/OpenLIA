@@ -75,7 +75,12 @@ def save_to_repo(db: Session, *, user_id: str, report_id: str) -> RepoItem:
     ).scalar_one_or_none()
     if existing is not None:
         return existing
-    if db.get(Report, report_id) is None:
+    # Owner-scope the existence check so a user cannot create a repo pointer at
+    # another user's report (the report is not theirs == not found, for them).
+    owned = db.execute(
+        select(Report).where(Report.id == report_id, Report.user_id == user_id)
+    ).scalar_one_or_none()
+    if owned is None:
         raise LookupError(f"report {report_id} not found")
     item = RepoItem(
         id=str(uuid.uuid4()),
@@ -146,18 +151,6 @@ def unsave_v2_run_from_repo(db: Session, *, user_id: str, pipeline_run_id: str) 
         RepoItem.pipeline_run_id == pipeline_run_id,
     ).delete()
     db.commit()
-
-
-def is_v2_run_saved(db: Session, *, user_id: str, pipeline_run_id: str) -> bool:
-    return (
-        db.execute(
-            select(RepoItem.id).where(
-                RepoItem.user_id == user_id,
-                RepoItem.pipeline_run_id == pipeline_run_id,
-            )
-        ).first()
-        is not None
-    )
 
 
 # ---------------------------------------------------------------------------

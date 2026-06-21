@@ -174,7 +174,9 @@ class MrDashboardCache(Base):
     )
     dashboard: Mapped[str] = mapped_column(String(32), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
-    provenance: Mapped[str] = mapped_column(String(16), nullable=False, default="live")
+    provenance: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="live", server_default="live"
+    )
     model_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
@@ -229,8 +231,7 @@ class RsDashboardCache(Base):
     ticker: Mapped[str] = mapped_column(String(16), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     # server_default matches the migration so autogenerate sees no drift on
-    # this column (MrDashboardCache omits it — that is the known pre-existing
-    # alembic-hygiene drift this table deliberately does not reproduce).
+    # this column (mirrors MrDashboardCache.provenance above).
     provenance: Mapped[str] = mapped_column(
         String(16), nullable=False, default="live", server_default="live"
     )

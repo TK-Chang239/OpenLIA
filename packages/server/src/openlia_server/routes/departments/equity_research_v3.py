@@ -13,10 +13,7 @@ Endpoints:
 - ``DELETE /api/departments/equity-research/v3/runs/{report_id}``
     Drop a run (cascades to child rows).
 
-The route is gated by the ``REPORT_ENGINE_VERSION`` environment
-variable. When the value is anything other than ``v3`` (default
-``v2.3``) every endpoint returns 503 with a clear pointer to the
-v2.3 path.
+v3 is the sole equity-research engine and is always on.
 
 Capability gate failures (``CapabilityError``) come back as 400.
 ``ReportNotFoundError`` from get/delete comes back as 404. Other
@@ -78,9 +75,6 @@ from openlia_server.services.attachments import FileUpload, extract_text, valida
 from openlia_server.services.v3_attachments import prepare_v3_attachments
 from openlia_server.services.v3_filename import build_download_filename
 from openlia_server.services.v3_wiring import build_v3_transports
-
-_ENV_FLAG = "REPORT_ENGINE_VERSION"
-_ENABLED_VALUE = "v3"
 
 # Sentinel ``template_id`` the frontend sends for "No template
 # (instructions only)". Resolves to a freeform TemplateSpec (empty
@@ -466,23 +460,6 @@ def _cover_out(raw: str | None) -> CoverOut | None:
 # ---------------------------------------------------------------------------
 
 
-def _engine_disabled() -> HTTPException:
-    return HTTPException(
-        status_code=503,
-        detail=(
-            f"v3 engine disabled. Set {_ENV_FLAG}={_ENABLED_VALUE} to enable. "
-            f"Default engine is v2.3 at /departments/equity-research/v2.3/runs."
-        ),
-    )
-
-
-def _engine_enabled() -> bool:
-    # v3 is now the sole equity-research engine and is always enabled. The
-    # REPORT_ENGINE_VERSION flag is retained only for backward compatibility:
-    # any value (including unset) keeps v3 on.
-    return True
-
-
 def _streaming_state(request: Request) -> tuple[EventBroker, dict[str, CancelToken]]:
     """Pull the v3 broker + cancel registry off ``app.state``.
 
@@ -612,9 +589,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> StartV3Response:
-        if not _engine_enabled():
-            raise _engine_disabled()
-
         template, instructions = _resolve_run_shape(db=db, user_id=user.id, payload=payload)
         run_request = RunRequest(
             subject=payload.subject,
@@ -644,8 +618,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> list[ReportSummaryOut]:
-        if not _engine_enabled():
-            raise _engine_disabled()
         rows = svc.list_runs(db=db, user_id=user.id, status=status)
         return [_summary(r) for r in rows]
 
@@ -655,8 +627,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> ReportDetailOut:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             row, sections, charts, citations = svc.get_run(
                 db=db, user_id=user.id, report_id=report_id
@@ -678,8 +648,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> None:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             svc.delete_run(db=db, user_id=user.id, report_id=report_id)
         except svc.ReportNotFoundError as exc:
@@ -710,8 +678,6 @@ def build_equity_research_v3_router(
         is bound, and the create_task call would raise
         ``RuntimeError: no running event loop``.
         """
-        if not _engine_enabled():
-            raise _engine_disabled()
         broker, cancel_registry = _streaming_state(request)
 
         payload, uploads = await _parse_start_request(request)
@@ -774,8 +740,6 @@ def build_equity_research_v3_router(
         emits a single ``run.snapshot`` event with the current
         terminal status and closes immediately.
         """
-        if not _engine_enabled():
-            raise _engine_disabled()
         # Authorise + 404 here using the request session before
         # opening the long-lived stream.
         try:
@@ -811,8 +775,6 @@ def build_equity_research_v3_router(
         token is registered (which is fine — caller's intent is
         satisfied).
         """
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             svc.get_run(db=db, user_id=user.id, report_id=report_id)
         except svc.ReportNotFoundError as exc:
@@ -827,8 +789,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> HTMLResponse:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             row = svc.get_report_row(db=db, user_id=user.id, report_id=report_id)
             rendered = render_svc.render_html(db=db, user_id=user.id, report_id=report_id)
@@ -849,8 +809,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        if not _engine_enabled():
-            raise _engine_disabled()
         launcher = getattr(request.app.state, "browser_launcher", None)
         if launcher is None:
             raise HTTPException(
@@ -897,8 +855,6 @@ def build_equity_research_v3_router(
         mis-shaped, the renderer emits a labelled placeholder so
         the export never silently drops content.
         """
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             row = svc.get_report_row(db=db, user_id=user.id, report_id=report_id)
             docx_bytes = render_svc.render_docx(db=db, user_id=user.id, report_id=report_id)
@@ -940,8 +896,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> list[TemplateOut]:
-        if not _engine_enabled():
-            raise _engine_disabled()
         rows = templates_svc.list_templates(db=db, user_id=user.id)
         return [
             TemplateOut(
@@ -964,8 +918,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> TemplateOut:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             row = templates_svc.create_template_from_markdown(
                 db=db,
@@ -991,8 +943,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             templates_svc.soft_delete_template(db=db, user_id=user.id, template_id=template_id)
         except templates_svc.TemplateNotFoundError as exc:
@@ -1013,8 +963,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> list[InstructionsOut]:
-        if not _engine_enabled():
-            raise _engine_disabled()
         rows = instructions_svc.list_instructions(db=db, user_id=user.id)
         return [
             InstructionsOut(
@@ -1038,8 +986,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> InstructionsOut:
-        if not _engine_enabled():
-            raise _engine_disabled()
         content = await file.read()
         upload = FileUpload(
             filename=file.filename or "unnamed",
@@ -1080,8 +1026,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             instructions_svc.soft_delete_instructions(
                 db=db, user_id=user.id, instructions_id=instructions_id
@@ -1121,8 +1065,6 @@ def build_equity_research_v3_router(
         ``start_run_async`` — ``asyncio.create_task`` inside the
         service requires a running event loop.
         """
-        if not _engine_enabled():
-            raise _engine_disabled()
         broker, cancel_registry = _streaming_state(request)
 
         # Owner-scope + load the parent so we can build the
@@ -1192,8 +1134,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> list[RevisionOut]:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             rows = revision_svc.list_revisions(db=db, user_id=user.id, report_id=report_id)
         except svc.ReportNotFoundError as exc:
@@ -1219,8 +1159,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> dict[str, bool]:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             revision_svc.get_revision(db=db, user_id=user.id, revision_id=revision_id)
         except revision_svc.RevisionNotFoundError as exc:
@@ -1238,8 +1176,6 @@ def build_equity_research_v3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> StreamingResponse:
-        if not _engine_enabled():
-            raise _engine_disabled()
         try:
             row = revision_svc.get_revision(db=db, user_id=user.id, revision_id=revision_id)
         except revision_svc.RevisionNotFoundError as exc:
