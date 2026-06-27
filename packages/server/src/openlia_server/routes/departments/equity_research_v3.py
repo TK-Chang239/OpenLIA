@@ -74,7 +74,7 @@ from openlia_server.services import v3_template_service as templates_svc
 from openlia_server.services.attachments import FileUpload, extract_text, validate_uploads
 from openlia_server.services.v3_attachments import prepare_v3_attachments
 from openlia_server.services.v3_filename import build_download_filename
-from openlia_server.services.v3_wiring import build_v3_transports
+from openlia_server.services.v3_wiring import build_v3_transports, resolve_eodhd_api_key
 
 # Sentinel ``template_id`` the frontend sends for "No template
 # (instructions only)". Resolves to a freeform TemplateSpec (empty
@@ -395,6 +395,15 @@ class RevisionStartResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _resolve_v3_transports(db: DBSession):
+    """EODHD bundle resolved from env or an installed connector, or None when unconfigured.
+
+    Mirrors the EU/MB engines so an EODHD connector installed through the
+    Connectors UI is usable by equity research, not just the env var.
+    """
+    return build_v3_transports(api_key=resolve_eodhd_api_key(db))
+
+
 def _summary(row: ReportV3) -> ReportSummaryOut:
     return ReportSummaryOut(
         report_id=row.id,
@@ -606,7 +615,7 @@ def build_equity_research_v3_router(
                 db=db,
                 user_id=user.id,
                 request=run_request,
-                transports=build_v3_transports(),
+                transports=_resolve_v3_transports(db),
             )
         except CapabilityError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -714,7 +723,7 @@ def build_equity_research_v3_router(
                 session_factory=db_session_factory,
                 broker=broker,
                 cancel_registry=cancel_registry,
-                transports=build_v3_transports(),
+                transports=_resolve_v3_transports(db),
             )
         except CapabilityError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1117,7 +1126,7 @@ def build_equity_research_v3_router(
                 session_factory=db_session_factory,
                 broker=broker,
                 cancel_registry=cancel_registry,
-                transports=build_v3_transports(),
+                transports=_resolve_v3_transports(db),
             )
         except revision_svc.RevisionInFlightError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -72,3 +72,41 @@ def test_build_v3_transports_respects_news_limit(monkeypatch):
     transports = build_v3_transports()
     assert transports is not None
     assert transports.news("NVDA.US", 1)  # fake returns up to `limit`
+
+
+def test_build_v3_transports_uses_explicit_api_key(monkeypatch):
+    """An explicit key (e.g. resolved from a Connectors-UI EODHD connector)
+    builds transports even when EODHD_API_KEY is unset."""
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    _install_fake_eodhd(monkeypatch)
+    assert build_v3_transports(api_key="explicit") is not None
+
+
+def test_resolve_v3_transports_uses_validated_connector(monkeypatch, db_session):
+    """The v3 route resolver honors a validated EODHD connector installed
+    through the Connectors UI, not just the EODHD_API_KEY env var."""
+    from openlia_server.db.models.connectors import Connector
+    from openlia_server.routes.departments.equity_research_v3 import _resolve_v3_transports
+
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    _install_fake_eodhd(monkeypatch)
+    db_session.add(
+        Connector(
+            id="c-eodhd",
+            provider_id="eodhd",
+            source="built_in",
+            category="financial",
+            launch={},
+            secrets={"EODHD_API_KEY": "db-key"},
+            status="validated",
+        )
+    )
+    db_session.commit()
+    assert _resolve_v3_transports(db_session) is not None
+
+
+def test_resolve_v3_transports_none_without_key_or_connector(monkeypatch, db_session):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    from openlia_server.routes.departments.equity_research_v3 import _resolve_v3_transports
+
+    assert _resolve_v3_transports(db_session) is None
