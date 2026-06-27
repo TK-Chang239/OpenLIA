@@ -3,6 +3,17 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { InstallBuiltinForm } from "../InstallBuiltinForm";
 import type { BuiltinTemplate } from "../../../api/connectors";
 import * as connectorsApi from "../../../api/connectors";
+import { ApiError } from "../../../api/client";
+
+const conflictError = (existingId: string) =>
+  new ApiError(409, "HTTP 409", {
+    detail: {
+      message: "connector already exists",
+      existing_id: existingId,
+      provider_id: "firecrawl",
+      source: "built_in",
+    },
+  });
 
 const TEMPLATE: BuiltinTemplate = {
   template_id: "firecrawl",
@@ -77,5 +88,66 @@ describe("InstallBuiltinForm", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /install/i }));
     expect(await screen.findByText(/nope/i)).toBeInTheDocument();
+  });
+
+  it("on 409 conflict, offers to replace the existing connector instead of a raw error", async () => {
+    vi.spyOn(connectorsApi, "installBuiltin").mockRejectedValue(
+      conflictError("c1"),
+    );
+    const onInstalled = vi.fn();
+    render(
+      <InstallBuiltinForm
+        template={TEMPLATE}
+        onCancel={() => {}}
+        onInstalled={onInstalled}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/api key/i), {
+      target: { value: "k" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /install/i }));
+
+    expect(await screen.findByText(/already installed/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /replace/i }),
+    ).toBeInTheDocument();
+    expect(onInstalled).not.toHaveBeenCalled();
+  });
+
+  it("replace deletes the existing connector and reinstalls with the entered key", async () => {
+    const installStub = vi
+      .spyOn(connectorsApi, "installBuiltin")
+      .mockRejectedValueOnce(conflictError("c1"))
+      .mockResolvedValueOnce({
+        id: "c2",
+        provider_id: "firecrawl",
+        display_name: "Firecrawl",
+        source: "built_in",
+        category: "web_search",
+        status: "validated",
+        last_error: null,
+        cached_tools_count: 0,
+      });
+    const deleteStub = vi
+      .spyOn(connectorsApi, "deleteConnector")
+      .mockResolvedValue(undefined);
+    const onInstalled = vi.fn();
+
+    render(
+      <InstallBuiltinForm
+        template={TEMPLATE}
+        onCancel={() => {}}
+        onInstalled={onInstalled}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/api key/i), {
+      target: { value: "k" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /install/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /replace/i }));
+
+    await waitFor(() => expect(deleteStub).toHaveBeenCalledWith("c1"));
+    await waitFor(() => expect(onInstalled).toHaveBeenCalled());
+    expect(installStub).toHaveBeenCalledTimes(2);
   });
 });
