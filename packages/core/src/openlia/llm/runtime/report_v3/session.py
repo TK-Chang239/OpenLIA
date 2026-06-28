@@ -69,7 +69,12 @@ _ENV_VAR_BY_PROVIDER: dict[str, tuple[str, ...]] = {
 }
 
 
-def _resolve_credentials(provider_kind: str) -> ProviderCredentials:
+def _resolve_credentials(provider_kind: str, api_key: str | None = None) -> ProviderCredentials:
+    # An explicit key (resolved server-side from the admin-configured provider)
+    # wins over the environment so a key entered in Settings -> Models works
+    # without also exporting an env var.
+    if api_key:
+        return ProviderCredentials(api_key=api_key, base_url=None, env_var_name=None)
     candidates = _ENV_VAR_BY_PROVIDER.get(provider_kind, ())
     for env_var in candidates:
         api_key = os.environ.get(env_var)
@@ -99,6 +104,7 @@ class LLMSession:
     model: str
     capabilities: Capabilities
     _adapter: LLMProvider | None = field(default=None, repr=False, compare=False)
+    _api_key: str | None = field(default=None, repr=False, compare=False)
 
     @classmethod
     def create(
@@ -107,6 +113,7 @@ class LLMSession:
         provider_kind: str,
         model: str,
         capability_override: dict | None = None,
+        api_key: str | None = None,
     ) -> LLMSession:
         """Resolve capabilities, run the gate, return a session.
 
@@ -141,6 +148,7 @@ class LLMSession:
             provider_kind=provider_kind,
             model=model,
             capabilities=capabilities,
+            _api_key=api_key,
         )
 
     def attach_adapter(self, adapter: LLMProvider) -> None:
@@ -153,7 +161,7 @@ class LLMSession:
 
     def _ensure_adapter(self) -> LLMProvider:
         if self._adapter is None:
-            credentials = _resolve_credentials(self.provider_kind)
+            credentials = _resolve_credentials(self.provider_kind, self._api_key)
             self._adapter = build_adapter(
                 kind=self.provider_kind,
                 credentials=credentials,
