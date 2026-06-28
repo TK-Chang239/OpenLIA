@@ -290,6 +290,7 @@ async def test_start_run_resolves_and_forwards_capability_override(create_tables
             cancel_token=None,
             revise=None,
             capability_override=None,
+            api_key=None,
         ):
             self.capability_override = capability_override
             raise CapabilityError("stop after capture")
@@ -299,6 +300,55 @@ async def test_start_run_resolves_and_forwards_capability_override(create_tables
         await svc.start_run(db=db_session, user_id=user.id, request=_request(), runner=recorder)
 
     assert recorder.capability_override == {"web_search_native": False}
+
+
+@pytest.mark.asyncio
+async def test_start_run_resolves_and_forwards_provider_api_key(create_tables, db_session):
+    """start_run must resolve the admin-configured provider key from the DB and
+    thread it into runner.run, so reports use the key entered in Settings."""
+    from openlia_server.services import llm_providers as llm_svc
+
+    user = _make_user(db_session)
+    provider = llm_svc.create_provider(
+        db_session,
+        kind="anthropic",
+        label="Main",
+        api_key="sk-db",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
+    )
+    llm_svc.create_model(
+        db_session,
+        provider_id=provider.id,
+        model_ref="claude-sonnet-4-6",
+        display_name="Sonnet",
+    )
+    db_session.commit()
+
+    class _Recorder:
+        def __init__(self) -> None:
+            self.api_key: object = "UNSET"
+
+        async def run(
+            self,
+            request,
+            *,
+            session=None,
+            emitter=None,
+            cancel_token=None,
+            revise=None,
+            capability_override=None,
+            api_key=None,
+        ):
+            self.api_key = api_key
+            raise CapabilityError("stop after capture")
+
+    recorder = _Recorder()
+    with pytest.raises(CapabilityError):
+        await svc.start_run(db=db_session, user_id=user.id, request=_request(), runner=recorder)
+
+    assert recorder.api_key == "sk-db"
 
 
 @pytest.mark.asyncio

@@ -52,7 +52,10 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Section,
     ReportV3ToolCallLog,
 )
-from openlia_server.services.llm_providers import get_capability_override
+from openlia_server.services.llm_providers import (
+    get_capability_override,
+    resolve_provider_api_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -117,9 +120,15 @@ async def start_run(
     capability_override = get_capability_override(
         db, provider_kind=request.provider_kind, model=request.model
     )
+    api_key = resolve_provider_api_key(db, provider_kind=request.provider_kind, model=request.model)
 
     try:
-        result = await runner.run(request, session=session, capability_override=capability_override)
+        result = await runner.run(
+            request,
+            session=session,
+            capability_override=capability_override,
+            api_key=api_key,
+        )
     except CapabilityError as exc:
         row.status = "failed"
         row.error_message = str(exc)
@@ -288,6 +297,7 @@ def start_run_async(
     capability_override = get_capability_override(
         db, provider_kind=request.provider_kind, model=request.model
     )
+    api_key = resolve_provider_api_key(db, provider_kind=request.provider_kind, model=request.model)
 
     task = asyncio.create_task(
         _run_in_background(
@@ -302,6 +312,7 @@ def start_run_async(
             broker=broker,
             cancel_registry=cancel_registry,
             capability_override=capability_override,
+            api_key=api_key,
         )
     )
     _BACKGROUND_TASKS.add(task)
@@ -323,6 +334,7 @@ async def _run_in_background(
     broker: EventBroker,
     cancel_registry: dict[str, CancelToken],
     capability_override: dict | None = None,
+    api_key: str | None = None,
 ) -> None:
     """Run the engine in a background task.
 
@@ -340,6 +352,7 @@ async def _run_in_background(
                 emitter=emitter,
                 cancel_token=cancel_token,
                 capability_override=capability_override,
+                api_key=api_key,
             )
         except CapabilityError as exc:
             _mark_failed(session_factory, report_id, str(exc))

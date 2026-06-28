@@ -61,7 +61,10 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Section,
     ReportV3ToolCallLog,
 )
-from openlia_server.services.llm_providers import get_capability_override
+from openlia_server.services.llm_providers import (
+    get_capability_override,
+    resolve_provider_api_key,
+)
 from openlia_server.services.v3_run_service import (
     ReportNotFoundError,
     _default_runner,
@@ -200,6 +203,7 @@ def start_revision_async(
     capability_override = get_capability_override(
         db, provider_kind=request.provider_kind, model=request.model
     )
+    api_key = resolve_provider_api_key(db, provider_kind=request.provider_kind, model=request.model)
 
     task = asyncio.create_task(
         _run_revision_in_background(
@@ -215,6 +219,7 @@ def start_revision_async(
             broker=broker,
             cancel_registry=cancel_registry,
             capability_override=capability_override,
+            api_key=api_key,
         )
     )
     _BACKGROUND_TASKS.add(task)
@@ -236,6 +241,7 @@ async def _run_revision_in_background(
     broker: EventBroker,
     cancel_registry: dict[str, CancelToken],
     capability_override: dict | None = None,
+    api_key: str | None = None,
 ) -> None:
     try:
         try:
@@ -246,6 +252,7 @@ async def _run_revision_in_background(
                 cancel_token=cancel_token,
                 revise=revise,
                 capability_override=capability_override,
+                api_key=api_key,
             )
         except CapabilityError as exc:
             _mark_revision_failed(session_factory, revision_id, report_id, str(exc))
