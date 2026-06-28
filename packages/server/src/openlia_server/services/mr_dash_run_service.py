@@ -38,7 +38,10 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.dashboard import MrDashboardCache
 from openlia_server.services import connectors_service, portfolio
-from openlia_server.services.llm_providers import get_capability_override
+from openlia_server.services.llm_providers import (
+    get_capability_override,
+    resolve_provider_api_key,
+)
 from openlia_server.services.mb_v2_run_service import build_mb_dispatcher
 from openlia_server.services.mb_v2_wiring import (
     build_mb_transports,
@@ -388,6 +391,9 @@ async def run_to_cache(
             provider_kind=request.provider_kind,
             model=request.model,
             capability_override=get_capability_override(
+                db, provider_kind=request.provider_kind, model=request.model
+            ),
+            api_key=resolve_provider_api_key(
                 db, provider_kind=request.provider_kind, model=request.model
             ),
         )
