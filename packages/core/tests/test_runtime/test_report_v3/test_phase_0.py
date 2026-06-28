@@ -169,6 +169,53 @@ def test_session_create_rejects_gpt_5_4_mini():
         LLMSession.create(provider_kind="openai", model="gpt-5.4-mini")
 
 
+def test_session_create_unknown_model_message_suggests_override():
+    # An unmatched model degraded to the conservative default. The error must
+    # say so and point at the override, not just "pick another model".
+    with pytest.raises(CapabilityError) as excinfo:
+        LLMSession.create(provider_kind="openai", model="gpt-9.9-ultra")
+    msg = str(excinfo.value).lower()
+    assert "capability override" in msg
+    assert "registry" in msg
+
+
+def test_session_create_honors_capability_override():
+    # The no-code escape hatch: an override marking the model web-search-capable
+    # lets it pass the gate even though the registry says otherwise.
+    session = LLMSession.create(
+        provider_kind="ollama",
+        model="llama3.1",
+        capability_override={"web_search_native": True},
+    )
+    assert session.capabilities.web_search_native is True
+
+
+@pytest.mark.asyncio
+async def test_runner_forwards_capability_override_to_session_create(monkeypatch):
+    # The runner builds the session when none is passed; it must thread the
+    # caller's capability_override into LLMSession.create so DB overrides apply.
+    import openlia.llm.runtime.report_v3.runner as runner_mod
+
+    captured: dict = {}
+
+    def _spy_create(*, provider_kind, model, capability_override=None):
+        captured["capability_override"] = capability_override
+        raise CapabilityError("stop after gate")
+
+    monkeypatch.setattr(runner_mod.LLMSession, "create", _spy_create)
+    req = RunRequest(
+        subject="X",
+        template=get_builtin(ReportType.INITIATION),
+        language=Language.EN,
+        length=ReportLength.NORMAL,
+        provider_kind="openai",
+        model="gpt-5.4",
+    )
+    with pytest.raises(CapabilityError):
+        await Runner(max_turns=1).run(req, capability_override={"web_search_native": True})
+    assert captured["capability_override"] == {"web_search_native": True}
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ from typing import Any
 
 from ...adapters import build_adapter
 from ...base import LLMProvider
-from ...capabilities import capabilities_for
+from ...capabilities import capabilities_for, is_known_model
 from ...types import (
     Capabilities,
     LLMRequest,
@@ -122,6 +122,14 @@ class LLMSession:
             override=capability_override,
         )
         if not capabilities.web_search_native:
+            if not is_known_model(provider_kind, model):
+                raise CapabilityError(
+                    f"{provider_kind!r}/{model!r} is not in the capability registry, "
+                    f"so it defaulted to no native web search. Set a capability "
+                    f"override (Settings -> Models) marking ``web_search_native`` "
+                    f"true, or pick a model with native web search "
+                    f"(e.g. gpt-5.4, claude-sonnet, gemini-3.1-pro)."
+                )
             raise CapabilityError(
                 f"v3 requires a model with native web search. "
                 f"{provider_kind!r}/{model!r} does not advertise "
