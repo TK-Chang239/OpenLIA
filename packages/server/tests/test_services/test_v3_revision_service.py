@@ -213,6 +213,54 @@ async def test_revision_writes_new_version_for_touched_section(create_tables, db
 
 
 @pytest.mark.asyncio
+async def test_start_revision_async_commits_row_for_background_session(
+    create_tables, db_session: Session
+):
+    """The revision row must be committed before the detached background task
+    runs, so the task's separate session can find and update it. A flush-only
+    row is invisible cross-session, leaving the revision stuck on 'running'."""
+    user = _make_user(db_session)
+    parent = _seed_completed_report(db_session, user)
+    template = get_builtin(ReportType.INITIATION)
+    revise = ReviseContext(
+        revision_request="Rewrite it.",
+        prior_sections=[],
+        prior_charts=[],
+        prior_citations=[],
+    )
+    session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
+    session.attach_adapter(
+        FakeLLMProvider(scripted_responses=[script_tool_calls(("finalize", {}))])
+    )
+    from openlia_server.db.session import SessionLocal
+
+    db_session.commit()  # release parent + sections to the bg session
+
+    handle = rev_svc.start_revision_async(
+        db=db_session,
+        user_id=user.id,
+        report_id=parent.id,
+        revision_request="Rewrite it.",
+        request=_request(template),
+        revise=revise,
+        session_factory=SessionLocal,
+        broker=EventBroker(),
+        cancel_registry={},
+        runner=Runner(max_turns=20),
+        llm_session=session,
+    )
+    try:
+        # Before the background task runs, a fresh session must already see the
+        # committed revision row (flush-only would be invisible here).
+        with SessionLocal() as fresh:
+            assert fresh.get(ReportV3Revision, handle.revision_id) is not None
+    finally:
+        for task in list(rev_svc._BACKGROUND_TASKS):
+            task.cancel()
+        await asyncio.gather(*list(rev_svc._BACKGROUND_TASKS), return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_revision_rejects_concurrent_starts(create_tables, db_session: Session):
     """A second start_revision_async on the same report while one is
     in flight raises RevisionInFlightError."""

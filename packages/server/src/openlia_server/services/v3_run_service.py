@@ -52,6 +52,7 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Section,
     ReportV3ToolCallLog,
 )
+from openlia_server.services.llm_providers import get_capability_override
 
 log = logging.getLogger(__name__)
 
@@ -113,9 +114,12 @@ async def start_run(
     db.flush()
 
     runner = runner or _default_runner(transports)
+    capability_override = get_capability_override(
+        db, provider_kind=request.provider_kind, model=request.model
+    )
 
     try:
-        result = await runner.run(request, session=session)
+        result = await runner.run(request, session=session, capability_override=capability_override)
     except CapabilityError as exc:
         row.status = "failed"
         row.error_message = str(exc)
@@ -269,13 +273,21 @@ def start_run_async(
         ),
     )
     db.add(row)
-    db.flush()
+    # Commit (not just flush): the background task reads and updates this row
+    # through its own session_factory connection. A bare flush leaves the row
+    # uncommitted, so a fast failure (e.g. the capability gate) runs
+    # _mark_failed before the request transaction commits and can't find the
+    # row — leaving the run stuck on status="running" forever.
+    db.commit()
 
     cancel_token = CancelToken()
     cancel_registry[report_id] = cancel_token
 
     bg_runner = runner or _default_runner(transports)
     emitter = BrokerEmitter(broker=broker, report_id=report_id)
+    capability_override = get_capability_override(
+        db, provider_kind=request.provider_kind, model=request.model
+    )
 
     task = asyncio.create_task(
         _run_in_background(
@@ -289,6 +301,7 @@ def start_run_async(
             session_factory=session_factory,
             broker=broker,
             cancel_registry=cancel_registry,
+            capability_override=capability_override,
         )
     )
     _BACKGROUND_TASKS.add(task)
@@ -309,6 +322,7 @@ async def _run_in_background(
     session_factory: Callable[[], DBSession],
     broker: EventBroker,
     cancel_registry: dict[str, CancelToken],
+    capability_override: dict | None = None,
 ) -> None:
     """Run the engine in a background task.
 
@@ -325,6 +339,7 @@ async def _run_in_background(
                 session=session,
                 emitter=emitter,
                 cancel_token=cancel_token,
+                capability_override=capability_override,
             )
         except CapabilityError as exc:
             _mark_failed(session_factory, report_id, str(exc))

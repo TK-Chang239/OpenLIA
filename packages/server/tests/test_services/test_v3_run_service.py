@@ -224,6 +224,84 @@ async def test_capability_error_persists_failed_status(create_tables, db_session
 
 
 @pytest.mark.asyncio
+async def test_async_capability_error_marks_row_failed(
+    create_tables, db_session: Session, db_session_factory
+):
+    """The async path must commit the row before the background task runs, so a
+    fast CapabilityError is recorded as status='failed' — not left invisible to
+    the background session (which leaves the run stuck on 'running' forever)."""
+    import asyncio
+
+    from openlia.llm.runtime.report_v3 import EventBroker
+
+    user = _make_user(db_session)
+    db_session.commit()
+    req = RunRequest(
+        subject="RKLB.US",
+        template=get_builtin(ReportType.INITIATION),
+        language=Language.EN,
+        length=ReportLength.NORMAL,
+        provider_kind="ollama",
+        model="llama3.1",
+    )
+
+    handle = svc.start_run_async(
+        db=db_session,
+        user_id=user.id,
+        request=req,
+        session_factory=db_session_factory,
+        broker=EventBroker(),
+        cancel_registry={},
+    )
+    await asyncio.gather(*list(svc._BACKGROUND_TASKS))
+
+    with db_session_factory() as fresh:
+        row = fresh.get(ReportV3, handle.report_id)
+        assert row is not None
+        assert row.status == "failed"
+        assert "web search" in (row.error_message or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_start_run_resolves_and_forwards_capability_override(create_tables, db_session):
+    """start_run must look up the per-model capability override from the DB and
+    thread it into runner.run, so admins can enable a new model without code."""
+    from openlia_server.services.llm_providers import set_capability_override
+
+    user = _make_user(db_session)
+    set_capability_override(
+        db_session,
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        override={"web_search_native": False},
+    )
+    db_session.commit()
+
+    class _Recorder:
+        def __init__(self) -> None:
+            self.capability_override: object = "UNSET"
+
+        async def run(
+            self,
+            request,
+            *,
+            session=None,
+            emitter=None,
+            cancel_token=None,
+            revise=None,
+            capability_override=None,
+        ):
+            self.capability_override = capability_override
+            raise CapabilityError("stop after capture")
+
+    recorder = _Recorder()
+    with pytest.raises(CapabilityError):
+        await svc.start_run(db=db_session, user_id=user.id, request=_request(), runner=recorder)
+
+    assert recorder.capability_override == {"web_search_native": False}
+
+
+@pytest.mark.asyncio
 async def test_get_run_returns_full_denormalized_view(create_tables, db_session: Session):
     user = _make_user(db_session)
     req = _request()
