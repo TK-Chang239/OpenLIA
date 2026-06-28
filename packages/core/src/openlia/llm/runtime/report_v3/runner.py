@@ -113,6 +113,7 @@ class Runner:
         cancel_token: CancelToken | None = None,
         revise: ReviseContext | None = None,
         capability_override: dict | None = None,
+        api_key: str | None = None,
     ) -> RunResult:
         """Execute a v3 run for the given request.
 
@@ -143,6 +144,7 @@ class Runner:
                 provider_kind=request.provider_kind,
                 model=request.model,
                 capability_override=capability_override,
+                api_key=api_key,
             )
         emitter = emitter or NullEmitter()
         cancel_token = cancel_token or CancelToken()
