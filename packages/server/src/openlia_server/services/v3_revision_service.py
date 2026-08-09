@@ -61,6 +61,10 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Section,
     ReportV3ToolCallLog,
 )
+from openlia_server.services.llm_providers import (
+    get_capability_override,
+    resolve_provider_api_key,
+)
 from openlia_server.services.v3_run_service import (
     ReportNotFoundError,
     _default_runner,
@@ -186,12 +190,20 @@ def start_revision_async(
     if parent is not None:
         parent.status = "revising"
 
-    db.flush()
+    # Commit (not just flush): the background task reads and updates the
+    # revision + parent rows through its own session_factory connection. A bare
+    # flush leaves them uncommitted, so a fast failure marks nothing and the
+    # revision is stuck on status="running" with the parent stuck "revising".
+    db.commit()
 
     cancel_token = CancelToken()
     cancel_registry[_cancel_key(revision_id)] = cancel_token
     bg_runner = runner or _default_runner(transports)
     emitter = BrokerEmitter(broker=broker, report_id=revision_id)
+    capability_override = get_capability_override(
+        db, provider_kind=request.provider_kind, model=request.model
+    )
+    api_key = resolve_provider_api_key(db, provider_kind=request.provider_kind, model=request.model)
 
     task = asyncio.create_task(
         _run_revision_in_background(
@@ -206,6 +218,8 @@ def start_revision_async(
             session_factory=session_factory,
             broker=broker,
             cancel_registry=cancel_registry,
+            capability_override=capability_override,
+            api_key=api_key,
         )
     )
     _BACKGROUND_TASKS.add(task)
@@ -226,6 +240,8 @@ async def _run_revision_in_background(
     session_factory: Callable[[], DBSession],
     broker: EventBroker,
     cancel_registry: dict[str, CancelToken],
+    capability_override: dict | None = None,
+    api_key: str | None = None,
 ) -> None:
     try:
         try:
@@ -235,6 +251,8 @@ async def _run_revision_in_background(
                 emitter=emitter,
                 cancel_token=cancel_token,
                 revise=revise,
+                capability_override=capability_override,
+                api_key=api_key,
             )
         except CapabilityError as exc:
             _mark_revision_failed(session_factory, revision_id, report_id, str(exc))

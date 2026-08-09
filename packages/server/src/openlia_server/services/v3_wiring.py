@@ -25,24 +25,26 @@ from typing import Any
 from openlia.llm.runtime.report_v3 import DataTransports
 
 from .eodhd_payload import trim_eodhd_fundamentals
+from .eu_v2_wiring import resolve_eodhd_api_key
 
 log = logging.getLogger(__name__)
 
 
-def build_v3_transports() -> DataTransports | None:
+def build_v3_transports(api_key: str | None = None) -> DataTransports | None:
     """Build EODHD-backed transports for the v3 runner.
 
-    Returns ``None`` when ``EODHD_API_KEY`` is unset so the runner uses
-    its loud null fallback.
+    Uses ``api_key`` when provided (e.g. resolved from an installed
+    connector), else falls back to ``EODHD_API_KEY``. Returns ``None``
+    when neither yields a key so the runner uses its loud null fallback.
     """
-    api_key = os.getenv("EODHD_API_KEY")
-    if not api_key:
+    key = api_key or os.getenv("EODHD_API_KEY")
+    if not key:
         log.info("EODHD_API_KEY unset; v3 data tools will return a not-configured error.")
         return None
 
     from eodhd import APIClient
 
-    client = APIClient(api_key=api_key)
+    client = APIClient(api_key=key)
 
     def fundamentals(ticker: str) -> dict[str, Any]:
         raw = client.get_fundamentals_data(ticker)
@@ -67,4 +69,4 @@ def build_v3_transports() -> DataTransports | None:
     return DataTransports(fundamentals=fundamentals, prices=prices, news=news)
 
 
-__all__ = ["build_v3_transports"]
+__all__ = ["build_v3_transports", "resolve_eodhd_api_key"]

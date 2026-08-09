@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field, replace
 
 from openlia.llm.types import Capabilities, Capability, DepartmentRequirements
+
+log = logging.getLogger(__name__)
 
 _DEFAULT = Capabilities()
 
@@ -93,6 +96,22 @@ def _openai_gpt_5_4_mini() -> Capabilities:
     )
 
 
+# gpt-5.5 is the successor to gpt-5.4 and shares its capability profile
+# (native web search, large context/output). Listed explicitly so the model
+# resolves correctly instead of falling through to the conservative _DEFAULT
+# (no web search, 8K/2K), which the v3 web-search gate rejects.
+def _openai_gpt_5_5_pro() -> Capabilities:
+    return _openai_gpt_5_4_pro()
+
+
+def _openai_gpt_5_5() -> Capabilities:
+    return _openai_gpt_5_4()
+
+
+def _openai_gpt_5_5_mini() -> Capabilities:
+    return _openai_gpt_5_4_mini()
+
+
 def _gemini_pro() -> Capabilities:
     return Capabilities(
         streaming=True,
@@ -153,6 +172,9 @@ _CAPABILITY_MAP: list[tuple[str, re.Pattern[str], object]] = [
     ("openai", re.compile(r"^gpt-5\.4-pro", re.IGNORECASE), _openai_gpt_5_4_pro),
     ("openai", re.compile(r"^gpt-5\.4-mini", re.IGNORECASE), _openai_gpt_5_4_mini),
     ("openai", re.compile(r"^gpt-5\.4", re.IGNORECASE), _openai_gpt_5_4),
+    ("openai", re.compile(r"^gpt-5\.5-pro", re.IGNORECASE), _openai_gpt_5_5_pro),
+    ("openai", re.compile(r"^gpt-5\.5-mini", re.IGNORECASE), _openai_gpt_5_5_mini),
+    ("openai", re.compile(r"^gpt-5\.5", re.IGNORECASE), _openai_gpt_5_5),
     ("gemini", re.compile(r"^gemini-3\.1-pro", re.IGNORECASE), _gemini_pro),
     ("gemini", re.compile(r"^gemini-3\.1-flash-lite", re.IGNORECASE), _gemini_flash_lite),
     ("gemini", re.compile(r"^gemini-3\.1-flash", re.IGNORECASE), _gemini_flash),
@@ -161,6 +183,28 @@ _CAPABILITY_MAP: list[tuple[str, re.Pattern[str], object]] = [
     ("ollama", re.compile(r"^qwen2\.5", re.IGNORECASE), _ollama_tool_family),
     ("ollama", re.compile(r"^mistral-nemo", re.IGNORECASE), _ollama_tool_family),
 ]
+
+
+def _matched_factory(provider_kind: str, model: str) -> object | None:
+    """Return the capability factory whose pattern matches, or None."""
+    for kind, pattern, factory in _CAPABILITY_MAP:
+        if kind == provider_kind and pattern.match(model):
+            return factory
+    return None
+
+
+def is_known_model(provider_kind: str, model: str) -> bool:
+    """True when the registry has an explicit capability profile for this model.
+
+    ``openai_compat`` and ``openrouter`` resolve structurally (generic default
+    / upstream lookup) and so count as known. Everything else is "known" only
+    when a ``_CAPABILITY_MAP`` pattern matches; an unmatched model degrades to
+    the conservative ``_DEFAULT`` and is reported as unknown so callers can
+    prompt for a capability override instead of silently mis-gating it.
+    """
+    if provider_kind in ("openai_compat", "openrouter"):
+        return True
+    return _matched_factory(provider_kind, model) is not None
 
 
 def _lookup_base(provider_kind: str, model: str) -> Capabilities:
@@ -183,10 +227,23 @@ def _lookup_base(provider_kind: str, model: str) -> Capabilities:
     if provider_kind == "openai_compat":
         return _OPENAI_COMPAT_DEFAULT
 
-    for kind, pattern, factory in _CAPABILITY_MAP:
-        if kind == provider_kind and pattern.match(model):
-            return factory()  # type: ignore[operator]
+    factory = _matched_factory(provider_kind, model)
+    if factory is not None:
+        return factory()  # type: ignore[operator]
 
+    # No registry entry: fall back to the conservative default, but say so
+    # loudly. A genuinely capable model silently treated as
+    # web_search_native=False / 8K / 2K is the failure mode that makes report
+    # runs hang or get rejected with no obvious cause.
+    log.warning(
+        "No capability profile for provider_kind=%r model=%r; using conservative "
+        "defaults (web_search_native=False, %d ctx / %d out). Add a registry entry "
+        "or set a capability override (Settings -> Models).",
+        provider_kind,
+        model,
+        _DEFAULT.max_context_tokens,
+        _DEFAULT.max_output_tokens,
+    )
     return _DEFAULT
 
 

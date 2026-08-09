@@ -31,6 +31,14 @@ class SQLModelRegistry(ModelRegistry):
             return None
         return self._load_row(row.model_id)
 
+    def get_user_preferred_model(self, user_id: str) -> ResolvedModelRow | None:
+        from openlia_server.db.models.config import UserPrefs
+
+        prefs = self._db.get(UserPrefs, user_id)
+        if prefs is None or prefs.preferred_model_id is None:
+            return None
+        return self._load_row(prefs.preferred_model_id)
+
     def get_system_role_default(self, role_id: str) -> ResolvedModelRow | None:
         row = self._db.get(LLMSlotDefault, ("system_role", role_id))
         if row is None:

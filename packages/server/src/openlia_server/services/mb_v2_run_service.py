@@ -76,6 +76,10 @@ from openlia_server.services import (
     mb_v2_instructions_service,
     mb_v2_template_service,
 )
+from openlia_server.services.llm_providers import (
+    get_capability_override,
+    resolve_provider_api_key,
+)
 from openlia_server.services.mb_v2_wiring import (
     build_mb_transports,
     resolve_eodhd_api_key,
@@ -455,6 +459,10 @@ def start_run_async(
     cancel_token = CancelToken()
     cancel_registry[report_id] = cancel_token
     emitter = BrokerEmitter(broker=broker, report_id=report_id)
+    capability_override = get_capability_override(
+        db, provider_kind=request.provider_kind, model=request.model
+    )
+    api_key = resolve_provider_api_key(db, provider_kind=request.provider_kind, model=request.model)
 
     task = asyncio.create_task(
         _run_in_background(
@@ -468,6 +476,8 @@ def start_run_async(
             session_factory=session_factory,
             broker=broker,
             cancel_registry=cancel_registry,
+            capability_override=capability_override,
+            api_key=api_key,
         )
     )
     _BACKGROUND_TASKS.add(task)
@@ -488,6 +498,8 @@ async def _run_in_background(
     session_factory: Callable[[], DBSession],
     broker: EventBroker,
     cancel_registry: dict[str, CancelToken],
+    capability_override: dict | None = None,
+    api_key: str | None = None,
 ) -> None:
     """Run the engine in a background task.
 
@@ -506,6 +518,8 @@ async def _run_in_background(
                 session = LLMSession.create(
                     provider_kind=request.provider_kind,
                     model=request.model,
+                    capability_override=capability_override,
+                    api_key=api_key,
                 )
             result = await runner.run(
                 session=session,
@@ -649,6 +663,12 @@ async def run_to_completion(
         session = LLMSession.create(
             provider_kind=request.provider_kind,
             model=request.model,
+            capability_override=get_capability_override(
+                db, provider_kind=request.provider_kind, model=request.model
+            ),
+            api_key=resolve_provider_api_key(
+                db, provider_kind=request.provider_kind, model=request.model
+            ),
         )
     result = await runner.run(
         session=session,

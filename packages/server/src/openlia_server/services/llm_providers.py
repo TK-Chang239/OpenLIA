@@ -171,6 +171,39 @@ def get_provider_api_key(session: Session, provider_id: str) -> str | None:
     return row.api_key
 
 
+def resolve_provider_api_key(session: Session, *, provider_kind: str, model: str) -> str | None:
+    """Resolve the API key for a ``(provider_kind, model_ref)`` report run.
+
+    Report engines receive only ``provider_kind`` + ``model`` from the frontend
+    (not a ``provider_id``), so this maps them back to a configured provider:
+    an enabled model whose ``model_ref`` matches under an enabled provider of
+    the given ``kind``, falling back to the first enabled provider of that kind.
+    Returns ``None`` when nothing matches so the engine falls back to env vars.
+    """
+    from openlia_server.db.models.config import LLMModel, LLMProvider
+
+    provider = session.scalars(
+        select(LLMProvider)
+        .join(LLMModel, LLMModel.provider_id == LLMProvider.id)
+        .where(
+            LLMProvider.kind == provider_kind,
+            LLMProvider.is_enabled.is_(True),
+            LLMModel.model_ref == model,
+            LLMModel.is_enabled.is_(True),
+        )
+    ).first()
+    if provider is None:
+        provider = session.scalars(
+            select(LLMProvider).where(
+                LLMProvider.kind == provider_kind,
+                LLMProvider.is_enabled.is_(True),
+            )
+        ).first()
+    if provider is None:
+        return None
+    return get_provider_api_key(session, provider.id)
+
+
 # ---------------------------------------------------------------------------
 # Model CRUD
 # ---------------------------------------------------------------------------

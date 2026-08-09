@@ -33,6 +33,24 @@ def test_registry_no_longer_exposes_tier_methods(db_session):
     assert not hasattr(reg, "get_department_tier_override")
 
 
+def test_get_user_preferred_model_returns_row(db_session, make_user, llm_model_factory):
+    from openlia_server.services import user_prefs
+
+    user = make_user()
+    m = llm_model_factory()
+    user_prefs.update(db_session, user_id=user.id, preferred_model_id=m.id)
+    reg = SQLModelRegistry(db_session)
+    row = reg.get_user_preferred_model(user.id)
+    assert row is not None
+    assert row.model_id == m.id
+
+
+def test_get_user_preferred_model_none_when_unset(db_session, make_user):
+    user = make_user()
+    reg = SQLModelRegistry(db_session)
+    assert reg.get_user_preferred_model(user.id) is None
+
+
 def test_get_by_id_returns_row(db_session, llm_model_factory):
     m = llm_model_factory()
     reg = SQLModelRegistry(db_session)

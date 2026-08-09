@@ -169,6 +169,122 @@ def test_session_create_rejects_gpt_5_4_mini():
         LLMSession.create(provider_kind="openai", model="gpt-5.4-mini")
 
 
+def test_session_create_unknown_model_message_suggests_override():
+    # An unmatched model degraded to the conservative default. The error must
+    # say so and point at the override, not just "pick another model".
+    with pytest.raises(CapabilityError) as excinfo:
+        LLMSession.create(provider_kind="openai", model="gpt-9.9-ultra")
+    msg = str(excinfo.value).lower()
+    assert "capability override" in msg
+    assert "registry" in msg
+
+
+def test_session_create_honors_capability_override():
+    # The no-code escape hatch: an override marking the model web-search-capable
+    # lets it pass the gate even though the registry says otherwise.
+    session = LLMSession.create(
+        provider_kind="ollama",
+        model="llama3.1",
+        capability_override={"web_search_native": True},
+    )
+    assert session.capabilities.web_search_native is True
+
+
+def test_resolve_credentials_prefers_explicit_api_key(monkeypatch):
+    from openlia.llm.runtime.report_v3.session import CredentialError, _resolve_credentials
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # No env + no explicit key -> raises (existing behavior).
+    with pytest.raises(CredentialError):
+        _resolve_credentials("openai")
+    # Explicit key wins over the (absent) env var.
+    assert _resolve_credentials("openai", "sk-explicit").api_key == "sk-explicit"
+
+
+def test_session_threads_explicit_api_key_to_adapter(monkeypatch):
+    # The server resolves the admin-configured provider key from the DB and
+    # passes it to create(); it must reach build_adapter even with no env var.
+    import openlia.llm.runtime.report_v3.session as sess_mod
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    captured: dict = {}
+
+    def _fake_build_adapter(*, kind, model, credentials, capabilities):
+        captured["api_key"] = credentials.api_key
+        return object()
+
+    monkeypatch.setattr(sess_mod, "build_adapter", _fake_build_adapter)
+    session = LLMSession.create(provider_kind="openai", model="gpt-5.4", api_key="sk-explicit")
+    session._ensure_adapter()
+    assert captured["api_key"] == "sk-explicit"
+
+
+def test_session_falls_back_to_env_api_key(monkeypatch):
+    import openlia.llm.runtime.report_v3.session as sess_mod
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    captured: dict = {}
+
+    def _fake_build_adapter(*, kind, model, credentials, capabilities):
+        captured["api_key"] = credentials.api_key
+        return object()
+
+    monkeypatch.setattr(sess_mod, "build_adapter", _fake_build_adapter)
+    session = LLMSession.create(provider_kind="openai", model="gpt-5.4")
+    session._ensure_adapter()
+    assert captured["api_key"] == "sk-env"
+
+
+@pytest.mark.asyncio
+async def test_runner_forwards_capability_override_to_session_create(monkeypatch):
+    # The runner builds the session when none is passed; it must thread the
+    # caller's capability_override into LLMSession.create so DB overrides apply.
+    import openlia.llm.runtime.report_v3.runner as runner_mod
+
+    captured: dict = {}
+
+    def _spy_create(*, provider_kind, model, capability_override=None, api_key=None):
+        captured["capability_override"] = capability_override
+        raise CapabilityError("stop after gate")
+
+    monkeypatch.setattr(runner_mod.LLMSession, "create", _spy_create)
+    req = RunRequest(
+        subject="X",
+        template=get_builtin(ReportType.INITIATION),
+        language=Language.EN,
+        length=ReportLength.NORMAL,
+        provider_kind="openai",
+        model="gpt-5.4",
+    )
+    with pytest.raises(CapabilityError):
+        await Runner(max_turns=1).run(req, capability_override={"web_search_native": True})
+    assert captured["capability_override"] == {"web_search_native": True}
+
+
+@pytest.mark.asyncio
+async def test_runner_forwards_api_key_to_session_create(monkeypatch):
+    import openlia.llm.runtime.report_v3.runner as runner_mod
+
+    captured: dict = {}
+
+    def _spy_create(*, provider_kind, model, capability_override=None, api_key=None):
+        captured["api_key"] = api_key
+        raise CapabilityError("stop after gate")
+
+    monkeypatch.setattr(runner_mod.LLMSession, "create", _spy_create)
+    req = RunRequest(
+        subject="X",
+        template=get_builtin(ReportType.INITIATION),
+        language=Language.EN,
+        length=ReportLength.NORMAL,
+        provider_kind="openai",
+        model="gpt-5.4",
+    )
+    with pytest.raises(CapabilityError):
+        await Runner(max_turns=1).run(req, api_key="sk-thread")
+    assert captured["api_key"] == "sk-thread"
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------

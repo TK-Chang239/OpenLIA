@@ -28,7 +28,24 @@ export function ModelPicker(): JSX.Element | null {
     ]).then(([m, p]) => {
       if (cancelled) return;
       setModels(m);
-      setModelId(p?.preferred_model_id ?? null);
+      const saved = p?.preferred_model_id ?? null;
+      setModelId(saved);
+      // Persist-on-load: the pill shows the first enabled model as selected
+      // even when nothing is saved, but the resolver only honors a persisted
+      // preferred_model_id. Adopt the displayed default so what the user sees
+      // is what actually gets used — no per-department slot default required.
+      const enabled = (m ?? []).filter((x) => x.is_enabled);
+      const validSaved = saved !== null && enabled.some((x) => x.id === saved);
+      if (enabled.length > 0 && !validSaved) {
+        const fallback = enabled[0].id;
+        updatePrefs({ preferred_model_id: fallback })
+          .then(() => {
+            if (!cancelled) setModelId(fallback);
+          })
+          .catch(() => {
+            // best-effort; user can still pick manually.
+          });
+      }
     });
     return () => {
       cancelled = true;
