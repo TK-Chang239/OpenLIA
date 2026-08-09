@@ -24,10 +24,10 @@ def test_fed_build_context_detects_hawkish_keyword():
             "source": "Reuters",
         },
         {
-            "date": "2026-04-18",
-            "headline": "Fed stays patient",
-            "summary": "Data dependent stance",
-            "source": "WSJ",
+            "date": "2026-04-19",
+            "headline": "Officials echo persistent inflation worry",
+            "summary": "More persistent inflation commentary.",
+            "source": "Bloomberg",
         },
     ]
     events = [
@@ -50,7 +50,13 @@ def test_fed_build_context_no_matches_is_dovish_green():
             "headline": "Fed stays patient",
             "summary": "well anchored",
             "source": "Reuters",
-        }
+        },
+        {
+            "date": "2026-04-19",
+            "headline": "Officials remain patient",
+            "summary": "expectations well anchored",
+            "source": "WSJ",
+        },
     ]
     r = p.build_context(
         panel_config={"params": FedLanguagePanel().default_ruleset["params"]},

@@ -31,7 +31,9 @@ def test_diplomacy_detects_progress_and_escalation() -> None:
         payloads={
             "company_news": [
                 {"headline": "Ceasefire announced", "summary": "talks resumed"},
+                {"headline": "Peace talks progress", "summary": "de-escalation hopes"},
                 {"headline": "Military escalation reported", "summary": "blockade"},
+                {"headline": "Retaliation feared", "summary": "further mobilization"},
             ]
         },
     )
@@ -47,4 +49,18 @@ def test_diplomacy_no_news_no_milestone_defaults_to_today() -> None:
     )
     assert built.scalars["days_elapsed"] == 0
     assert built.scalars["progress_detected"] is False
+    assert built.scalars["escalation_detected"] is False
+
+
+def test_diplomacy_single_escalation_article_does_not_fire() -> None:
+    # A lone "strike" headline (often a labor/price story) must not trip
+    # escalation without corroboration.
+    panel = DiplomacyPanel()
+    built = panel.build_context(
+        panel_config={
+            "milestone_date": date.today().isoformat(),
+            "params": panel.default_ruleset["params"],
+        },
+        payloads={"company_news": [{"headline": "Workers strike at plant", "summary": ""}]},
+    )
     assert built.scalars["escalation_detected"] is False

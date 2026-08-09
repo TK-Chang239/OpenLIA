@@ -69,6 +69,8 @@ def _panel_result_dict(
     derived_scalars: dict[str, Any],
     extras: dict[str, Any],
     warnings: list[str],
+    raw_series: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "panel_id": panel_id,
@@ -76,23 +78,15 @@ def _panel_result_dict(
         "label": label,
         "resolved_values": resolved_values,
         "derived_scalars": derived_scalars,
+        # Full panel scalar readings (survey levels, matched headlines, keyword
+        # flags, ...) so the viewer can render real values, not a whitelist.
         "extras": extras,
+        # Named numeric arrays (price/tip/value series) that back the charts.
+        "raw_series": raw_series if raw_series is not None else {},
+        # Effective panel params (thresholds, targets, tickers) for the UI.
+        "params": params if params is not None else {},
         "warnings": warnings,
     }
-
-
-_EXTRA_SCALAR_KEYS = frozenset(
-    {
-        "matched_progress_headlines",
-        "matched_escalation_headlines",
-        "matched_phrase",
-        "matched_headline",
-        "matched_date",
-        "days_since_fomc",
-        "days_elapsed",
-        "days_remaining",
-    }
-)
 
 
 def _filter_engine_scalars(scalars: dict[str, Any]) -> dict[str, Any]:
@@ -131,6 +125,7 @@ class PtRunner:
                     resolved_values={},
                     derived_scalars={},
                     extras={},
+                    params=entry.get("params", {}),
                     warnings=[],
                 )
                 panel_statuses[panel_id] = "disabled"
@@ -147,6 +142,7 @@ class PtRunner:
                     resolved_values={},
                     derived_scalars={},
                     extras={"override": override},
+                    params=entry.get("params", {}),
                     warnings=[],
                 )
                 panel_statuses[panel_id] = override["status"]
@@ -195,14 +191,15 @@ class PtRunner:
                     params=entry.get("params", {}),
                     engine=self.engine,
                 )
-                extras = {k: v for k, v in built.scalars.items() if k in _EXTRA_SCALAR_KEYS}
                 panels_out[panel_id] = _panel_result_dict(
                     panel_id,
                     status=result.status,
                     label=result.label,
                     resolved_values=result.resolved_values,
                     derived_scalars=result.derived_scalars,
-                    extras=extras,
+                    extras=dict(built.scalars),
+                    raw_series=built.raw_series,
+                    params=entry.get("params", {}),
                     warnings=result.warnings + fetch_warnings + built.warnings,
                 )
                 panel_statuses[panel_id] = result.status
@@ -216,6 +213,7 @@ class PtRunner:
                     resolved_values={},
                     derived_scalars={},
                     extras={},
+                    params=entry.get("params", {}),
                     warnings=[msg],
                 )
                 panel_statuses[panel_id] = "disabled"
