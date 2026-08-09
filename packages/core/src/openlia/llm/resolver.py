@@ -29,6 +29,8 @@ class ModelRegistry(Protocol):
 
     def get_department_slot_default(self, department_id: str) -> ResolvedModelRow | None: ...
 
+    def get_user_preferred_model(self, user_id: str) -> ResolvedModelRow | None: ...
+
     def get_system_role_default(self, role_id: str) -> ResolvedModelRow | None: ...
 
 
@@ -57,9 +59,9 @@ def resolve(
     model_id_override: str | None = None,
 ) -> ResolvedModel:
     """Department-scoped resolution chain:
-    explicit model_id_override -> per-user-per-department pref -> admin
-    slot default for the department. Raises `ModelNotConfiguredError`
-    when nothing matches.
+    explicit model_id_override -> per-user-per-department pref ->
+    user-level preferred model -> admin slot default for the department.
+    Raises `ModelNotConfiguredError` when nothing matches.
     """
     if model_id_override is not None:
         row = registry.get_by_id(model_id_override)
@@ -70,6 +72,10 @@ def resolve(
         over = registry.get_department_user_override(user_id, department_id)
         if over is not None:
             return _to_resolved(over)
+
+        pref = registry.get_user_preferred_model(user_id)
+        if pref is not None:
+            return _to_resolved(pref)
 
     slot = registry.get_department_slot_default(department_id)
     if slot is not None:

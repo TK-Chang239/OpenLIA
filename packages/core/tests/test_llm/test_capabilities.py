@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from openlia.llm.capabilities import capabilities_for
+import logging
+
+from openlia.llm.capabilities import capabilities_for, is_known_model
 
 
 def test_unknown_provider_returns_sane_default() -> None:
@@ -9,6 +11,21 @@ def test_unknown_provider_returns_sane_default() -> None:
     assert caps.tool_calling is False
     assert caps.structured_output is False
     assert caps.max_context_tokens == 8192
+
+
+def test_is_known_model_distinguishes_registered_from_unknown() -> None:
+    assert is_known_model(provider_kind="openai", model="gpt-5.4") is True
+    assert is_known_model(provider_kind="anthropic", model="claude-sonnet-4-6") is True
+    assert is_known_model(provider_kind="openai", model="gpt-9.9-ultra") is False
+    # openai_compat / openrouter resolve structurally, so count as known.
+    assert is_known_model(provider_kind="openai_compat", model="anything") is True
+
+
+def test_capabilities_for_warns_on_unknown_model(caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="openlia.llm.capabilities"):
+        capabilities_for(provider_kind="openai", model="gpt-9.9-ultra")
+    assert "gpt-9.9-ultra" in caplog.text
+    assert "capability override" in caplog.text.lower()
 
 
 def test_anthropic_opus_family_matches() -> None:
@@ -29,6 +46,19 @@ def test_openai_gpt_5_4_matches() -> None:
     assert caps.tool_calling is True
     assert caps.structured_output is True
     assert caps.web_search_native is True
+
+
+def test_openai_gpt_5_5_matches() -> None:
+    # gpt-5.5 must resolve to the gpt-5.4 capability profile (native web search,
+    # large context/output) instead of falling through to the conservative
+    # _DEFAULT (no web search, 8K/2K) — which the v3 web-search gate rejects.
+    for model in ("gpt-5.5", "gpt-5.5-2026-03-05", "gpt-5.5-pro"):
+        caps = capabilities_for(provider_kind="openai", model=model)
+        assert caps.web_search_native is True, model
+        assert caps.max_output_tokens >= 16_000, model
+    # The mini tier mirrors gpt-5.4-mini: no native web search.
+    mini = capabilities_for(provider_kind="openai", model="gpt-5.5-mini")
+    assert mini.web_search_native is False
 
 
 def test_gemini_3_1_matches() -> None:

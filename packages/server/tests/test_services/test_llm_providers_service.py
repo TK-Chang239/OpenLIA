@@ -98,6 +98,31 @@ def test_delete_provider_blocks_when_models_exist(db_session) -> None:
         svc.delete_provider(db_session, provider.id)
 
 
+def test_resolve_provider_api_key_matches_model_under_kind(db_session) -> None:
+    provider = svc.create_provider(
+        db_session,
+        kind="openai",
+        label="Main OpenAI",
+        api_key="sk-db",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
+    )
+    svc.create_model(
+        db_session,
+        provider_id=provider.id,
+        model_ref="gpt-5.5",
+        display_name="GPT 5.5",
+    )
+    db_session.commit()
+    key = svc.resolve_provider_api_key(db_session, provider_kind="openai", model="gpt-5.5")
+    assert key == "sk-db"
+
+
+def test_resolve_provider_api_key_none_when_no_provider(db_session) -> None:
+    assert svc.resolve_provider_api_key(db_session, provider_kind="openai", model="gpt-5.5") is None
+
+
 def test_capability_override_roundtrip(db_session) -> None:
     svc.set_capability_override(
         db_session,
