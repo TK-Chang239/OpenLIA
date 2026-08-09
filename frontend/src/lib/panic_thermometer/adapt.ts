@@ -211,6 +211,26 @@ function formatDateLabel(iso: string): string {
     .toUpperCase();
 }
 
+/** Compact "07 Aug" date for chips/labels; empty string when unparseable. */
+function shortDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+}
+
+/** Compact "HH:MM" time for chips/labels; empty string when unparseable. */
+function shortTime(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 const SEVERITY_ORDER: Severity[] = [
   "calm",
   "elevated",
@@ -719,6 +739,7 @@ export function adaptFed(r: PanelResult): FedPanel {
   const hawkish = strArray(r.params.hawkish_keywords);
   const crisis = strArray(r.params.crisis_keywords);
   const matchList = phrase ? [phrase] : [];
+  const matchedDateLabel = shortDate(matchedDate);
 
   return {
     panelId: "fed",
@@ -727,7 +748,7 @@ export function adaptFed(r: PanelResult): FedPanel {
     subtitle: "Posture detection from FOMC + Fed newsflow",
     pillTone,
     pillLabel: `${statusLabel(r.status)} · ${TONE_LABEL[tone].toLowerCase()}`,
-    lastUpdate: matchedDate ? `Matched ${matchedDate}` : `${daysSinceFomc}d post-FOMC`,
+    lastUpdate: matchedDateLabel ? `Matched ${matchedDateLabel}` : `${daysSinceFomc}d post-FOMC`,
     presetLabel: PRESET_LABEL,
     rules: [],
     params: paramRows(r.params),
@@ -755,7 +776,7 @@ export function adaptFed(r: PanelResult): FedPanel {
     },
     postureTimeline: [
       {
-        label: matchedDate || "current",
+        label: matchedDateLabel || "current",
         tone,
         isCurrent: true,
       },
@@ -764,8 +785,8 @@ export function adaptFed(r: PanelResult): FedPanel {
       headline || matchedDate
         ? [
             {
-              when: matchedDate || "",
-              time: "",
+              when: matchedDateLabel,
+              time: shortTime(matchedDate),
               source: "Fed newsflow",
               body: [
                 ...(headline ? [{ kind: "text" as const, value: headline }] : []),
