@@ -89,6 +89,37 @@ def validate_session(db: DBSession, raw_token: str) -> ValidatedSession | None:
     return ValidatedSession(session=session, user=user)
 
 
+def list_active_sessions(db: DBSession, *, user_id: str) -> list[SessionRow]:
+    """Non-revoked, non-expired sessions for a user, most-recently-seen first."""
+    now = datetime.now(UTC)
+    stmt = (
+        select(SessionRow)
+        .where(
+            SessionRow.user_id == user_id,
+            SessionRow.revoked_at.is_(None),
+            SessionRow.expires_at > now,
+        )
+        .order_by(SessionRow.last_seen_at.desc())
+    )
+    return list(db.execute(stmt).scalars().all())
+
+
+def revoke_session_for_user(db: DBSession, *, user_id: str, session_id: str) -> bool:
+    """Revoke a session only if it belongs to ``user_id``. Returns True if a
+    matching active session was revoked."""
+    result = db.execute(
+        update(SessionRow)
+        .where(
+            SessionRow.id == session_id,
+            SessionRow.user_id == user_id,
+            SessionRow.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(UTC))
+    )
+    db.commit()
+    return bool(result.rowcount or 0)
+
+
 def revoke_session(db: DBSession, session_id: str) -> None:
     db.execute(
         update(SessionRow)

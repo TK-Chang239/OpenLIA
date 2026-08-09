@@ -1,144 +1,119 @@
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, MessageSquare } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import {
+  listMbRuns,
+  type MbCoverMetric,
+  type MbRunSummary,
+} from "../../api/morning-briefing";
 
-/** Compact snapshot of today's Morning Briefing rendered on the Home page.
- *  All numbers are placeholder per Q1=A; replace with the snapshot API once
- *  the morning-briefing department exposes a /today endpoint. See
- *  planning/dev-backlog/home.md for the full backlog list. */
+/** Compact snapshot of the latest Morning Briefing on the Home page.
+ *  Backed by the real latest completed run's cover highlights (lede, rating,
+ *  key metrics, date). The engine emits prose sections + a cover summary, so
+ *  this surfaces the summary and links to the full briefing rather than
+ *  fabricating macro/watchlist/calendar columns. */
 
-interface MacroEvent {
-  time: string;
-  region: string;
-  headline: string;
-  detail: JSX.Element;
+function metricToneClass(tone: string | null): string {
+  const t = (tone ?? "").toLowerCase();
+  if (/pos|up|gain|bull|good/.test(t)) return "text-feedback-success";
+  if (/neg|down|loss|bear|bad|risk/.test(t)) return "text-feedback-error";
+  return "text-text-primary";
 }
 
-interface WatchEntry {
-  ticker: string;
-  importance: "high" | "med" | "low";
-  preMarket: string;
-  preMarketPos: boolean;
-  blurb: string;
+function editionDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const wd = d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase();
+  const day = String(d.getDate()).padStart(2, "0");
+  const mon = d.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+  return `${wd} ${day} ${mon}`;
 }
 
-interface CalendarEntry {
-  time: string;
-  day: string;
-  tag: string;
-  event: string;
-  estimate: JSX.Element;
+function Shell({
+  children,
+  ariaLabel,
+}: {
+  children: React.ReactNode;
+  ariaLabel: string;
+}): JSX.Element {
+  return (
+    <article
+      aria-label={ariaLabel}
+      className="rounded-xl border border-border-subtle bg-bg-elevated overflow-hidden"
+    >
+      {children}
+    </article>
+  );
 }
-
-const MACRO: MacroEvent[] = [
-  {
-    time: "06:42",
-    region: "EU",
-    headline: "German IFO misses; expectations component drags",
-    detail: (
-      <>
-        86.3 vs <strong>87.1</strong> cons ·{" "}
-        <strong className="text-feedback-error">−0.92σ</strong>
-      </>
-    ),
-  },
-  {
-    time: "05:08",
-    region: "US",
-    headline: "10Y auction tails 0.2bp; indirect bid steady",
-    detail: (
-      <>
-        stop <strong>4.293</strong> · BTC <strong>2.58</strong>
-      </>
-    ),
-  },
-  {
-    time: "02:14",
-    region: "JP",
-    headline: "Tokyo CPI ex-fresh-food prints 2.2%, in line",
-    detail: (
-      <>
-        core <strong>2.2%</strong> · svcs <strong>1.8%</strong>
-      </>
-    ),
-  },
-];
-
-const WATCH: WatchEntry[] = [
-  {
-    ticker: "NVDA",
-    importance: "high",
-    preMarket: "+2.4% PM",
-    preMarketPos: true,
-    blurb: "Hyperscaler capex chatter lifts AI names; Q3 print Wed AMC.",
-  },
-  {
-    ticker: "AAPL",
-    importance: "med",
-    preMarket: "+1.1% PM",
-    preMarketPos: true,
-    blurb:
-      "Services beat from Q2 still bid; PT chatter from two sell-side desks.",
-  },
-  {
-    ticker: "SBUX",
-    importance: "high",
-    preMarket: "−3.2% PM",
-    preMarketPos: false,
-    blurb: "China comp −8% guide cut still weighing; downgrade from MS overnight.",
-  },
-];
-
-const CAL: CalendarEntry[] = [
-  {
-    time: "08:30",
-    day: "Today",
-    tag: "US · DATA",
-    event: "JOLTS job openings",
-    estimate: (
-      <>
-        cons <strong>8.10M</strong> · prior 8.49M
-      </>
-    ),
-  },
-  {
-    time: "16:00",
-    day: "Today",
-    tag: "EARN",
-    event: "AMZN · Q1 FY26 AMC",
-    estimate: (
-      <>
-        EPS <strong>$1.41</strong> · Rev <strong>$155.0B</strong>
-      </>
-    ),
-  },
-  {
-    time: "08:30",
-    day: "Fri",
-    tag: "US · DATA",
-    event: "Non-farm payrolls",
-    estimate: (
-      <>
-        cons <strong>165k</strong> · UR <strong>3.9%</strong>
-      </>
-    ),
-  },
-];
-
-const IMPORTANCE_CLASS: Record<WatchEntry["importance"], string> = {
-  high: "bg-[rgba(224,92,48,0.14)] text-feedback-error",
-  med: "bg-[rgba(220,150,20,0.16)] text-feedback-warning",
-  low: "bg-[rgba(107,130,0,0.14)] text-feedback-success",
-};
 
 export function MorningBriefingSnapshotCard(): JSX.Element {
   const { t } = useTranslation();
+  const [run, setRun] = useState<MbRunSummary | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const runs = await listMbRuns("completed");
+        if (cancelled) return;
+        const latest = [...runs].sort((a, b) =>
+          b.created_at.localeCompare(a.created_at),
+        )[0];
+        setRun(latest ?? null);
+      } catch {
+        if (!cancelled) setRun(null);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ariaLabel = t("home_cards.morning_briefing_aria");
+
+  if (!loaded) {
+    return (
+      <Shell ariaLabel={ariaLabel}>
+        <div className="px-[18px] py-[22px] text-sm text-text-tertiary">
+          {t("home_cards.mb_loading")}
+        </div>
+      </Shell>
+    );
+  }
+
+  if (!run) {
+    return (
+      <Shell ariaLabel={ariaLabel}>
+        <div className="flex flex-col gap-2 px-[18px] py-[22px]">
+          <span className="text-[15px] font-semibold text-text-primary">
+            {t("home_cards.mb_empty")}
+          </span>
+          <span className="text-sm text-text-secondary">
+            {t("home_cards.mb_empty_hint")}
+          </span>
+          <Link
+            to="/morning-briefing"
+            className="mt-1 inline-flex w-fit items-center gap-[6px] px-[10px] py-1 rounded-md border border-border-subtle text-text-primary no-underline transition-colors duration-normal ease-out hover:border-border-strong hover:bg-surface-hover"
+          >
+            {t("home_cards.open_briefing")}
+            <ArrowRight size={11} strokeWidth={2} />
+          </Link>
+        </div>
+      </Shell>
+    );
+  }
+
+  const lede = run.highlights?.subtitle || run.subject;
+  const rating = run.highlights?.rating;
+  const metrics: MbCoverMetric[] = run.highlights?.metrics ?? [];
+
   return (
-    <article
-      aria-label={t("home_cards.morning_briefing_aria")}
-      className="rounded-xl border border-border-subtle bg-bg-elevated overflow-hidden"
-    >
+    <Shell ariaLabel={ariaLabel}>
       <header className="flex items-center gap-[10px] px-[18px] py-[14px] border-b border-border-subtle">
         <span
           aria-hidden="true"
@@ -146,15 +121,19 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
         >
           LIA
         </span>
-        <span className="text-[13.5px] font-semibold text-text-primary tracking-[-0.005em]">
-          {t("home_cards.edition_no", { n: 218 })}
+        <span className="text-[13.5px] font-semibold text-text-primary tracking-[-0.005em] truncate">
+          {run.subject}
         </span>
         <span className="ml-auto flex items-center gap-2 font-mono text-[9.5px] tracking-[0.1em] uppercase text-text-tertiary">
-          <span>TUE 02 MAY</span>
-          <span className="w-[3px] h-[3px] rounded-full bg-text-tertiary" />
-          <span className="text-feedback-success">
-            {t("home_cards.pre_open")}
-          </span>
+          <span>{editionDate(run.created_at)}</span>
+          {rating ? (
+            <>
+              <span className="w-[3px] h-[3px] rounded-full bg-text-tertiary" />
+              <span className="text-feedback-success normal-case tracking-normal">
+                {rating}
+              </span>
+            </>
+          ) : null}
         </span>
         <Link
           to="/morning-briefing"
@@ -165,7 +144,7 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
         </Link>
       </header>
 
-      <div className="grid grid-cols-[28px_1fr] gap-3 px-[18px] py-[14px] pb-[14px] border-b border-border-subtle">
+      <div className="grid grid-cols-[28px_1fr] gap-3 px-[18px] py-[14px] border-b border-border-subtle">
         <span
           aria-hidden="true"
           className="self-start mt-[2px] inline-flex items-center justify-center w-[22px] h-[22px] rounded-[5px] bg-accent-primary text-[--color-accent-on] font-mono text-[9px] font-bold"
@@ -175,121 +154,39 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
         <div className="flex flex-col gap-[6px] min-w-0">
           <div className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.12em] uppercase text-text-tertiary">
             <span>{t("home_cards.todays_read")}</span>
-            <span className="w-[3px] h-[3px] rounded-full bg-text-tertiary" />
-            <span>{t("home_cards.confidence", { n: 78 })}</span>
-            <span className="w-[3px] h-[3px] rounded-full bg-text-tertiary" />
-            <span>{t("home_cards.sources_count", { n: 12 })}</span>
           </div>
           <p className="m-0 text-[16px] leading-[1.4] font-medium text-text-primary tracking-[-0.005em]">
-            Payrolls Friday is the only chart that matters this week — and the
-            market is{" "}
-            <em className="not-italic text-feedback-success">
-              positioned for a soft print
-            </em>
-            .
+            {lede}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3">
-        <Column heading={t("home_cards.col_overnight_macro")} count={t("home_cards.col_overnight_count")}>
-          <div className="flex flex-col gap-2">
-            {MACRO.map((m) => (
-              <div
-                key={`${m.time}-${m.region}`}
-                className="grid grid-cols-[38px_1fr] gap-[10px] items-start"
-              >
-                <div className="font-mono text-[9.5px] text-text-tertiary leading-[1.3] tracking-[0.04em] pt-[1px]">
-                  {m.time}
-                  <span className="block text-feedback-success mt-[1px] text-[8.5px] tracking-[0.1em]">
-                    {m.region}
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <p className="m-0 mb-[2px] text-[12.5px] leading-[1.4] font-medium text-text-primary">
-                    {m.headline}
-                  </p>
-                  <p className="m-0 font-mono text-[10px] text-text-tertiary tabular-nums tracking-[0.02em]">
-                    {m.detail}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Column>
-
-        <Column heading={t("home_cards.col_watchlist")} count={t("home_cards.col_watchlist_count")} border>
-          <div className="flex flex-col gap-2">
-            {WATCH.map((w, i) => (
-              <div
-                key={w.ticker}
-                className={`flex flex-col gap-[3px] ${i < WATCH.length - 1 ? "pb-2 border-b border-dashed border-border-subtle" : ""}`}
-              >
-                <div className="flex items-center gap-[6px]">
-                  <span className="font-mono text-[10.5px] font-semibold text-text-primary px-[5px] py-[1px] rounded-[3px] bg-[--color-bg-code] tracking-[0.02em]">
-                    {w.ticker}
-                  </span>
+      {metrics.length > 0 ? (
+        <div className="flex flex-wrap gap-x-6 gap-y-2 px-[18px] py-[14px]">
+          {metrics.slice(0, 4).map((m) => (
+            <div key={`${m.label}-${m.value}`} className="flex flex-col gap-[2px]">
+              <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-text-tertiary">
+                {m.label}
+              </span>
+              <span className="flex items-baseline gap-2">
+                <span className="font-mono text-[15px] font-medium text-text-primary tabular-nums">
+                  {m.value}
+                </span>
+                {m.change ? (
                   <span
-                    className={`font-mono text-[8.5px] tracking-[0.1em] uppercase px-[5px] py-[1px] rounded-[3px] ${IMPORTANCE_CLASS[w.importance]}`}
+                    className={`font-mono text-[10px] tabular-nums ${metricToneClass(m.tone)}`}
                   >
-                    {w.importance === "high"
-                      ? t("home_cards.importance_high")
-                      : w.importance === "med"
-                        ? t("home_cards.importance_med")
-                        : t("home_cards.importance_low")}
+                    {m.change}
                   </span>
-                  <span
-                    className={`ml-auto font-mono text-[10px] tabular-nums ${w.preMarketPos ? "text-feedback-success" : "text-feedback-error"}`}
-                  >
-                    {w.preMarket}
-                  </span>
-                </div>
-                <p className="m-0 text-[12.5px] leading-[1.4] text-text-primary">
-                  {w.blurb}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Column>
-
-        <Column heading={t("home_cards.col_today_ahead")} count={t("home_cards.col_today_ahead_count")}>
-          <div className="flex flex-col gap-2">
-            {CAL.map((c, i) => (
-              <div
-                key={`${c.time}-${c.day}-${c.event}`}
-                className={`grid grid-cols-[50px_1fr] gap-[10px] items-start ${i < CAL.length - 1 ? "pb-2 border-b border-dashed border-border-subtle" : ""}`}
-              >
-                <div className="font-mono text-[10px] text-text-primary tabular-nums pt-[1px]">
-                  {c.time}
-                  <span className="block text-text-tertiary text-[8.5px] tracking-[0.1em] mt-[1px] uppercase">
-                    {c.day}
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <p className="m-0 mb-[2px] text-[12.5px] leading-[1.4] text-text-primary">
-                    <span className="inline-block font-mono text-[8.5px] tracking-[0.1em] uppercase text-text-tertiary mr-[6px]">
-                      {c.tag}
-                    </span>
-                    {c.event}
-                  </p>
-                  <p className="m-0 font-mono text-[9.5px] text-text-tertiary tabular-nums tracking-[0.02em]">
-                    {c.estimate}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Column>
-      </div>
+                ) : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-[14px] px-[18px] py-[10px] border-t border-border-subtle bg-bg-base font-mono text-[10px] tracking-[0.06em] text-text-tertiary uppercase">
-        <span className="inline-flex items-center gap-[6px] before:content-[''] before:w-[4px] before:h-[4px] before:bg-accent-primary before:rounded-full">
-          {t("home_cards.footer_watchlist")}
-        </span>
-        <span>·</span>
-        <span>{t("home_cards.footer_earnings")}</span>
-        <span>·</span>
-        <span>{t("home_cards.footer_updated")}</span>
+        <span>{editionDate(run.created_at)}</span>
         <Link
           to={`/secretary?prompt=${encodeURIComponent("Brief me on today.")}`}
           className="ml-auto inline-flex items-center gap-[6px] px-[10px] py-[3px] rounded-md border border-border-subtle text-text-primary no-underline transition-colors duration-normal ease-out hover:bg-surface-hover hover:border-border-strong"
@@ -298,30 +195,6 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
           <MessageSquare size={11} strokeWidth={2} />
         </Link>
       </div>
-    </article>
-  );
-}
-
-function Column({
-  heading,
-  count,
-  border,
-  children,
-}: {
-  heading: string;
-  count: string;
-  border?: boolean;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <div
-      className={`flex flex-col gap-[10px] px-[18px] py-[14px] min-w-0 ${border ? "md:border-l md:border-r border-border-subtle" : ""}`}
-    >
-      <div className="flex items-center justify-between font-mono text-[9px] tracking-[0.14em] uppercase text-text-tertiary">
-        <span className="text-text-primary">{heading}</span>
-        <span>{count}</span>
-      </div>
-      {children}
-    </div>
+    </Shell>
   );
 }
