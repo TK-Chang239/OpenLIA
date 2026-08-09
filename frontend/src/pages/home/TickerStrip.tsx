@@ -58,7 +58,7 @@ export function TickerStrip(): JSX.Element | null {
         return (
           <div
             key={q.symbol}
-            className={`flex-1 px-[14px] py-[10px] flex flex-col gap-[3px] ${i < quotes.length - 1 ? "border-r border-border-subtle" : ""}`}
+            className={`flex-1 px-[14px] py-[10px] flex flex-col gap-[3px] transition-colors duration-normal ease-out hover:bg-surface-hover ${i < quotes.length - 1 ? "border-r border-border-subtle" : ""}`}
           >
             <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-text-tertiary">
               {q.label}

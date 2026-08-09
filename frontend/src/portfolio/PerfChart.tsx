@@ -187,7 +187,7 @@ export function PerfChart({ range, series, loading, market }: PerfChartProps): J
                 No data for {range}
               </div>
             ) : loading ? (
-              <div className="h-full w-full animate-pulse rounded bg-[--color-border-subtle]/30" />
+              <div className="ol-skeleton h-full w-full" />
             ) : (
               <svg
                 ref={svgRef}

@@ -381,6 +381,38 @@ body {
   color: var(--color-text-primary);
 }
 
+/* ── Shared loading skeleton ──────────────────────────────────
+   Moving-gradient shimmer, used across every department's loading
+   state so the app has one consistent "loading" texture instead of
+   the old mix of flat animate-pulse blocks and bespoke bars.
+   Pair with the Skeleton primitive (components/primitives/Skeleton). */
+.ol-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-code) 0%,
+    var(--color-surface-hover) 20%,
+    var(--color-bg-code) 40%,
+    var(--color-bg-code) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+  animation: ol-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes ol-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ol-skeleton {
+    animation: none;
+    background: var(--color-bg-code);
+  }
+}
+
 @keyframes ol-pulse {
   0%,
   100% {

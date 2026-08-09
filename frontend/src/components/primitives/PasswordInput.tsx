@@ -25,7 +25,7 @@ export function PasswordInput({
   const [visible, setVisible] = useState(false);
   const borderClass = hasError
     ? "border-feedback-error ring-2 ring-feedback-error/20"
-    : "border-border-subtle focus:border-border-secondary focus:ring-2 focus:ring-focus";
+    : "border-border-subtle hover:border-border-strong focus:border-border-secondary focus:ring-2 focus:ring-focus";
 
   return (
     <div className="relative">

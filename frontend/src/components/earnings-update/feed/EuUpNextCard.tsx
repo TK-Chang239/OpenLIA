@@ -28,7 +28,7 @@ export function EuUpNextCard({ entry }: Props) {
         : null;
 
   return (
-    <article className="flex flex-col gap-2 px-4 py-4 bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[10px] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal]">
+    <article className="flex flex-col gap-2 px-4 py-4 bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[10px] hover:border-[--color-border-strong] hover:-translate-y-0.5 hover:shadow-sm transition-all duration-[--duration-normal]">
       {timingLabel ? (
         <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-[--color-text-tertiary]">
           {timingLabel}
