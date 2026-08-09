@@ -9,8 +9,8 @@ describe("RepoListSkeleton", () => {
     expect(rows).toHaveLength(8);
   });
 
-  it("uses animate-pulse styling on placeholders", () => {
+  it("uses the shared shimmer skeleton on placeholders", () => {
     const { container } = render(<RepoListSkeleton />);
-    expect(container.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
+    expect(container.querySelectorAll(".ol-skeleton").length).toBeGreaterThan(0);
   });
 });

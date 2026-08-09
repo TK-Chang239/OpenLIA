@@ -41,7 +41,7 @@ export default function RetailSentiment(): JSX.Element {
 
   return (
     <div
-      className="flex flex-col h-full"
+      className="flex flex-col h-full motion-safe:animate-rs-page-enter"
       data-testid="retail-sentiment"
     >
       {/* Top bar */}
@@ -66,6 +66,10 @@ export default function RetailSentiment(): JSX.Element {
         >
           {t("retail_sentiment.department_label")} ·{" "}
           <strong style={{ color: "var(--color-feedback-success)", fontWeight: 500 }}>
+            <span
+              aria-hidden="true"
+              className="mr-1 inline-block h-[6px] w-[6px] rounded-full bg-[--color-feedback-success] align-middle motion-safe:animate-rs-live-pulse"
+            />
             {t("retail_sentiment.status_active")}
           </strong>
         </span>
@@ -100,7 +104,10 @@ export default function RetailSentiment(): JSX.Element {
         className="flex-1 overflow-y-auto"
         style={{ scrollbarGutter: "stable" }}
       >
-        <div className="max-w-[1200px] mx-auto px-8 pt-7 pb-16">
+        <div
+          key={selected ?? "empty"}
+          className="max-w-[1200px] mx-auto px-8 pt-7 pb-16 motion-safe:animate-rs-section-enter"
+        >
           {selected ? (
             <RsOverviewView key={selected} ticker={selected} />
           ) : (

@@ -38,7 +38,7 @@ function SectionLabel({
 function LoadingSkeleton() {
   return (
     <div
-      className="space-y-4 animate-pulse"
+      className="space-y-4"
       data-testid="rs-overview-loading"
       aria-live="polite"
       aria-label="Generating dashboard — please wait"
@@ -46,8 +46,8 @@ function LoadingSkeleton() {
       {[...Array(4)].map((_, i) => (
         <div
           key={i}
-          className="h-20 rounded-xl bg-[--color-bg-elevated]"
-          style={{ opacity: 0.6 - i * 0.1 }}
+          className="ol-skeleton h-20"
+          style={{ borderRadius: "var(--radius-xl)" }}
         />
       ))}
     </div>
