@@ -75,11 +75,16 @@ class WageGrowthPanel:
         events = payloads.get("economic_events") or []
         warnings: list[str] = []
 
+        # AHE publishes both a month-over-month and a year-over-year row under
+        # the same name; the thresholds here are MoM, so keep MoM (or rows that
+        # carry no comparison tag, e.g. in tests) and drop YoY.
         wage_events = sorted(
             [
                 e
                 for e in events
-                if e.get("event_name") == event_filter and e.get("actual") is not None
+                if e.get("event_name") == event_filter
+                and e.get("actual") is not None
+                and e.get("comparison") in (None, "mom")
             ],
             key=lambda e: e.get("date", ""),
         )
