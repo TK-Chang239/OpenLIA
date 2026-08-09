@@ -93,6 +93,29 @@ def test_runner_returns_five_panels_and_composite(db_session, user):
     )
 
 
+def test_runner_surfaces_series_params_and_full_scalars(db_session, user):
+    # Phase B payload superset: the dashboard must carry the chart series
+    # (raw_series), the effective thresholds (params), and the full panel
+    # scalar readings (not a narrow whitelist) so the viewer can render real
+    # data instead of the frozen static copy.
+    cfg_svc = PtConfigService(session_factory=lambda: db_session)
+    cfg_svc.get_or_create_for_user(user.id)
+    runner = PtRunner(
+        session_factory=lambda: db_session,
+        dispatcher=_dispatcher_with_oil_red(),
+    )
+    payload = runner.compute_dashboard(user.id)
+
+    oil = payload.panels["oil"]
+    assert oil["raw_series"]["price"]  # non-empty price series feeds the chart
+    assert oil["params"]["price_threshold"] == 85  # threshold for the UI
+
+    # ``michigan_5y_missing`` is a panel scalar outside the old whitelist;
+    # its presence proves the full scalar set is surfaced.
+    inflation = payload.panels["inflation"]
+    assert inflation["extras"]["michigan_5y_missing"] is True
+
+
 def test_runner_disabled_panel_returns_disabled_status(db_session, user):
     cfg_svc = PtConfigService(session_factory=lambda: db_session)
     cfg = cfg_svc.get_or_create_for_user(user.id)

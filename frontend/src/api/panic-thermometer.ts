@@ -66,7 +66,13 @@ export interface PanelResult {
   label: string;
   resolved_values: Record<string, unknown>;
   derived_scalars: Record<string, unknown>;
+  // Full panel scalar readings (survey levels, matched headlines, keyword
+  // flags, day counts, ...).
   extras: Record<string, unknown>;
+  // Named numeric arrays (price/tip/value series) that back the charts.
+  raw_series: Record<string, number[]>;
+  // Effective panel params (thresholds, targets, tickers) for the viewer.
+  params: Record<string, unknown>;
   warnings: string[];
 }
 
