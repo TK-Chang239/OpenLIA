@@ -23,6 +23,7 @@ class FakeRegistry:
     by_id: dict[str, ResolvedModelRow] = field(default_factory=dict)
     dept_user_override: dict[tuple[str, str], ResolvedModelRow] = field(default_factory=dict)
     dept_slot_default: dict[str, ResolvedModelRow] = field(default_factory=dict)
+    user_preferred: dict[str, ResolvedModelRow] = field(default_factory=dict)
     system_role_default: dict[str, ResolvedModelRow] = field(default_factory=dict)
 
     def get_by_id(self, mid: str) -> ResolvedModelRow | None:
@@ -35,6 +36,9 @@ class FakeRegistry:
 
     def get_department_slot_default(self, department_id: str) -> ResolvedModelRow | None:
         return self.dept_slot_default.get(department_id)
+
+    def get_user_preferred_model(self, user_id: str) -> ResolvedModelRow | None:
+        return self.user_preferred.get(user_id)
 
     def get_system_role_default(self, role_id: str) -> ResolvedModelRow | None:
         return self.system_role_default.get(role_id)
@@ -69,6 +73,46 @@ def test_slot_default_used_when_no_user_override():
     default = _row("D")
     reg = FakeRegistry(dept_slot_default={"secretary": default})
     out = resolve(department_id="secretary", registry=reg, user_id="U")
+    assert out.model_id == "D"
+
+
+def test_user_preferred_used_when_no_dept_override():
+    pref = _row("U-pref")
+    reg = FakeRegistry(user_preferred={"U": pref})
+    out = resolve(department_id="secretary", registry=reg, user_id="U")
+    assert out.model_id == "U-pref"
+
+
+def test_user_preferred_wins_over_slot_default():
+    pref = _row("U-pref")
+    default = _row("D")
+    reg = FakeRegistry(
+        user_preferred={"U": pref},
+        dept_slot_default={"secretary": default},
+    )
+    out = resolve(department_id="secretary", registry=reg, user_id="U")
+    assert out.model_id == "U-pref"
+
+
+def test_dept_override_wins_over_user_preferred():
+    over = _row("U-dept")
+    pref = _row("U-pref")
+    reg = FakeRegistry(
+        dept_user_override={("U", "secretary"): over},
+        user_preferred={"U": pref},
+    )
+    out = resolve(department_id="secretary", registry=reg, user_id="U")
+    assert out.model_id == "U-dept"
+
+
+def test_user_preferred_skipped_when_no_user_id():
+    pref = _row("U-pref")
+    default = _row("D")
+    reg = FakeRegistry(
+        user_preferred={"U": pref},
+        dept_slot_default={"secretary": default},
+    )
+    out = resolve(department_id="secretary", registry=reg, user_id=None)
     assert out.model_id == "D"
 
 
