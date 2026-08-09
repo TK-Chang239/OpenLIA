@@ -217,6 +217,44 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         response.delete_cookie(COOKIE_NAME, path="/")
         return Response(status_code=204)
 
+    @router.get("/sessions")
+    def list_sessions(
+        user=require_auth,
+        openlia_session: str | None = Cookie(default=None, alias=COOKIE_NAME),
+        db: DBSession = Depends(session_dep),
+    ):
+        current_id: str | None = None
+        if openlia_session:
+            validated = sessions.validate_session(db, openlia_session)
+            if validated is not None:
+                current_id = validated.session.id
+        rows = sessions.list_active_sessions(db, user_id=user.id)
+        return {
+            "sessions": [
+                {
+                    "id": s.id,
+                    "created_at": s.created_at.isoformat(),
+                    "last_seen_at": s.last_seen_at.isoformat(),
+                    "expires_at": s.expires_at.isoformat(),
+                    "user_agent": s.user_agent,
+                    "ip_address": s.ip_address,
+                    "current": s.id == current_id,
+                }
+                for s in rows
+            ]
+        }
+
+    @router.delete("/sessions/{session_id}", status_code=204)
+    def revoke_one_session(
+        session_id: str,
+        user=require_auth,
+        db: DBSession = Depends(session_dep),
+    ):
+        # Ownership is enforced in the service; revoking a session the caller
+        # does not own (or one already gone) is a no-op that still returns 204.
+        sessions.revoke_session_for_user(db, user_id=user.id, session_id=session_id)
+        return Response(status_code=204)
+
     @router.get("/session")
     def get_session(user=require_auth):
         return {
