@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
+from openlia.panic_thermometer.panels._scanning import matching_articles
 from openlia.panic_thermometer.panels.base import PanelContextBuildResult
 
 _DEFAULT_RULESET: dict[str, Any] = {
@@ -52,14 +53,12 @@ _DEFAULT_RULESET: dict[str, Any] = {
             "mobilization",
         ],
         "news_lookback_days": 30,
+        # Require this many matching articles before progress/escalation is
+        # treated as real, so a single stray "strike" headline does not trip it.
+        "min_signal_articles": 2,
     },
     "streak_condition": None,
 }
-
-
-def _matches(article: dict[str, Any], keywords: list[str]) -> bool:
-    text = f"{article.get('headline', '')} {article.get('summary', '')}".lower()
-    return any(kw.lower() in text for kw in keywords)
 
 
 @dataclass(frozen=True)
@@ -109,21 +108,18 @@ class DiplomacyPanel:
         days_remaining = max(0, window_days - days_elapsed)
 
         news = payloads.get("company_news") or []
-        progress_articles = [a for a in news if _matches(a, news_keywords)]
-        escalation_articles = [a for a in news if _matches(a, escalation_keywords)]
+        min_articles = int(params.get("min_signal_articles", 2))
+        progress = matching_articles(news, news_keywords)
+        escalation = matching_articles(news, escalation_keywords)
 
         return PanelContextBuildResult(
             scalars={
                 "days_elapsed": days_elapsed,
                 "days_remaining": days_remaining,
-                "progress_detected": bool(progress_articles),
-                "escalation_detected": bool(escalation_articles),
-                "matched_progress_headlines": [
-                    a.get("headline", "") for a in progress_articles[:10]
-                ],
-                "matched_escalation_headlines": [
-                    a.get("headline", "") for a in escalation_articles[:10]
-                ],
+                "progress_detected": len(progress) >= min_articles,
+                "escalation_detected": len(escalation) >= min_articles,
+                "matched_progress_headlines": [a.get("headline", "") for _, a in progress[:10]],
+                "matched_escalation_headlines": [a.get("headline", "") for _, a in escalation[:10]],
                 "manual_override": panel_config.get("manual_override"),
             },
             raw_series={},

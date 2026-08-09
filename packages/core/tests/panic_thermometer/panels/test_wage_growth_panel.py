@@ -51,6 +51,32 @@ def test_wage_default_rules_amber_at_threshold() -> None:
     assert result.status == "amber"
 
 
+def test_wage_panel_prefers_mom_over_yoy_when_both_present() -> None:
+    # EODHD publishes Average Hourly Earnings as two identically-named rows on
+    # the same date (mom ~0.3, yoy ~3.5). The panel's thresholds are MoM, so it
+    # must read the month-over-month figure, not the year-over-year one.
+    panel = WageGrowthPanel()
+    events = [
+        {
+            "date": "2026-08-07",
+            "event_name": "Average Hourly Earnings",
+            "actual": 0.3,
+            "comparison": "mom",
+        },
+        {
+            "date": "2026-08-07",
+            "event_name": "Average Hourly Earnings",
+            "actual": 3.5,
+            "comparison": "yoy",
+        },
+    ]
+    built = panel.build_context(
+        panel_config={"params": panel.default_ruleset["params"]},
+        payloads={"economic_events": events},
+    )
+    assert built.scalars["value"] == 0.3
+
+
 def test_wage_panel_no_events_returns_warning() -> None:
     panel = WageGrowthPanel()
     built = panel.build_context(

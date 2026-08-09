@@ -99,6 +99,7 @@ from openlia_server.services.background_report_registry import BackgroundReportR
 from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
 from openlia_server.services.pt_config import PtConfigService
 from openlia_server.services.pt_runner import PtRunner
+from openlia_server.services.pt_wiring import build_pt_dispatcher
 from openlia_server.services.report_export import BrowserLauncher
 from openlia_server.services.runtime import (
     build_chat_runner,
@@ -135,13 +136,6 @@ _DEPARTMENT_SLOTS: dict[str, list[str]] = {
         "batch.classify_sentiment.user",
     ],
 }
-
-
-class _NoopPtDispatcher:
-    """Fallback PT data dispatcher used when no real adapter is wired."""
-
-    def fetch(self, *, requirement, panel_id, params):  # type: ignore[no-untyped-def]
-        return None
 
 
 class _NoopEarningsRecentAdapter:
@@ -810,10 +804,11 @@ def create_app(
 
     app.include_router(build_retail_sentiment_router(db_session_factory=factory, mode=mode))
     # PT runner singleton (per-process) so the per-panel cache persists across
-    # requests within a process. Dispatcher defaults to a no-op; a real
-    # Plan 3 dispatcher can be installed on `app.state.pt_dispatcher` from an
-    # embedding process before the first request.
-    pt_dispatcher = getattr(app.state, "pt_dispatcher", None) or _NoopPtDispatcher()
+    # requests within a process. The dispatcher fetches real EODHD data,
+    # resolving the key lazily (env, then an installed connector) on each
+    # request; an embedding process may pre-install its own dispatcher on
+    # `app.state.pt_dispatcher` before the first request.
+    pt_dispatcher = getattr(app.state, "pt_dispatcher", None) or build_pt_dispatcher(factory)
     app.state.pt_dispatcher = pt_dispatcher
     app.state.pt_runner = PtRunner(session_factory=factory, dispatcher=pt_dispatcher)
     # Seed shipped presets once at app-factory time.
