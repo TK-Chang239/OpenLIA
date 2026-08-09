@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
+from openlia.panic_thermometer.panels._scanning import matching_articles
 from openlia.panic_thermometer.panels.base import PanelContextBuildResult
 
 _DEFAULT_RULESET: dict[str, Any] = {
@@ -50,17 +51,13 @@ _DEFAULT_RULESET: dict[str, Any] = {
         ],
         "news_lookback_days": 30,
         "news_search_tags": "Fed,FOMC,Powell,Federal Reserve",
+        # A category counts as a real signal only once this many distinct
+        # articles match it, so a single stray keyword mention in a loosely
+        # related feed does not flip the panel (e.g. a false "emergency").
+        "min_signal_articles": 2,
     },
     "streak_condition": None,
 }
-
-
-def _scan(text: str, keywords: list[str]) -> str | None:
-    haystack = text.lower()
-    for kw in keywords:
-        if kw.lower() in haystack:
-            return kw
-    return None
 
 
 def _is_fomc_event(event_name: str | None) -> bool:
@@ -109,39 +106,32 @@ class FedLanguagePanel:
         news = payloads.get("company_news") or []
         events = payloads.get("economic_events") or []
         warnings: list[str] = []
-
-        dovish = params.get("dovish_keywords", [])
-        neutral = params.get("neutral_keywords", [])
-        hawkish = params.get("hawkish_keywords", [])
-        crisis = params.get("crisis_keywords", [])
+        min_articles = int(params.get("min_signal_articles", 2))
 
         sorted_news = sorted(news, key=lambda a: a.get("date", ""), reverse=True)
+
+        # Highest-severity first, so the winning category also supplies the
+        # phrase/headline shown in the label.
+        category_order = [
+            ("crisis_keyword_detected", params.get("crisis_keywords", [])),
+            ("hawkish_keyword_detected", params.get("hawkish_keywords", [])),
+            ("neutral_keyword_detected", params.get("neutral_keywords", [])),
+            ("dovish_keyword_detected", params.get("dovish_keywords", [])),
+        ]
+        matches = {name: matching_articles(sorted_news, kws) for name, kws in category_order}
+        # A category fires only with enough corroborating articles.
+        flags = {name: len(matches[name]) >= min_articles for name, _ in category_order}
 
         matched_phrase = ""
         matched_headline = ""
         matched_date = ""
-        flags = {
-            "dovish_keyword_detected": False,
-            "neutral_keyword_detected": False,
-            "hawkish_keyword_detected": False,
-            "crisis_keyword_detected": False,
-        }
-        category_order = [
-            ("crisis_keyword_detected", crisis),
-            ("hawkish_keyword_detected", hawkish),
-            ("neutral_keyword_detected", neutral),
-            ("dovish_keyword_detected", dovish),
-        ]
-        for article in sorted_news:
-            text = f"{article.get('headline', '')} {article.get('summary', '')}"
-            for flag_name, kw_list in category_order:
-                hit = _scan(text, kw_list)
-                if hit:
-                    flags[flag_name] = True
-                    if not matched_phrase:
-                        matched_phrase = hit
-                        matched_headline = article.get("headline", "")
-                        matched_date = article.get("date", "")
+        for flag_name, _ in category_order:
+            if flags[flag_name] and matches[flag_name]:
+                hit, article = matches[flag_name][0]  # newest article of that category
+                matched_phrase = hit
+                matched_headline = article.get("headline", "")
+                matched_date = article.get("date", "")
+                break
 
         fomc_events = [e for e in events if _is_fomc_event(e.get("event_name", ""))]
         days_since_fomc: float | None = None
