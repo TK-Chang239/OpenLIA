@@ -1846,3 +1846,43 @@
   .pt-scroll { padding: 20px 16px 60px; }
   .pt-topbar { gap: 8px; padding: 0 16px; }
 }
+
+/* ===== Live-data states (loading / error / empty) ============ */
+.pt-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 320px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+.pt-state strong {
+  font-size: 15px;
+  color: var(--color-text-primary);
+}
+.pt-state.is-error strong {
+  color: var(--color-feedback-error);
+}
+.pt-state .pt-top-btn {
+  margin-top: 8px;
+}
+.pt-skeleton-bar {
+  width: 220px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-code) 0%,
+    var(--color-surface-hover) 50%,
+    var(--color-bg-code) 100%
+  );
+  background-size: 200% 100%;
+  animation: pt-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes pt-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

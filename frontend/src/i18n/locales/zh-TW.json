@@ -1159,6 +1159,11 @@
     "open_settings": "開啟設定",
     "settings": "設定",
     "red_of_total": "{{red}} / {{total}} 紅燈",
+    "loading": "載入即時儀表板…",
+    "error_title": "無法載入儀表板",
+    "retry": "重試",
+    "empty_title": "連接 EODHD 以啟用此儀表板",
+    "empty_body": "每個面板都需要市場資料。請在設定中新增 EODHD 連接器以查看即時讀數。",
     "settings_drawer": {
       "aria": "恐慌溫度計設定",
       "title": "設定",
