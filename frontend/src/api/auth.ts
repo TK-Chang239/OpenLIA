@@ -71,6 +71,29 @@ export async function logoutAll(): Promise<null> {
   return fetchJson<null>("/api/auth/logout-all", { method: "POST" });
 }
 
+export interface AuthSession {
+  id: string;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  user_agent: string | null;
+  ip_address: string | null;
+  current: boolean;
+}
+
+export async function listAuthSessions(): Promise<AuthSession[]> {
+  const resp = await fetchJson<{ sessions: AuthSession[] }>(
+    "/api/auth/sessions",
+  );
+  return resp.sessions;
+}
+
+export async function revokeAuthSession(id: string): Promise<void> {
+  await fetchJson<void>(`/api/auth/sessions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
 export interface RegisterInput {
   email: string;
   password: string;

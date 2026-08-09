@@ -180,6 +180,86 @@ def test_company_onboarding_loop(company_client: TestClient, db_session, make_us
     assert company_client.get("/auth/session").status_code == 401
 
 
+class TestSessionsEndpoints:
+    def _register_alice(self, client: TestClient) -> str:
+        resp = client.post(
+            "/auth/register",
+            json={
+                "email": "alice@example.com",
+                "password": "correct-horse-battery-staple",
+                "display_name": "Alice",
+                "invite_token": "valid-invite",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json()["user_id"]
+
+    def test_list_shows_current_session(self, company_client: TestClient, seeded_invite):
+        self._register_alice(company_client)
+        resp = company_client.get("/auth/sessions")
+        assert resp.status_code == 200
+        data = resp.json()["sessions"]
+        assert len(data) == 1
+        assert data[0]["current"] is True
+        assert set(data[0].keys()) >= {
+            "id",
+            "created_at",
+            "last_seen_at",
+            "expires_at",
+            "user_agent",
+            "ip_address",
+            "current",
+        }
+
+    def test_revoke_other_session(
+        self, company_client: TestClient, db_session, seeded_invite
+    ):
+        from openlia_server.db.models.auth import User
+        from openlia_server.services.auth import sessions
+
+        uid = self._register_alice(company_client)
+        alice = db_session.query(User).filter_by(id=uid).one()
+        other = sessions.create_session(
+            db_session, user_id=alice.id, persistent=False, user_agent="Other UA"
+        )
+
+        data = company_client.get("/auth/sessions").json()["sessions"]
+        assert len(data) == 2
+        assert sum(1 for s in data if s["current"]) == 1
+        other_id = next(s["id"] for s in data if not s["current"])
+        assert other_id == other.session.id
+
+        resp = company_client.delete(f"/auth/sessions/{other_id}")
+        assert resp.status_code == 204
+
+        db_session.expire_all()
+        assert sessions.validate_session(db_session, other.raw_token) is None
+        remaining = company_client.get("/auth/sessions").json()["sessions"]
+        assert len(remaining) == 1
+        assert remaining[0]["current"] is True
+
+    def test_cannot_revoke_another_users_session(
+        self, company_client: TestClient, db_session, seeded_invite, make_user
+    ):
+        from openlia_server.services.auth import sessions
+
+        self._register_alice(company_client)  # alice is the authenticated caller
+        bob = make_user(email="bob@example.com", is_admin=False)
+        bob_sess = sessions.create_session(db_session, user_id=bob.id, persistent=False)
+
+        resp = company_client.delete(f"/auth/sessions/{bob_sess.session.id}")
+        assert resp.status_code == 204  # ownership mismatch is a silent no-op
+
+        db_session.expire_all()
+        assert sessions.validate_session(db_session, bob_sess.raw_token) is not None
+        ids = [s["id"] for s in company_client.get("/auth/sessions").json()["sessions"]]
+        assert bob_sess.session.id not in ids
+
+    def test_requires_auth(self, company_client: TestClient):
+        company_client.cookies.clear()
+        assert company_client.get("/auth/sessions").status_code == 401
+
+
 class TestSignupPolicyEndpoint:
     def test_returns_mode(self, company_client: TestClient):
         resp = company_client.get("/auth/signup-policy")
@@ -539,6 +619,8 @@ _AUTH_ROUTE_CASES = [
     ("post", "/api/auth/login", {"email": "x@y.z", "password": "x", "persistent": False}),
     ("post", "/api/auth/logout", None),
     ("post", "/api/auth/logout-all", None),
+    ("get", "/api/auth/sessions", None),
+    ("delete", "/api/auth/sessions/x", None),
     ("get", "/api/auth/session", None),
     ("get", "/api/auth/signup-policy", None),
     ("post", "/api/auth/password-reset/request", {"email": "x@y.z"}),
