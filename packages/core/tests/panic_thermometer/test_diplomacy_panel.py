@@ -25,9 +25,19 @@ def test_diplomacy_build_context_computes_days_elapsed():
             "summary": "Diplomatic progress",
         },
         {
+            "date": "2026-04-22",
+            "headline": "Second ceasefire holds",
+            "summary": "negotiations continue",
+        },
+        {
             "date": "2026-04-21",
             "headline": "Mobilization announced",
             "summary": "Retaliation threatened",
+        },
+        {
+            "date": "2026-04-23",
+            "headline": "Blockade tightens",
+            "summary": "further military escalation",
         },
     ]
     r = p.build_context(
