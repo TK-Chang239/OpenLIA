@@ -63,6 +63,17 @@ def _scan(text: str, keywords: list[str]) -> str | None:
     return None
 
 
+def _is_fomc_event(event_name: str | None) -> bool:
+    """Match the FOMC family across data-provider naming.
+
+    EODHD's economic calendar splits the meeting into "FOMC Minutes" and
+    "FOMC Economic Projections" and names the rate move "Fed Interest Rate
+    Decision" (no "FOMC" substring), so match the decision by name too.
+    """
+    name = event_name or ""
+    return "FOMC" in name or "Fed Interest Rate Decision" in name
+
+
 @dataclass(frozen=True)
 class FedLanguagePanel:
     panel_id: str = "fed_language"
@@ -132,7 +143,7 @@ class FedLanguagePanel:
                         matched_headline = article.get("headline", "")
                         matched_date = article.get("date", "")
 
-        fomc_events = [e for e in events if "FOMC" in (e.get("event_name", "") or "")]
+        fomc_events = [e for e in events if _is_fomc_event(e.get("event_name", ""))]
         days_since_fomc: float | None = None
         if fomc_events:
             latest_fomc = max(fomc_events, key=lambda e: e.get("date", ""))

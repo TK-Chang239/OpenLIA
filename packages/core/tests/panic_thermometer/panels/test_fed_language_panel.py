@@ -74,3 +74,21 @@ def test_fed_panel_no_news_falls_through_green() -> None:
     )
     assert built.scalars["hawkish_keyword_detected"] is False
     assert built.scalars["crisis_keyword_detected"] is False
+
+
+def test_fed_panel_recognizes_rate_decision_as_fomc() -> None:
+    # EODHD's calendar names the decision "Fed Interest Rate Decision" (no
+    # "FOMC" substring); the panel must still resolve days_since_fomc from it.
+    from datetime import date, timedelta
+
+    panel = FedLanguagePanel()
+    recent = (date.today() - timedelta(days=3)).isoformat()
+    built = panel.build_context(
+        panel_config={"params": panel.default_ruleset["params"]},
+        payloads={
+            "company_news": [],
+            "economic_events": [{"event_name": "Fed Interest Rate Decision", "date": recent}],
+        },
+    )
+    assert built.scalars["days_since_fomc"] == 3.0
+    assert not any("no FOMC event" in w for w in built.warnings)
