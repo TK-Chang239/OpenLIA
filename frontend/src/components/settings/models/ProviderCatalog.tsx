@@ -95,6 +95,22 @@ export function ProviderCatalog({ departments, isAdmin }: Props): JSX.Element {
   const [modelFormByProvider, setModelFormByProvider] = useState<
     Record<string, ModelFormState>
   >({});
+  // Inline edit-in-place state: one provider and one model may be under edit.
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(
+    null,
+  );
+  const [providerEditForm, setProviderEditForm] = useState<{
+    label: string;
+    api_key: string;
+    clear_api_key: boolean;
+    base_url: string;
+    env_var_name: string;
+  }>({ label: '', api_key: '', clear_api_key: false, base_url: '', env_var_name: '' });
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [modelEditForm, setModelEditForm] = useState<{
+    model_ref: string;
+    display_name: string;
+  }>({ model_ref: '', display_name: '' });
 
   const refresh = async () => {
     try {
@@ -214,6 +230,40 @@ export function ProviderCatalog({ departments, isAdmin }: Props): JSX.Element {
     }
   };
 
+  const startEditProvider = (p: AdminProvider) => {
+    setEditingProviderId(p.id);
+    setProviderEditForm({
+      label: p.label,
+      api_key: '',
+      clear_api_key: false,
+      base_url: p.base_url ?? '',
+      env_var_name: p.env_var_name ?? '',
+    });
+  };
+
+  const onSaveProvider = async (p: AdminProvider, e: FormEvent) => {
+    e.preventDefault();
+    try {
+      // null/omitted => keep existing (server treats None as UNCHANGED); only
+      // send api_key when the admin typed a new one, or clear it via the flag.
+      const update: AdminProviderUpdate = {
+        label: providerEditForm.label.trim() || null,
+        base_url: providerEditForm.base_url.trim() || null,
+        env_var_name: providerEditForm.env_var_name.trim() || null,
+      };
+      if (providerEditForm.clear_api_key) {
+        update.clear_api_key = true;
+      } else if (providerEditForm.api_key) {
+        update.api_key = providerEditForm.api_key;
+      }
+      await updateAdminProvider(p.id, update);
+      setEditingProviderId(null);
+      await refresh();
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  };
+
   const onCreateModel = async (providerId: string, e: FormEvent) => {
     e.preventDefault();
     const form = modelFormByProvider[providerId] ?? EMPTY_MODEL_FORM;
@@ -254,6 +304,28 @@ export function ProviderCatalog({ departments, isAdmin }: Props): JSX.Element {
     if (!confirm(`Delete model ${m.display_name}?`)) return;
     try {
       await deleteAdminModel(m.id);
+      await refresh();
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  };
+
+  const startEditModel = (m: AdminModel) => {
+    setEditingModelId(m.id);
+    setModelEditForm({ model_ref: m.model_ref, display_name: m.display_name });
+  };
+
+  const onSaveModel = async (m: AdminModel, e?: FormEvent) => {
+    e?.preventDefault();
+    try {
+      await updateAdminModel(m.id, {
+        provider_id: m.provider_id,
+        model_ref: modelEditForm.model_ref.trim(),
+        display_name: modelEditForm.display_name.trim(),
+        is_enabled: m.is_enabled,
+        overrides: m.overrides ?? null,
+      });
+      setEditingModelId(null);
       await refresh();
     } catch (err) {
       setError((err as ApiError).message);
@@ -440,6 +512,17 @@ export function ProviderCatalog({ departments, isAdmin }: Props): JSX.Element {
                 <div className="flex gap-2 text-xs">
                   <button
                     type="button"
+                    onClick={() =>
+                      editingProviderId === p.id
+                        ? setEditingProviderId(null)
+                        : startEditProvider(p)
+                    }
+                    className="text-accent-primary hover:underline"
+                  >
+                    {editingProviderId === p.id ? 'Cancel' : 'Edit'}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onToggleProvider(p)}
                     className="text-accent-primary hover:underline"
                   >
@@ -455,6 +538,93 @@ export function ProviderCatalog({ departments, isAdmin }: Props): JSX.Element {
                 </div>
               ) : null}
             </div>
+
+            {isAdmin && editingProviderId === p.id ? (
+              <form
+                onSubmit={(e) => onSaveProvider(p, e)}
+                aria-label={`Edit provider ${p.label}`}
+                className="grid grid-cols-2 gap-2 rounded-md border border-border-subtle bg-bg-base p-3"
+              >
+                <label className="text-xs text-text-secondary">
+                  Label
+                  <input
+                    type="text"
+                    value={providerEditForm.label}
+                    onChange={(e) =>
+                      setProviderEditForm((s) => ({ ...s, label: e.target.value }))
+                    }
+                    className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm text-text-primary"
+                  />
+                </label>
+                <label className="text-xs text-text-secondary">
+                  API key {p.has_api_key ? '(leave blank to keep)' : ''}
+                  <input
+                    type="password"
+                    value={providerEditForm.api_key}
+                    disabled={providerEditForm.clear_api_key}
+                    onChange={(e) =>
+                      setProviderEditForm((s) => ({ ...s, api_key: e.target.value }))
+                    }
+                    className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm text-text-primary disabled:opacity-50"
+                  />
+                </label>
+                <label className="text-xs text-text-secondary">
+                  Base URL
+                  <input
+                    type="text"
+                    value={providerEditForm.base_url}
+                    onChange={(e) =>
+                      setProviderEditForm((s) => ({ ...s, base_url: e.target.value }))
+                    }
+                    className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm text-text-primary"
+                  />
+                </label>
+                <label className="text-xs text-text-secondary">
+                  Env var name
+                  <input
+                    type="text"
+                    value={providerEditForm.env_var_name}
+                    onChange={(e) =>
+                      setProviderEditForm((s) => ({
+                        ...s,
+                        env_var_name: e.target.value,
+                      }))
+                    }
+                    className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm text-text-primary"
+                  />
+                </label>
+                {p.has_api_key ? (
+                  <label className="col-span-2 flex items-center gap-2 text-xs text-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={providerEditForm.clear_api_key}
+                      onChange={(e) =>
+                        setProviderEditForm((s) => ({
+                          ...s,
+                          clear_api_key: e.target.checked,
+                        }))
+                      }
+                    />
+                    Clear stored API key
+                  </label>
+                ) : null}
+                <div className="col-span-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingProviderId(null)}
+                    className="rounded-md border border-border-subtle px-3 py-1 text-xs text-text-primary hover:bg-surface-hover"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-md bg-accent-primary px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover"
+                  >
+                    Save provider
+                  </button>
+                </div>
+              </form>
+            ) : null}
 
             {models.length === 0 ? (
               <p className="text-xs text-text-secondary">
@@ -474,13 +644,46 @@ export function ProviderCatalog({ departments, isAdmin }: Props): JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {models.map((m) => (
+                  {models.map((m) => {
+                    const editing = isAdmin && editingModelId === m.id;
+                    return (
                     <tr key={m.id} className="border-t border-border-subtle">
                       <td>
-                        {m.display_name}{' '}
-                        <span className="text-text-secondary">
-                          ({m.model_ref})
-                        </span>
+                        {editing ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              aria-label="model_ref"
+                              value={modelEditForm.model_ref}
+                              onChange={(e) =>
+                                setModelEditForm((s) => ({
+                                  ...s,
+                                  model_ref: e.target.value,
+                                }))
+                              }
+                              className="w-1/2 rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+                            />
+                            <input
+                              type="text"
+                              aria-label="display name"
+                              value={modelEditForm.display_name}
+                              onChange={(e) =>
+                                setModelEditForm((s) => ({
+                                  ...s,
+                                  display_name: e.target.value,
+                                }))
+                              }
+                              className="w-1/2 rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            {m.display_name}{' '}
+                            <span className="text-text-secondary">
+                              ({m.model_ref})
+                            </span>
+                          </>
+                        )}
                       </td>
                       <td>
                         <DepartmentChips
@@ -495,24 +698,53 @@ export function ProviderCatalog({ departments, isAdmin }: Props): JSX.Element {
                       <td>{m.is_enabled ? 'yes' : 'no'}</td>
                       {isAdmin ? (
                         <td className="space-x-2 text-right">
-                          <button
-                            type="button"
-                            onClick={() => onToggleModelEnabled(m)}
-                            className="text-text-primary hover:underline"
-                          >
-                            {m.is_enabled ? 'Disable' : 'Enable'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteModel(m)}
-                            className="text-feedback-error hover:underline"
-                          >
-                            Delete
-                          </button>
+                          {editing ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => onSaveModel(m)}
+                                className="text-accent-primary hover:underline"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingModelId(null)}
+                                className="text-text-primary hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => startEditModel(m)}
+                                className="text-accent-primary hover:underline"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onToggleModelEnabled(m)}
+                                className="text-text-primary hover:underline"
+                              >
+                                {m.is_enabled ? 'Disable' : 'Enable'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteModel(m)}
+                                className="text-feedback-error hover:underline"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </td>
                       ) : null}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}

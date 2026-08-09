@@ -1,44 +1,83 @@
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import {
+  fetchMarketIndices,
+  type IndexQuote,
+} from "../../api/markets";
 
-interface Cell {
-  label: string;
-  value: string;
-  delta: string;
-  positive: boolean;
+const POLL_MS = 60_000;
+
+function formatValue(value: number): string {
+  // Yields/index-ish small numbers get 2 decimals; large index levels get
+  // thousands separators and no decimals; BTC gets grouped integers.
+  const digits = value >= 1000 ? 0 : 2;
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
 }
 
-const CELLS: Cell[] = [
-  { label: "S&P FUT", value: "5,891.25", delta: "+0.34%", positive: true },
-  { label: "NASDAQ", value: "20,142", delta: "+0.52%", positive: true },
-  { label: "VIX", value: "14.2", delta: "−1.8%", positive: false },
-  { label: "10Y", value: "4.28", delta: "−2bp", positive: false },
-  { label: "DXY", value: "103.1", delta: "+0.11%", positive: true },
-  { label: "BTC", value: "94,820", delta: "+1.42%", positive: true },
-];
+function formatDelta(q: IndexQuote): { text: string; positive: boolean } | null {
+  if (q.change_pct == null) return null;
+  const positive = q.change_pct >= 0;
+  const sign = positive ? "+" : "−"; // real minus sign
+  return {
+    text: `${sign}${Math.abs(q.change_pct).toFixed(2)}%`,
+    positive,
+  };
+}
 
-export function TickerStrip(): JSX.Element {
+export function TickerStrip(): JSX.Element | null {
+  const [quotes, setQuotes] = useState<IndexQuote[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const { indices } = await fetchMarketIndices();
+        if (!cancelled) setQuotes(indices);
+      } catch {
+        if (!cancelled) setQuotes([]);
+      }
+    };
+    void load();
+    const id = window.setInterval(() => void load(), POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  // Hide the strip until it has real quotes (no EODHD key, empty, or error).
+  if (!quotes || quotes.length === 0) return null;
+
   return (
     <div className="flex border border-border-subtle rounded-lg bg-bg-elevated overflow-hidden">
-      {CELLS.map((c, i) => (
-        <div
-          key={c.label}
-          className={`flex-1 px-[14px] py-[10px] flex flex-col gap-[3px] ${i < CELLS.length - 1 ? "border-r border-border-subtle" : ""}`}
-        >
-          <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-text-tertiary">
-            {c.label}
-          </span>
-          <span className="flex items-baseline gap-2">
-            <span className="font-mono text-[14px] font-medium text-text-primary tabular-nums">
-              {c.value}
+      {quotes.map((q, i) => {
+        const delta = formatDelta(q);
+        return (
+          <div
+            key={q.symbol}
+            className={`flex-1 px-[14px] py-[10px] flex flex-col gap-[3px] ${i < quotes.length - 1 ? "border-r border-border-subtle" : ""}`}
+          >
+            <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-text-tertiary">
+              {q.label}
             </span>
-            <span
-              className={`font-mono text-[10px] tabular-nums ${c.positive ? "text-feedback-success" : "text-feedback-error"}`}
-            >
-              {c.delta}
+            <span className="flex items-baseline gap-2">
+              <span className="font-mono text-[14px] font-medium text-text-primary tabular-nums">
+                {formatValue(q.value)}
+              </span>
+              {delta ? (
+                <span
+                  className={`font-mono text-[10px] tabular-nums ${delta.positive ? "text-feedback-success" : "text-feedback-error"}`}
+                >
+                  {delta.text}
+                </span>
+              ) : null}
             </span>
-          </span>
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

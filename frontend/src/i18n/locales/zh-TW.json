@@ -65,6 +65,7 @@
     "suggested_today": "今日建議",
     "ticker": "代號行情",
     "recent": "最近項目",
+    "recent_now": "剛剛",
     "nav": "淨值",
     "vs_spx": "對標普 500",
     "drawdown": "回撤",
@@ -298,6 +299,7 @@
       "readonly_hint": "來源（{{source}}）與類別（{{category}}）建立後無法修改。",
       "display_name": "顯示名稱",
       "secrets_legend": "更新密鑰（留空表示保留原值）",
+      "existing_secrets": "現有密鑰：{{keys}}",
       "add_secret": "+ 新增密鑰",
       "save_failed": "儲存失敗。"
     },
@@ -321,7 +323,14 @@
       },
       "sessions": {
         "description": "登出所有裝置會結束每個工作階段，包括目前這個。您需要重新登入。",
-        "sign_out_all": "登出所有裝置"
+        "sign_out_all": "登出所有裝置",
+        "loading": "載入工作階段...",
+        "empty": "沒有其他使用中的工作階段。",
+        "unknown_device": "未知裝置",
+        "current": "目前裝置",
+        "revoke": "登出",
+        "last_active": "最後活動 {{when}}",
+        "load_failed": "無法載入工作階段。"
       }
     }
   },
@@ -1711,7 +1720,14 @@
     "importance_med": "中",
     "importance_low": "低",
     "suggested_today": "今日建議",
-    "refresh": "重新整理"
+    "refresh": "重新整理",
+    "portfolio_empty": "尚無持股",
+    "portfolio_today": "今日 {{change}}",
+    "portfolio_return": "{{tf}} {{pct}}",
+    "portfolio_loading": "載入投資組合...",
+    "mb_empty": "尚無簡報",
+    "mb_empty_hint": "排定晨間簡報後，即可在此看到今日重點。",
+    "mb_loading": "載入簡報..."
   },
   "report": {
     "no_data": "尚無資料",

@@ -11,12 +11,16 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   deleteConnector,
+  getConnector,
   listConnectors,
   listBuiltinTemplates,
   syncTemplateSpecs,
+  updateConnector,
   validateConnector,
   type BuiltinTemplate,
+  type ConnectorDetail,
   type ConnectorRow,
+  type CreateConnectorInput,
 } from "../../../api/connectors";
 import { refreshDeptHealth, useDeptHealth } from "../../../store/dept-health";
 import { CatalogGrid } from "../../connectors/CatalogGrid";
@@ -287,31 +291,64 @@ interface EditModalProps {
 
 /**
  * Edit modal limited to display_name + secrets per spec; source/category
- * are read-only post-creation. Editing posts via the connectors PATCH
- * endpoint when implemented; today we surface a notice that the feature
- * requires server-side support not yet wired.
+ * are read-only post-creation. Saving PUTs the full connector (fetched via
+ * the detail endpoint so launch config survives) with the edited display
+ * name; secrets are only included when the user enters new ones, otherwise
+ * the server preserves the existing secrets. The server re-validates on save.
  */
 function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
   const { t } = useTranslation();
+  const [detail, setDetail] = useState<ConnectorDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(true);
   const [displayName, setDisplayName] = useState(row.display_name);
   const [secrets, setSecrets] = useState<KV[]>([{ key: "", value: "" }]);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await getConnector(row.id);
+        if (!cancelled) setDetail(d);
+      } catch (e) {
+        if (!cancelled)
+          setErr(e instanceof Error ? e.message : t('settings.connectors.load_failed'));
+      } finally {
+        if (!cancelled) setLoadingDetail(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [row.id, t]);
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!detail) return;
     setSubmitting(true);
     setErr(null);
     try {
-      // Backend PATCH endpoint for connector edits is not yet wired (Phase 11
-      // scope is the panel UI). We display the captured fields and surface a
-      // notice rather than silently dropping the form data.
-      const payload = {
+      const input: CreateConnectorInput = {
+        provider_id: detail.provider_id,
         display_name: displayName,
-        secrets: kvToRecord(secrets),
+        source: detail.source,
+        category: detail.category,
+        launch: detail.launch,
+        source_repo_url: detail.source_repo_url ?? null,
+        source_repo_revision: detail.source_repo_revision ?? null,
+        grounding_paths: detail.grounding_paths ?? null,
+        openapi_url: detail.openapi_url ?? null,
       };
-      // eslint-disable-next-line no-console
-      console.warn("Connector edit not yet wired on the server:", payload);
+      // Only send secrets the user actually entered; omitting the field tells
+      // the server to keep the existing secrets rather than wiping them.
+      const newSecrets = kvToRecord(secrets);
+      if (Object.keys(newSecrets).length > 0) input.secrets = newSecrets;
+      const saved = await updateConnector(row.id, input);
+      if (saved.status === "failed") {
+        setErr(saved.last_error || t('settings.connectors.save_failed'));
+        return;
+      }
       await onSaved();
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : t('settings.connectors.save_failed'));
@@ -350,6 +387,13 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
           <legend className="text-xs text-text-secondary">
             {t('settings.connectors.secrets_legend')}
           </legend>
+          {detail && detail.secret_keys.length > 0 ? (
+            <p className="text-xs text-text-secondary">
+              {t('settings.connectors.existing_secrets', {
+                keys: detail.secret_keys.join(", "),
+              })}
+            </p>
+          ) : null}
           {secrets.map((s, i) => (
             <div key={i} className="flex gap-2">
               <input
@@ -406,7 +450,7 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || loadingDetail || !detail}
             className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {submitting ? t('common.saving') : t('common.save')}

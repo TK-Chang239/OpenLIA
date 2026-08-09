@@ -65,6 +65,7 @@
     "suggested_today": "Suggested · today",
     "ticker": "Ticker",
     "recent": "Recent",
+    "recent_now": "now",
     "nav": "NAV",
     "vs_spx": "vs SPX",
     "drawdown": "Drawdown",
@@ -298,6 +299,7 @@
       "readonly_hint": "Source ({{source}}) and category ({{category}}) are read-only.",
       "display_name": "Display name",
       "secrets_legend": "Update secrets (leave blank to keep)",
+      "existing_secrets": "Current secrets: {{keys}}",
       "add_secret": "+ Add secret",
       "save_failed": "Save failed."
     },
@@ -321,7 +323,14 @@
       },
       "sessions": {
         "description": "Signing out of all devices ends every session, including this one. You'll need to sign in again.",
-        "sign_out_all": "Sign out of all devices"
+        "sign_out_all": "Sign out of all devices",
+        "loading": "Loading sessions...",
+        "empty": "No other active sessions.",
+        "unknown_device": "Unknown device",
+        "current": "This device",
+        "revoke": "Sign out",
+        "last_active": "Last active {{when}}",
+        "load_failed": "Could not load sessions."
       }
     }
   },
@@ -1711,7 +1720,14 @@
     "importance_med": "Med",
     "importance_low": "Low",
     "suggested_today": "Suggested · today",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "portfolio_empty": "No holdings yet",
+    "portfolio_today": "{{change}} today",
+    "portfolio_return": "{{tf}} {{pct}}",
+    "portfolio_loading": "Loading portfolio...",
+    "mb_empty": "No briefing yet",
+    "mb_empty_hint": "Schedule a Morning Briefing to see today’s read here.",
+    "mb_loading": "Loading briefing..."
   },
   "report": {
     "no_data": "No data",

@@ -77,6 +77,7 @@ from openlia_server.routes.dept_health import build_dept_health_router
 from openlia_server.routes.disclaimer import build_disclaimer_router
 from openlia_server.routes.guardrail_events import build_guardrail_events_router
 from openlia_server.routes.jobs import build_jobs_router
+from openlia_server.routes.markets import build_markets_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.notifications_stream import build_notifications_stream_router
@@ -766,6 +767,7 @@ def create_app(
             price_provider_factory=_portfolio_price_provider_factory,
         )
     )
+    app.include_router(build_markets_router(db_session_factory=factory, mode=mode))
 
     # Macro Research — singleton for the per-user assessment schedule.
     from openlia_server.services.mr_schedules import MRScheduleService
