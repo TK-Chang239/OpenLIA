@@ -15,8 +15,8 @@ interface Props {
 
 /**
  * Lightweight confirm dialog primitive — focus-trapped, role="alertdialog",
- * Esc cancels, Enter confirms. No transition for now; the surrounding
- * content stays interactable to nothing while open thanks to the backdrop.
+ * Esc cancels, Enter confirms. Backdrop fades and the panel eases up on open
+ * (motion-safe); the backdrop blocks interaction with content behind it.
  */
 export function ConfirmDialog({
   open,
@@ -84,14 +84,14 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       aria-describedby={description ? "confirm-dialog-description" : undefined}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 motion-safe:animate-overlay-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-sm rounded-lg border border-[--color-border-subtle] bg-[--color-bg-elevated] p-5 shadow-xl"
+        className="w-full max-w-sm rounded-lg border border-[--color-border-subtle] bg-[--color-bg-elevated] p-5 shadow-xl motion-safe:animate-dialog-in"
       >
         <h2
           id="confirm-dialog-title"

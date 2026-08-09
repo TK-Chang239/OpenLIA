@@ -28,6 +28,7 @@ import { type JSX } from "react";
 import type { V3Event, V3ReportDetail } from "../../api/equity-research-v3";
 import { v3HtmlUrl } from "../../api/equity-research-v3";
 import { V3ActivityFeed } from "./V3ActivityFeed";
+import { V3GeneratingCockpit } from "./V3GeneratingCockpit";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { useFileViewerOptional } from "../viewer/FileViewerContext";
@@ -136,8 +137,19 @@ export function V3ReportCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
       data-testid="er-v3-report-card"
-      className="max-w-[640px] overflow-hidden rounded-[12px] border border-[--color-border-subtle] bg-[--color-bg-elevated] shadow-sm"
+      className="relative max-w-[640px] overflow-hidden rounded-[12px] border border-[--color-border-subtle] bg-[--color-bg-elevated] shadow-sm"
     >
+      {generating && live?.status === "streaming" ? (
+        <span
+          aria-hidden="true"
+          data-testid="er-v3-scan-line"
+          className="pointer-events-none absolute left-0 right-0 top-0 h-px animate-lcg-scan"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent, rgba(var(--color-accent-primary-rgb),0.85), transparent)",
+          }}
+        />
+      ) : null}
       <header className="flex items-start gap-3 px-[18px] pt-4 pb-3">
         <div
           aria-hidden="true"
@@ -173,6 +185,7 @@ export function V3ReportCard({
               {live.terminalMessage}
             </p>
           ) : null}
+          {live ? <V3GeneratingCockpit live={live} /> : null}
           <V3ActivityFeed events={live?.events ?? []} />
         </>
       ) : previewText ? (

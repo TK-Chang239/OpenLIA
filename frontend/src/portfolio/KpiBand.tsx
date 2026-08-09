@@ -114,9 +114,9 @@ function KpiBandSkeleton(): JSX.Element {
           key={i}
           className="flex flex-col gap-2 border-b border-r border-[--color-border-subtle] px-5 py-[18px] last:border-r-0"
         >
-          <span className="h-[10px] w-16 animate-pulse rounded bg-[--color-border-subtle]" />
-          <span className="h-[28px] w-32 animate-pulse rounded bg-[--color-border-subtle]" />
-          <span className="h-[12px] w-40 animate-pulse rounded bg-[--color-border-subtle]" />
+          <span className="ol-skeleton inline-block h-[10px] w-16" />
+          <span className="ol-skeleton inline-block h-[28px] w-32" />
+          <span className="ol-skeleton inline-block h-[12px] w-40" />
         </div>
       ))}
     </div>

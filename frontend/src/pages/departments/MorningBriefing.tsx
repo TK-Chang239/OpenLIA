@@ -44,7 +44,7 @@ function Skeleton({ className = "" }: { className?: string }) {
   return (
     <div
       data-testid="mb-skeleton"
-      className={`bg-[--color-surface-hover] rounded-[--radius-md] animate-pulse ${className}`}
+      className={`ol-skeleton ${className}`}
     />
   );
 }
