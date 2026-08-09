@@ -8,7 +8,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const base =
-  "group relative inline-flex items-center justify-center gap-2 rounded-md px-4 py-[9px] font-display text-[13px] font-medium uppercase transition-all duration-normal ease-out active:scale-[0.96] overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed";
+  "group relative inline-flex items-center justify-center gap-2 rounded-md px-4 py-[9px] font-display text-[13px] font-medium uppercase transition-all duration-normal ease-out active:scale-[0.96] overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-[--color-bg-base]";
 
 const variants: Record<ButtonVariant, string> = {
   primary: "bg-accent-primary text-accent-on hover:bg-accent-hover",

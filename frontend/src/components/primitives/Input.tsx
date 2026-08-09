@@ -24,6 +24,7 @@ export function Input({
         className={[
           "h-10 px-3 rounded-md bg-bg-input border border-border-subtle text-[14px] font-display text-text-primary",
           "transition-all duration-normal ease-out",
+          "hover:border-border-strong",
           "focus:outline-none focus:border-yellow-600 focus:shadow-input-focus",
           className ?? "",
         ].join(" ")}

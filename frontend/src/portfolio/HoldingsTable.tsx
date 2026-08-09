@@ -615,7 +615,7 @@ function TableSkeleton(): JSX.Element {
       {[0, 1, 2, 3, 4, 5].map((i) => (
         <li
           key={i}
-          className="h-[44px] animate-pulse rounded bg-[--color-border-subtle]"
+          className="ol-skeleton h-[44px]"
         />
       ))}
     </ul>

@@ -20,6 +20,10 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 const MAX_STACK = 3;
 
+// Must match the toast-out animation duration in tailwind.config.ts so the
+// node is removed only after its slide-out finishes.
+const EXIT_MS = 160;
+
 let _seq = 0;
 const nextId = (): string => {
   _seq += 1;
@@ -28,16 +32,42 @@ const nextId = (): string => {
 
 export function ToastProvider({ children }: { readonly children: ReactNode }): JSX.Element {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  const [exiting, setExiting] = useState<ReadonlySet<string>>(() => new Set());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const dismiss = useCallback((id: string) => {
+  const remove = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+    setExiting((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     const timer = timers.current.get(id);
     if (timer) {
       clearTimeout(timer);
       timers.current.delete(id);
     }
   }, []);
+
+  // Two-phase dismiss: flag the toast as exiting so it plays the slide-out,
+  // then actually unmount it once the animation completes.
+  const dismiss = useCallback(
+    (id: string) => {
+      setExiting((prev) => {
+        if (prev.has(id)) return prev;
+        return new Set(prev).add(id);
+      });
+      const auto = timers.current.get(id);
+      if (auto) {
+        clearTimeout(auto);
+        timers.current.delete(id);
+      }
+      const exitTimer = setTimeout(() => remove(id), EXIT_MS);
+      timers.current.set(id, exitTimer);
+    },
+    [remove],
+  );
 
   const push = useCallback(
     (entry: Omit<ToastEntry, "id">) => {
@@ -72,7 +102,7 @@ export function ToastProvider({ children }: { readonly children: ReactNode }): J
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <ToastContainer />
+      <ToastContainer exiting={exiting} />
     </ToastContext.Provider>
   );
 }
@@ -91,7 +121,11 @@ export function useToast(): ToastContextValue {
   return ctx;
 }
 
-function ToastContainer(): JSX.Element {
+function ToastContainer({
+  exiting,
+}: {
+  readonly exiting: ReadonlySet<string>;
+}): JSX.Element {
   const { t } = useTranslation();
   const ctx = useContext(ToastContext);
   if (!ctx) return <></>;
@@ -108,7 +142,13 @@ function ToastContainer(): JSX.Element {
           role="status"
           data-testid="toast-item"
           data-tone={t.tone ?? "info"}
-          className="pointer-events-auto min-w-[220px] max-w-[360px] px-3 py-2 rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] text-sm shadow flex items-center justify-between gap-3 animate-[fadeIn_120ms_ease-out]"
+          data-exiting={exiting.has(t.id) ? "true" : undefined}
+          className={[
+            "pointer-events-auto min-w-[220px] max-w-[360px] px-3 py-2 rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] text-sm shadow flex items-center justify-between gap-3",
+            exiting.has(t.id)
+              ? "motion-safe:animate-toast-out"
+              : "motion-safe:animate-toast-in",
+          ].join(" ")}
         >
           <span className="text-[--color-text-primary]">{t.title}</span>
           {t.undo ? (

@@ -38,9 +38,9 @@ export function RendererEmpty(): JSX.Element {
 
 export function RendererLoading(): JSX.Element {
   return (
-    <div className="animate-pulse space-y-2 p-6">
+    <div className="space-y-2 p-6">
       {[...Array(6)].map((_, i) => (
-        <div key={i} className="h-4 rounded bg-[--color-surface-hover]" />
+        <div key={i} className="ol-skeleton h-4" />
       ))}
     </div>
   );

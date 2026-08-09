@@ -59,6 +59,11 @@ describe("Toast primitive", () => {
     fireEvent.click(screen.getByText("push"));
     fireEvent.click(screen.getByText("Undo"));
     expect(undo).toHaveBeenCalled();
+    // Dismiss is two-phase: the toast plays a slide-out before it unmounts,
+    // so it is still in the DOM until the exit animation completes.
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
     expect(screen.queryByText("Removed")).toBeNull();
   });
 });

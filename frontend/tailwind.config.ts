@@ -113,6 +113,31 @@ const config: Config = {
           "0%": { left: "-32%" },
           "100%": { left: "100%" },
         },
+        // Shared overlay + dialog choreography. The panel eases up from a
+        // slight scale-down; the backdrop just fades. Exits are faster.
+        overlayIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        dialogIn: {
+          "0%": { opacity: "0", transform: "translateY(6px) scale(0.97)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        // Toasts slide in from the right edge and slide back out on dismiss.
+        toastIn: {
+          "0%": { opacity: "0", transform: "translateX(16px) scale(0.98)" },
+          "100%": { opacity: "1", transform: "translateX(0) scale(1)" },
+        },
+        toastOut: {
+          "0%": { opacity: "1", transform: "translateX(0) scale(1)" },
+          "100%": { opacity: "0", transform: "translateX(16px) scale(0.98)" },
+        },
+        // Moving-gradient shimmer for loading skeletons. Element supplies the
+        // gradient + 200% background-size (see .ol-skeleton).
+        skeletonShimmer: {
+          "0%": { backgroundPosition: "200% 0" },
+          "100%": { backgroundPosition: "-200% 0" },
+        },
       },
       animation: {
         "live-pulse": "livePulse 1.6s var(--ease-in-out) infinite",
@@ -120,6 +145,11 @@ const config: Config = {
         "feed-fade-in": "feedFadeIn 320ms var(--ease-out) both",
         "lcg-scan": "lcgScan 2.4s linear infinite",
         "lcg-sweep": "lcgSweep 1.9s var(--ease-in-out) infinite",
+        "overlay-in": "overlayIn 140ms var(--ease-out) both",
+        "dialog-in": "dialogIn 200ms var(--ease-out) both",
+        "toast-in": "toastIn 240ms var(--ease-out) both",
+        "toast-out": "toastOut 160ms var(--ease-in) both",
+        skeleton: "skeletonShimmer 1.4s ease-in-out infinite",
       },
     },
   },
