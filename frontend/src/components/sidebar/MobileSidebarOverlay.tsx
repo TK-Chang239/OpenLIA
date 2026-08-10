@@ -65,7 +65,10 @@ export function MobileSidebarOverlay({
             </Dialog.Close>
           </header>
           <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-            {CORE_NAV.map((entry) => (
+            {CORE_NAV.filter(
+              (entry) =>
+                import.meta.env.VITE_DEMO_MODE !== "true" || entry.id !== "memory",
+            ).map((entry) => (
               <NavItem
                 key={entry.id}
                 label={t(entry.labelKey, { defaultValue: entry.label })}

@@ -43,6 +43,13 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
   const { pathname } = useLocation();
   const { t } = useTranslation();
   const crumbs = crumbsForPath(pathname);
+  // Demo mode: the four adopted mockup pages carry their own header bar, so
+  // suppress the app TopBar on those routes to avoid a double breadcrumb.
+  const demoEmbed =
+    import.meta.env.VITE_DEMO_MODE === "true" &&
+    ["/secretary", "/equity-research", "/morning-briefing", "/repository"].includes(
+      pathname,
+    );
   const { open, setOpen } = useMobileNav();
   const refreshHealth = useDeptHealth((s) => s.refresh);
   const { close: closeViewer } = useFileViewer();
@@ -68,15 +75,17 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
       <MobileSidebarOverlay open={open} onOpenChange={setOpen} />
       <section
         className="grid overflow-hidden"
-        style={{ gridTemplateRows: "auto 1fr" }}
+        style={{ gridTemplateRows: demoEmbed ? "1fr" : "auto 1fr" }}
       >
-        <header>
-          <TopBar
-            crumbs={crumbs}
-            stamps={stampsForNow()}
-            live={pathname.startsWith("/morning-briefing")}
-          />
-        </header>
+        {!demoEmbed && (
+          <header>
+            <TopBar
+              crumbs={crumbs}
+              stamps={stampsForNow()}
+              live={pathname.startsWith("/morning-briefing")}
+            />
+          </header>
+        )}
         <main
           id="main"
           tabIndex={-1}
