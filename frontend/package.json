@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo",
     "build": "tsc -b && vite build",
+    "build:demo": "vite build --mode demo --outDir dist-demo && cp dist-demo/index.html dist-demo/404.html",
     "preview": "vite preview",
+    "preview:demo": "vite preview --outDir dist-demo",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"

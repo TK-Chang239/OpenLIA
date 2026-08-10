@@ -35,7 +35,16 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const LOCAL_USER: AuthUser = { id: "local", email: null, role: "admin" };
+const LOCAL_USER: AuthUser = {
+  id: "local",
+  email: null,
+  role: "admin",
+  // Demo build personalizes the single local user so the greeting and sidebar
+  // read naturally. No-op in normal builds.
+  ...(import.meta.env.VITE_DEMO_MODE === "true"
+    ? { display_name: "TK Chang" }
+    : {}),
+};
 
 interface AuthProviderProps {
   children: ReactNode;

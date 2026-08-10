@@ -1,0 +1,206 @@
+/* ============================================================
+   OpenLia — Page entrance motion
+   Tokens: instant 80ms · fast 120ms · normal 200ms · slow 350ms · xslow 550ms
+   Spec rule: entrances ease-out, slide from the left, mono labels scramble.
+   Exits are always FASTER than entrances.
+   ============================================================ */
+
+:root {
+  --anim-step:        38ms;   /* base stagger step */
+  --anim-fast:        220ms;
+  --anim-base:        360ms;  /* primary entrance duration */
+  --anim-slow:        520ms;  /* heavier shapes (panels, charts) */
+  --anim-ease-out:    cubic-bezier(.2,.7,.2,1);
+  --anim-ease-spring: cubic-bezier(.4,1.6,.5,1);
+}
+
+/* ---------- Keyframes ---------- */
+@keyframes om-fade-up   { from { opacity: 0; transform: translate3d(0,12px,0); }   to { opacity: 1; transform: none; } }
+@keyframes om-slide-in-left  { from { opacity: 0; transform: translate3d(-14px,0,0); } to { opacity: 1; transform: none; } }
+@keyframes om-slide-in-right { from { opacity: 0; transform: translate3d( 14px,0,0); } to { opacity: 1; transform: none; } }
+@keyframes om-fade      { from { opacity: 0; } to { opacity: 1; } }
+@keyframes om-pop       { 0% { opacity: 0; transform: scale(.92); } 65% { opacity: 1; transform: scale(1.03); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes om-panel-in  { from { opacity: 0; transform: translate3d(28px,0,0); } to { opacity: 1; transform: none; } }
+@keyframes om-bar-grow  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes om-dot-pulse { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.35); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+
+/* ---------- Body fade-in shim — kills FOUC during script init ---------- */
+html.om-anim body { animation: om-fade var(--anim-fast) ease-out both; }
+
+/* ---------- Utility classes ---------- */
+.om-fade-up     { animation: om-fade-up   var(--anim-base) var(--anim-ease-out) both; }
+.om-slide-left  { animation: om-slide-in-left  var(--anim-base) var(--anim-ease-out) both; }
+.om-slide-right { animation: om-slide-in-right var(--anim-base) var(--anim-ease-out) both; }
+.om-fade        { animation: om-fade      var(--anim-base) var(--anim-ease-out) both; }
+.om-pop         { animation: om-pop       var(--anim-base) var(--anim-ease-spring) both; }
+.om-panel-in    { animation: om-panel-in  var(--anim-slow) var(--anim-ease-out) both; }
+
+/* Delay stack — multiples of --anim-step */
+.om-d1  { animation-delay: calc(var(--anim-step) * 1); }
+.om-d2  { animation-delay: calc(var(--anim-step) * 2); }
+.om-d3  { animation-delay: calc(var(--anim-step) * 3); }
+.om-d4  { animation-delay: calc(var(--anim-step) * 4); }
+.om-d5  { animation-delay: calc(var(--anim-step) * 5); }
+.om-d6  { animation-delay: calc(var(--anim-step) * 6); }
+.om-d7  { animation-delay: calc(var(--anim-step) * 7); }
+.om-d8  { animation-delay: calc(var(--anim-step) * 8); }
+.om-d9  { animation-delay: calc(var(--anim-step) * 9); }
+.om-d10 { animation-delay: calc(var(--anim-step) * 10); }
+.om-d12 { animation-delay: calc(var(--anim-step) * 12); }
+.om-d14 { animation-delay: calc(var(--anim-step) * 14); }
+
+/* Auto-stagger for any direct child of an [data-om-stagger] container */
+[data-om-stagger] > *               { animation: om-fade-up var(--anim-base) var(--anim-ease-out) both; }
+[data-om-stagger] > *:nth-child(1)  { animation-delay: 0ms; }
+[data-om-stagger] > *:nth-child(2)  { animation-delay: calc(var(--anim-step) * 1); }
+[data-om-stagger] > *:nth-child(3)  { animation-delay: calc(var(--anim-step) * 2); }
+[data-om-stagger] > *:nth-child(4)  { animation-delay: calc(var(--anim-step) * 3); }
+[data-om-stagger] > *:nth-child(5)  { animation-delay: calc(var(--anim-step) * 4); }
+[data-om-stagger] > *:nth-child(6)  { animation-delay: calc(var(--anim-step) * 5); }
+[data-om-stagger] > *:nth-child(7)  { animation-delay: calc(var(--anim-step) * 6); }
+[data-om-stagger] > *:nth-child(8)  { animation-delay: calc(var(--anim-step) * 7); }
+[data-om-stagger] > *:nth-child(9)  { animation-delay: calc(var(--anim-step) * 8); }
+[data-om-stagger] > *:nth-child(10) { animation-delay: calc(var(--anim-step) * 9); }
+[data-om-stagger] > *:nth-child(11) { animation-delay: calc(var(--anim-step) * 10); }
+[data-om-stagger] > *:nth-child(12) { animation-delay: calc(var(--anim-step) * 11); }
+[data-om-stagger] > *:nth-child(13) { animation-delay: calc(var(--anim-step) * 12); }
+[data-om-stagger] > *:nth-child(14) { animation-delay: calc(var(--anim-step) * 13); }
+[data-om-stagger] > *:nth-child(15) { animation-delay: calc(var(--anim-step) * 14); }
+[data-om-stagger] > *:nth-child(16) { animation-delay: calc(var(--anim-step) * 15); }
+[data-om-stagger] > *:nth-child(17) { animation-delay: calc(var(--anim-step) * 16); }
+[data-om-stagger] > *:nth-child(18) { animation-delay: calc(var(--anim-step) * 17); }
+
+/* Direction overrides on a stagger container */
+[data-om-stagger="left"]  > * { animation-name: om-slide-in-left; }
+[data-om-stagger="right"] > * { animation-name: om-slide-in-right; }
+[data-om-stagger="fade"]  > * { animation-name: om-fade; }
+
+/* Bar grow — for sector exposure bars etc.
+   Set the natural width inline, then add .om-bar-grow + delay class */
+.om-bar-grow { transform-origin: left center; animation: om-bar-grow var(--anim-slow) var(--anim-ease-out) both; }
+
+/* Live-dot reveal — for the topbar status pill */
+.om-dot-pulse { animation: om-dot-pulse 480ms var(--anim-ease-spring) both; }
+
+/* ============================================================
+   Auto-entrance (drop-in)
+   Add data-om-auto to <body> to get a sensible opening choreography
+   for any page that uses the standard .app / .sidebar / .content shell.
+   ============================================================ */
+@keyframes om-side-in   { from { opacity: 0; transform: translate3d(-22px,0,0); } to { opacity: 1; transform: none; } }
+@keyframes om-bar-rise  { from { opacity: 0; transform: translate3d(0,-8px,0); }  to { opacity: 1; transform: none; } }
+@keyframes om-content-in { from { opacity: 0; transform: translate3d(8px,0,0); } to { opacity: 1; transform: none; } }
+
+html.om-anim body[data-om-auto] .sidebar {
+  animation: om-side-in 420ms var(--anim-ease-out) both;
+  will-change: transform, opacity;
+}
+html.om-anim body[data-om-auto] .sidebar > * {
+  animation: om-fade-up 320ms var(--anim-ease-out) both;
+}
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(1)  { animation-delay:  80ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(2)  { animation-delay: 120ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(3)  { animation-delay: 160ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(4)  { animation-delay: 200ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(5)  { animation-delay: 240ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(6)  { animation-delay: 280ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(7)  { animation-delay: 320ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(8)  { animation-delay: 360ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(9)  { animation-delay: 400ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(10) { animation-delay: 440ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(11) { animation-delay: 480ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(12) { animation-delay: 520ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(13) { animation-delay: 560ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(14) { animation-delay: 600ms; }
+html.om-anim body[data-om-auto] .sidebar > *:nth-child(15) { animation-delay: 640ms; }
+
+html.om-anim body[data-om-auto] .content,
+html.om-anim body[data-om-auto] main.content {
+  animation: om-content-in 360ms var(--anim-ease-out) both;
+  animation-delay: 120ms;
+}
+
+/* Topbar — rises in slightly after the content shell appears */
+html.om-anim body[data-om-auto] .topbar,
+html.om-anim body[data-om-auto] header.topbar,
+html.om-anim body[data-om-auto] .pgheader,
+html.om-anim body[data-om-auto] .pageheader {
+  animation: om-bar-rise 340ms var(--anim-ease-out) both;
+  animation-delay: 220ms;
+}
+html.om-anim body[data-om-auto] .topbar > *,
+html.om-anim body[data-om-auto] header.topbar > *,
+html.om-anim body[data-om-auto] .pgheader > *,
+html.om-anim body[data-om-auto] .pageheader > * {
+  animation: om-fade var(--anim-base) var(--anim-ease-out) both;
+}
+html.om-anim body[data-om-auto] .topbar > *:nth-child(1),
+html.om-anim body[data-om-auto] header.topbar > *:nth-child(1),
+html.om-anim body[data-om-auto] .pgheader > *:nth-child(1),
+html.om-anim body[data-om-auto] .pageheader > *:nth-child(1) { animation-delay: 280ms; }
+html.om-anim body[data-om-auto] .topbar > *:nth-child(2),
+html.om-anim body[data-om-auto] header.topbar > *:nth-child(2),
+html.om-anim body[data-om-auto] .pgheader > *:nth-child(2),
+html.om-anim body[data-om-auto] .pageheader > *:nth-child(2) { animation-delay: 340ms; }
+html.om-anim body[data-om-auto] .topbar > *:nth-child(3),
+html.om-anim body[data-om-auto] header.topbar > *:nth-child(3),
+html.om-anim body[data-om-auto] .pgheader > *:nth-child(3),
+html.om-anim body[data-om-auto] .pageheader > *:nth-child(3) { animation-delay: 400ms; }
+html.om-anim body[data-om-auto] .topbar > *:nth-child(4),
+html.om-anim body[data-om-auto] header.topbar > *:nth-child(4),
+html.om-anim body[data-om-auto] .pgheader > *:nth-child(4),
+html.om-anim body[data-om-auto] .pageheader > *:nth-child(4) { animation-delay: 460ms; }
+html.om-anim body[data-om-auto] .topbar > *:nth-child(5),
+html.om-anim body[data-om-auto] header.topbar > *:nth-child(5),
+html.om-anim body[data-om-auto] .pgheader > *:nth-child(5),
+html.om-anim body[data-om-auto] .pageheader > *:nth-child(5) { animation-delay: 520ms; }
+html.om-anim body[data-om-auto] .topbar > *:nth-child(6),
+html.om-anim body[data-om-auto] header.topbar > *:nth-child(6),
+html.om-anim body[data-om-auto] .pgheader > *:nth-child(6),
+html.om-anim body[data-om-auto] .pageheader > *:nth-child(6) { animation-delay: 580ms; }
+
+/* Main body sections — direct children of .content (after .topbar) cascade in.
+   We use child-position; the topbar above is :nth-child(1) so real content
+   begins at :nth-child(2). Delay floor matches when content shell settles. */
+html.om-anim body[data-om-auto] .content > *:nth-child(n+2) {
+  animation: om-fade-up 440ms var(--anim-ease-out) both;
+}
+html.om-anim body[data-om-auto] .content > *:nth-child(2)  { animation-delay: 360ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(3)  { animation-delay: 440ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(4)  { animation-delay: 520ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(5)  { animation-delay: 600ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(6)  { animation-delay: 680ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(7)  { animation-delay: 760ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(8)  { animation-delay: 840ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(9)  { animation-delay: 920ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(10) { animation-delay: 1000ms; }
+html.om-anim body[data-om-auto] .content > *:nth-child(n+11) { animation-delay: 1080ms; }
+
+/* Status pills / chips in the topbar use the spec's left-slide */
+html.om-anim body[data-om-auto] .status-row > * {
+  animation-name: om-slide-in-left;
+}
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html.om-anim body,
+  .om-fade-up, .om-slide-left, .om-slide-right, .om-fade, .om-pop, .om-panel-in,
+  .om-bar-grow, .om-dot-pulse,
+  [data-om-stagger] > *,
+  html.om-anim body[data-om-auto] .sidebar,
+  html.om-anim body[data-om-auto] .sidebar > *,
+  html.om-anim body[data-om-auto] .content,
+  html.om-anim body[data-om-auto] main.content,
+  html.om-anim body[data-om-auto] .topbar,
+  html.om-anim body[data-om-auto] header.topbar,
+  html.om-anim body[data-om-auto] .pgheader,
+  html.om-anim body[data-om-auto] .pageheader,
+  html.om-anim body[data-om-auto] .topbar > *,
+  html.om-anim body[data-om-auto] header.topbar > *,
+  html.om-anim body[data-om-auto] .pgheader > *,
+  html.om-anim body[data-om-auto] .pageheader > *,
+  html.om-anim body[data-om-auto] .content > *:nth-child(n+2) {
+    animation: om-fade 1ms linear both !important;
+    animation-delay: 0ms !important;
+  }
+}

@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenLia — AAPL Initiation Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="colors_and_type.css">
+<link rel="stylesheet" href="page-anim.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--color-bg-base); color: var(--color-text-primary); font-family: var(--font-display); -webkit-font-smoothing: antialiased; }
+
+  :root { --motion-normal: var(--duration-normal); --rule: 1px solid var(--color-border-subtle); }
+
+  .app { display: grid; grid-template-columns: 220px 1fr; height: 100vh; min-height: 0; }
+
+  /* ===== Sidebar ===== */
+  .sidebar { background: #0D0D0C; color: #B5B3A8; padding: 14px 8px 16px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; }
+  .brand-badge { width: 26px; height: 26px; background: var(--color-accent-primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--color-accent-on); box-shadow: 0 0 10px rgba(212,255,0,0.35); }
+  .brand-name { font-size: 15px; font-weight: 600; color: #F2F1E8; letter-spacing: -0.01em; }
+  .side-group { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #6E6E68; padding: 12px 10px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: #B5B3A8; font-size: 13px; cursor: pointer; position: relative; text-decoration: none; transition: background var(--motion-normal) var(--ease-out), color var(--motion-normal) var(--ease-out); }
+  .nav-item:hover { background: #1C1C1A; color: #F2F1E8; }
+  .nav-item.active { background: #252522; color: #F2F1E8; }
+  .nav-item.active::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 20px; background: var(--color-accent-primary); }
+  .nav-item.active svg { stroke: var(--color-accent-primary); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent-primary); box-shadow: 0 0 6px rgba(212,255,0,0.7); }
+  .side-spacer { flex: 1; }
+  .user-chip { margin: 8px 4px 0; padding: 14px 10px 10px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #2A2A27; }
+  .user-avatar { width: 28px; height: 28px; border-radius: 6px; background: #2E2E2A; color: #F2F1E8; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+  .user-name { font-size: 13px; color: #F2F1E8; }
+  .user-role { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #6E6E68; }
+
+  /* ===== Content shell ===== */
+  .content { display: grid; grid-template-rows: auto 1fr; overflow: hidden; min-height: 0; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 0 22px; height: 52px; flex-shrink: 0; border-bottom: var(--rule); background: var(--color-bg-base); }
+  .crumb { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .crumb a { color: var(--color-text-tertiary); text-decoration: none; transition: color var(--motion-normal) var(--ease-out); }
+  .crumb a:hover { color: var(--color-text-primary); }
+  .crumb .sep { opacity: 0.5; }
+  .crumb .here { color: var(--color-text-primary); }
+  .topbar-spacer { flex: 1; }
+  .top-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: transparent; color: var(--color-text-secondary); font-family: var(--font-display); font-size: 12.5px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .top-btn:hover { background: var(--color-surface-hover); color: var(--color-text-primary); border-color: var(--color-border-strong); }
+  .top-btn svg { width: 13px; height: 13px; }
+  .top-btn.primary { background: var(--color-accent-primary); color: var(--color-accent-on); border-color: transparent; font-weight: 500; }
+  .top-btn.primary:hover { background: var(--color-accent-hover); color: var(--color-accent-on); }
+
+  /* ===== Report shell ===== */
+  .report-shell { overflow-y: auto; min-height: 0; }
+  .report-grid {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr) 280px;
+    gap: 40px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 28px 32px 80px;
+  }
+
+  /* ===== Left TOC ===== */
+  .toc { position: sticky; top: 12px; align-self: start; }
+  .toc-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-text-tertiary); margin: 0 0 12px; padding: 0 12px; }
+  .toc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .toc-item { display: grid; grid-template-columns: 28px 1fr; align-items: baseline; gap: 6px; padding: 6px 12px; border-left: 2px solid transparent; color: var(--color-text-secondary); font-size: 12.5px; line-height: 1.45; cursor: pointer; text-decoration: none; transition: color var(--motion-normal) var(--ease-out), border-color var(--motion-normal) var(--ease-out), background var(--motion-normal) var(--ease-out); }
+  .toc-item:hover { color: var(--color-text-primary); background: var(--color-surface-hover); }
+  .toc-item .num { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.04em; }
+  .toc-item.active { color: var(--color-text-primary); border-left-color: var(--color-accent-primary); background: rgba(212,255,0,0.06); }
+  .toc-item.active .num { color: var(--color-feedback-success); }
+  .toc-foot { margin-top: 22px; padding: 14px 12px; border-top: var(--rule); display: flex; flex-direction: column; gap: 8px; }
+  .toc-foot .ff-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .toc-foot .ff-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--color-text-secondary); }
+  .toc-foot .ff-row .v { font-family: var(--font-mono); color: var(--color-text-primary); }
+
+  /* ===== Document body ===== */
+  .doc { min-width: 0; max-width: 720px; }
+
+  /* Document header */
+  .doc-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-feedback-success); margin-bottom: 10px; }
+  .doc-eyebrow::before { content: ""; width: 6px; height: 6px; background: var(--color-accent-primary); border-radius: 50%; box-shadow: 0 0 0 4px rgba(212,255,0,0.18); }
+  .doc-title { font-size: 38px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 600; margin: 0 0 4px; color: var(--color-text-primary); }
+  .doc-sub { font-size: 17px; color: var(--color-text-secondary); margin: 0 0 22px; font-weight: 400; }
+  .doc-sub strong { color: var(--color-text-primary); font-weight: 500; }
+
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; padding: 14px 0; border-top: var(--rule); border-bottom: var(--rule); margin-bottom: 28px; }
+  .meta-cell { padding: 4px 22px 4px 0; margin-right: 22px; border-right: var(--rule); }
+  .meta-cell:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+  .meta-cell .ml { display: block; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 4px; }
+  .meta-cell .mv { font-size: 14px; color: var(--color-text-primary); font-weight: 500; }
+  .meta-cell .mv.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .meta-cell .mv.up { color: var(--color-feedback-success); }
+  .rating-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; background: var(--color-accent-primary); color: var(--color-accent-on); border-radius: 4px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* Section blocks */
+  section.sec { padding: 30px 0 8px; border-top: var(--rule); margin-top: 8px; scroll-margin-top: 18px; }
+  section.sec:first-of-type { border-top: 0; padding-top: 0; }
+  .sec-num { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-feedback-success); margin-bottom: 8px; }
+  h2.sec-title { font-size: 24px; line-height: 1.2; letter-spacing: -0.015em; font-weight: 500; margin: 0 0 14px; color: var(--color-text-primary); }
+  h3.sub { font-size: 14px; font-weight: 600; margin: 22px 0 8px; color: var(--color-text-primary); letter-spacing: -0.005em; }
+
+  .doc p { font-size: 15px; line-height: 1.65; color: var(--color-text-primary); margin: 0 0 14px; text-wrap: pretty; }
+  .doc p strong { font-weight: 600; }
+  .doc p .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .doc a.cite { font-family: var(--font-mono); font-size: 10px; color: var(--color-feedback-success); text-decoration: none; padding: 0 3px; border: 1px solid rgba(107,130,0,0.25); border-radius: 3px; vertical-align: 1px; margin: 0 2px; transition: all var(--motion-normal) var(--ease-out); }
+  .doc a.cite:hover { background: rgba(212,255,0,0.18); border-color: var(--color-feedback-success); }
+
+  /* Pull-quote / TL;DR */
+  .tldr { padding: 18px 22px; background: rgba(212,255,0,0.05); border-left: 2px solid var(--color-accent-primary); border-radius: 0 8px 8px 0; margin: 0 0 24px; }
+  .tldr-tag { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-feedback-success); margin-bottom: 8px; display: inline-flex; align-items: center; gap: 6px; }
+  .tldr-tag::before { content: "⌁"; font-size: 12px; line-height: 1; color: var(--color-accent-on); background: var(--color-accent-primary); width: 14px; height: 14px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; }
+  .tldr p { font-size: 15px; line-height: 1.6; margin: 0; color: var(--color-text-primary); }
+  .tldr p + p { margin-top: 8px; }
+
+  /* Three-pillar grid */
+  .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0 6px; }
+  .pillar { padding: 14px 14px 16px; background: var(--color-bg-elevated); border: var(--rule); border-radius: 8px; }
+  .pillar .pn { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 6px; }
+  .pillar .pt { font-size: 14.5px; font-weight: 600; line-height: 1.3; margin: 0 0 6px; color: var(--color-text-primary); }
+  .pillar .pd { font-size: 12.5px; line-height: 1.5; color: var(--color-text-secondary); margin: 0; }
+
+  /* Tables */
+  .data-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; margin: 12px 0 18px; font-variant-numeric: tabular-nums; }
+  .data-table thead th { text-align: right; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--color-border-secondary); }
+  .data-table thead th:first-child { text-align: left; }
+  .data-table tbody td { text-align: right; padding: 9px 10px; border-bottom: var(--rule); color: var(--color-text-primary); }
+  .data-table tbody td:first-child { text-align: left; font-family: var(--font-display); font-size: 13px; color: var(--color-text-primary); }
+  .data-table tbody tr:hover td { background: rgba(0,0,0,0.015); }
+  .data-table tfoot td { font-weight: 600; padding: 10px; border-top: 1px solid var(--color-border-secondary); border-bottom: 0; }
+  .data-table tfoot td:first-child { font-family: var(--font-display); }
+  .data-table .pos { color: var(--color-feedback-success); }
+  .data-table .neg { color: var(--color-feedback-error); }
+
+  /* Segment chart — horizontal bars */
+  .seg-chart { display: grid; grid-template-columns: 100px 1fr 76px; gap: 12px; align-items: center; margin: 6px 0 18px; padding: 14px 0; border-top: var(--rule); border-bottom: var(--rule); }
+  .seg-row { display: contents; }
+  .seg-row .seg-name { font-size: 13px; color: var(--color-text-primary); }
+  .seg-row .seg-bar { height: 20px; background: var(--color-bg-elevated); border-radius: 3px; position: relative; overflow: hidden; }
+  .seg-row .seg-fill { height: 100%; background: var(--color-text-primary); border-radius: 3px; }
+  .seg-row.lia .seg-fill { background: var(--color-accent-primary); }
+  .seg-row.svc .seg-fill { background: linear-gradient(90deg, var(--color-accent-primary), #B8E600); }
+  .seg-row .seg-val { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-primary); text-align: right; font-variant-numeric: tabular-nums; }
+  .seg-row .seg-val .grow { color: var(--color-feedback-success); margin-left: 6px; font-size: 10px; letter-spacing: 0.04em; }
+
+  /* Inline mini chart for services CAGR */
+  .services-chart { display: flex; align-items: flex-end; gap: 6px; height: 100px; padding: 14px 0 8px; border-top: var(--rule); margin: 8px 0 6px; }
+  .svc-bar { flex: 1; background: var(--color-text-primary); border-radius: 2px 2px 0 0; position: relative; transition: background var(--motion-normal) var(--ease-out); }
+  .svc-bar:last-child { background: var(--color-accent-primary); }
+  .svc-bar:nth-last-child(2) { background: #5C7000; }
+  .svc-bar .svc-y { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 9.5px; color: var(--color-text-tertiary); letter-spacing: 0.04em; }
+  .svc-bar .svc-v { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 10px; color: var(--color-text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .services-chart + .chart-cap { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); margin: 28px 0 16px; }
+
+  /* Catalyst timeline */
+  .timeline { position: relative; margin: 12px 0 22px; padding: 0 0 0 18px; border-left: 2px dotted var(--color-border-secondary); display: flex; flex-direction: column; gap: 16px; }
+  .tl-item { position: relative; }
+  .tl-item::before { content: ""; position: absolute; left: -24px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--color-bg-base); border: 2px solid var(--color-border-strong); }
+  .tl-item.hi::before { background: var(--color-accent-primary); border-color: var(--color-accent-primary); box-shadow: 0 0 0 4px rgba(212,255,0,0.2); }
+  .tl-when { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 4px; }
+  .tl-what { font-size: 14px; font-weight: 500; line-height: 1.4; margin: 0 0 4px; color: var(--color-text-primary); }
+  .tl-impact { font-size: 12.5px; line-height: 1.5; color: var(--color-text-secondary); margin: 0; }
+  .tl-impact em { font-style: normal; color: var(--color-feedback-success); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em; padding: 1px 6px; background: rgba(212,255,0,0.12); border-radius: 3px; margin-right: 4px; }
+
+  /* Risks split */
+  .risks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0 6px; }
+  .risk-col { padding: 14px 16px 16px; background: var(--color-bg-elevated); border: var(--rule); border-radius: 8px; }
+  .risk-col .rl { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .risk-col.up .rl { color: var(--color-feedback-success); }
+  .risk-col.down .rl { color: var(--color-feedback-error); }
+  .risk-col ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 7px; }
+  .risk-col li { font-size: 12.5px; line-height: 1.5; color: var(--color-text-primary); }
+  .risk-col li::marker { color: var(--color-text-tertiary); font-family: var(--font-mono); }
+
+  /* Sources */
+  .sources { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: src; }
+  .sources li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; padding: 8px 0; border-bottom: var(--rule); align-items: baseline; counter-increment: src; }
+  .sources li::before { content: counter(src, decimal-leading-zero); font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.04em; }
+  .sources .src-title { font-size: 13px; color: var(--color-text-primary); }
+  .sources .src-title a { color: var(--color-text-primary); text-decoration: none; border-bottom: 1px dotted var(--color-text-tertiary); }
+  .sources .src-title a:hover { border-bottom-color: var(--color-feedback-success); }
+  .sources .src-meta { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.04em; }
+
+  /* Footer */
+  .doc-foot { margin-top: 36px; padding: 20px 22px; background: var(--color-bg-elevated); border: var(--rule); border-radius: 10px; display: flex; gap: 14px; align-items: center; }
+  .foot-avatar { width: 32px; height: 32px; border-radius: 7px; background: var(--color-accent-primary); color: var(--color-accent-on); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; font-weight: 700; flex-shrink: 0; box-shadow: 0 0 12px rgba(212,255,0,0.35); }
+  .doc-foot .ft { flex: 1; }
+  .doc-foot .ft-tag { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 3px; }
+  .doc-foot .ft-text { font-size: 14px; color: var(--color-text-primary); margin: 0; line-height: 1.45; }
+  .doc-foot .ft-cta { display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; height: 32px; background: var(--color-text-primary); color: var(--color-bg-base); border: 0; border-radius: 6px; font-family: var(--font-display); font-size: 13px; font-weight: 500; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .doc-foot .ft-cta:hover { background: #000; }
+  .doc-foot .ft-cta svg { width: 13px; height: 13px; }
+
+  /* ===== Right rail (sticky summary) ===== */
+  .rail { position: sticky; top: 12px; align-self: start; display: flex; flex-direction: column; gap: 12px; }
+  .rail-card { background: var(--color-bg-elevated); border: var(--rule); border-radius: 10px; padding: 16px 16px 18px; }
+  .rail-card .rc-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+  .rail-card .rc-label .more { color: var(--color-feedback-success); cursor: pointer; }
+
+  .verdict { display: flex; flex-direction: column; gap: 6px; }
+  .verdict .v-rating { display: inline-flex; align-items: center; gap: 8px; }
+  .verdict .v-rating .pill { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; background: var(--color-accent-primary); color: var(--color-accent-on); border-radius: 5px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+  .verdict .v-prev { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.06em; }
+  .verdict .v-target { font-family: var(--font-mono); font-size: 30px; font-weight: 500; color: var(--color-text-primary); letter-spacing: -0.015em; line-height: 1.1; font-variant-numeric: tabular-nums; margin-top: 6px; }
+  .verdict .v-target small { font-size: 13px; color: var(--color-text-tertiary); margin-left: 6px; font-weight: 400; }
+  .verdict .v-up { font-size: 12px; color: var(--color-feedback-success); font-family: var(--font-mono); letter-spacing: 0.04em; }
+  .verdict .v-up .arrow { display: inline-block; transform: translateY(-1px); }
+
+  .quick-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+  .qs-cell { display: flex; flex-direction: column; gap: 2px; }
+  .qs-cell .qs-l { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .qs-cell .qs-v { font-family: var(--font-mono); font-size: 14px; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+  .qs-cell .qs-d { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; }
+  .qs-cell .qs-d.pos { color: var(--color-feedback-success); }
+  .qs-cell .qs-d.neg { color: var(--color-feedback-error); }
+
+  .price-spark { height: 60px; margin: 6px 0 4px; }
+  .price-spark svg { width: 100%; height: 100%; display: block; }
+  .spark-foot { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 9.5px; color: var(--color-text-tertiary); letter-spacing: 0.06em; }
+
+  .analyst-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .analyst-row + .analyst-row { border-top: var(--rule); }
+  .analyst-row .av { width: 28px; height: 28px; border-radius: 50%; background: var(--color-text-primary); color: var(--color-bg-base); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; font-weight: 600; flex-shrink: 0; }
+  .analyst-row .av.lia { background: var(--color-accent-primary); color: var(--color-accent-on); }
+  .analyst-row .an { font-size: 13px; color: var(--color-text-primary); line-height: 1.2; }
+  .analyst-row .ar { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; color: var(--color-text-tertiary); display: block; margin-top: 2px; text-transform: uppercase; }
+
+  .related-list { display: flex; flex-direction: column; gap: 0; }
+  .related-list a { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: var(--rule); font-size: 13px; color: var(--color-text-primary); text-decoration: none; transition: color var(--motion-normal) var(--ease-out); }
+  .related-list a:last-child { border-bottom: 0; }
+  .related-list a:hover { color: var(--color-feedback-success); }
+  .related-list a .tk { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--color-text-tertiary); margin-left: auto; }
+
+  /* Print: drop sidebar/topbar/rails */
+  @media print {
+    .sidebar, .topbar, .toc, .rail, .doc-foot { display: none !important; }
+    .app { display: block; height: auto; }
+    .content { display: block; }
+    .report-shell { overflow: visible; }
+    .report-grid { grid-template-columns: 1fr; padding: 0; max-width: 100%; }
+  }
+
+  /* Narrow viewport — drop right rail then left TOC */
+  @media (max-width: 1180px) {
+    .report-grid { grid-template-columns: 220px minmax(0,1fr); }
+    .rail { display: none; }
+  }
+  @media (max-width: 880px) {
+    .report-grid { grid-template-columns: 1fr; gap: 18px; padding: 18px 18px 60px; }
+    .toc { display: none; }
+  }
+</style>
+</head>
+<body data-om-auto data-screen-label="Equity Research — AAPL Initiation Report">
+  <div class="app">
+    <!-- ===== Sidebar ===== -->
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-badge">LIA</div><span class="brand-name">OpenLia</span></div>
+      <div class="side-group">General</div>
+      <a class="nav-item" href="index-empty.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
+      <a class="nav-item" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Secretary</a>
+      <a class="nav-item" href="portfolio.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Portfolio</a>
+      <a class="nav-item" href="repository.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v9a2 2 0 0 1-2 2H6z"/></svg>Repository</a>
+
+      <div class="side-group">Departments</div>
+      <a class="nav-item active" href="equity-research.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Equity Research</a>
+      <a class="nav-item" href="earnings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>Earnings Update</a>
+      <a class="nav-item" href="morning-briefing-redesign.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>Morning Briefings<span class="nav-dot" title="New report"></span></a>
+      <a class="nav-item" href="retail-sentiment.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>Retail Sentiment</a>
+      <a class="nav-item" href="macro-summary-v2.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Macro Research</a>
+      <a class="nav-item" href="panic-thermometer.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>Panic Thermometer</a>
+
+      <div class="side-spacer"></div>
+      <a class="nav-item" href="settings.html" style="margin: 0 0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82 2 2 0 0 1-2.83 2.83 1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33 2 2 0 0 1-2.83-2.83 1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82 2 2 0 0 1 2.83-2.83 1.65 1.65 0 0 0 1.82.33A1.65 1.65 0 0 0 9 4.68V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33 2 2 0 0 1 2.83 2.83 1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div class="user-chip">
+        <div class="user-avatar">TK</div>
+        <div style="display:flex;flex-direction:column;gap:2px;"><span class="user-name">TK Chang</span><span class="user-role">PERSONAL · v0.4.2</span></div>
+      </div>
+    </aside>
+
+    <!-- ===== Content ===== -->
+    <main class="content">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="crumb">
+          <a href="equity-research.html">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><polyline points="15 18 9 12 15 6"/></svg>
+            Equity Research
+          </a>
+          <span class="sep">/</span>
+          <span>AAPL</span>
+          <span class="sep">/</span>
+          <span class="here">Initiation Report</span>
+        </div>
+        <div class="topbar-spacer"></div>
+
+        <button class="top-btn" title="Comments">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Annotate
+        </button>
+        <button class="top-btn" title="Save to Repository">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Save
+        </button>
+        <button class="top-btn" title="Share">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share
+        </button>
+        <button class="top-btn primary" id="downloadBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download PDF
+        </button>
+      </header>
+
+      <!-- Report -->
+      <div class="report-shell" id="reportShell">
+        <div class="report-grid">
+
+          <!-- ===== TOC ===== -->
+          <nav class="toc" aria-label="Table of contents">
+            <div class="toc-label">Table of Contents</div>
+            <div class="toc-list" id="tocList">
+              <a class="toc-item" href="#s-summary"><span class="num">01</span><span>Executive Summary</span></a>
+              <a class="toc-item" href="#s-thesis"><span class="num">02</span><span>Investment Thesis</span></a>
+              <a class="toc-item" href="#s-business"><span class="num">03</span><span>Business Overview</span></a>
+              <a class="toc-item" href="#s-segments"><span class="num">04</span><span>Segment Breakdown</span></a>
+              <a class="toc-item" href="#s-services"><span class="num">05</span><span>Services Growth Engine</span></a>
+              <a class="toc-item" href="#s-vision"><span class="num">06</span><span>Vision Pro Contribution</span></a>
+              <a class="toc-item" href="#s-financials"><span class="num">07</span><span>Financial Snapshot</span></a>
+              <a class="toc-item" href="#s-valuation"><span class="num">08</span><span>Valuation</span></a>
+              <a class="toc-item" href="#s-peers"><span class="num">09</span><span>Peer Comparison</span></a>
+              <a class="toc-item" href="#s-catalysts"><span class="num">10</span><span>Catalysts</span></a>
+              <a class="toc-item" href="#s-risks"><span class="num">11</span><span>Risks</span></a>
+              <a class="toc-item" href="#s-esg"><span class="num">12</span><span>ESG & Governance</span></a>
+              <a class="toc-item" href="#s-sources"><span class="num">13</span><span>Sources & Disclosures</span></a>
+            </div>
+            <div class="toc-foot">
+              <span class="ff-label">Reading</span>
+              <div class="ff-row"><span>Length</span><span class="v">~6,200 words</span></div>
+              <div class="ff-row"><span>Time</span><span class="v">~24 min</span></div>
+              <div class="ff-row"><span>Generated</span><span class="v">2.4s</span></div>
+            </div>
+          </nav>
+
+          <!-- ===== DOCUMENT ===== -->
+          <article class="doc">
+
+            <!-- Header -->
+            <span class="doc-eyebrow">Stock Initiation · Apr 29, 2026</span>
+            <h1 class="doc-title">Apple Inc. — Initiating at Buy</h1>
+            <p class="doc-sub">A credible re-rating path on Services compounding and AI-on-device, with downside cushioned by a <strong>$165B</strong> net cash position.</p>
+
+            <div class="doc-meta">
+              <div class="meta-cell">
+                <span class="ml">Ticker</span>
+                <span class="mv mono">AAPL · NASDAQ</span>
+              </div>
+              <div class="meta-cell">
+                <span class="ml">Rating</span>
+                <span class="mv"><span class="rating-pill">Buy</span></span>
+              </div>
+              <div class="meta-cell">
+                <span class="ml">Price Target (12M)</span>
+                <span class="mv mono">$245.00</span>
+              </div>
+              <div class="meta-cell">
+                <span class="ml">Upside</span>
+                <span class="mv mono up">+18.0%</span>
+              </div>
+              <div class="meta-cell">
+                <span class="ml">Last Close</span>
+                <span class="mv mono">$207.62</span>
+              </div>
+            </div>
+
+            <!-- TL;DR -->
+            <div class="tldr">
+              <div class="tldr-tag">Lia · TL;DR</div>
+              <p>We initiate <strong>AAPL</strong> at <strong>Buy</strong> with a 12-month price target of <span class="num">$245</span>. Services revenue compounded at <span class="num">14.1%</span> over the last five years and now contributes <span class="num">26%</span> of total revenue at <span class="num">74%</span> gross margin — a structural mix shift that the market has yet to fully capitalize.<a class="cite" href="#s-sources">[1]</a></p>
+              <p>Vision Pro remains a <strong>~$3.4B</strong> business — small, but a credible runway for spatial computing as content libraries deepen. We model it as <span class="num">~1%</span> of FY27 revenue, with optionality, not the thesis.<a class="cite" href="#s-sources">[2]</a></p>
+            </div>
+
+            <!-- 01 Summary -->
+            <section class="sec" id="s-summary">
+              <div class="sec-num">01 — Executive Summary</div>
+              <h2 class="sec-title">A maturing hardware franchise compounded by a software-economics tail</h2>
+              <p>Apple is no longer a phone-cycle stock. Through five years of post-pandemic noise, the iPhone installed base expanded from <span class="num">~1.0B</span> to <span class="num">~1.46B</span> active devices<a class="cite" href="#s-sources">[3]</a>, and the company has methodically converted that base into recurring software-economics revenue: App Store, services, advertising, and financial products.</p>
+              <p>We see three under-appreciated factors driving a re-rating: <strong>(1)</strong> Services mix continuing to lift consolidated gross margin into the 47–48% range, <strong>(2)</strong> a credible AI-on-device thesis as Apple Intelligence matures into a paid tier in late FY26, and <strong>(3)</strong> capital return remains a floor — buybacks reduced share count by <span class="num">3.1%</span> in FY25 alone.<a class="cite" href="#s-sources">[4]</a></p>
+              <p>Our <span class="num">$245</span> target reflects <span class="num">28x</span> NTM EPS, a modest premium to the 5-yr mean of <span class="num">25x</span> that we view as justified by the higher quality of the marginal earnings dollar.</p>
+            </section>
+
+            <!-- 02 Thesis -->
+            <section class="sec" id="s-thesis">
+              <div class="sec-num">02 — Investment Thesis</div>
+              <h2 class="sec-title">Three pillars that, together, support a Buy</h2>
+              <div class="pillars">
+                <div class="pillar">
+                  <div class="pn">Pillar 01</div>
+                  <p class="pt">Services as the structural margin lever</p>
+                  <p class="pd">Services now <span style="font-family:var(--font-mono);">26%</span> of revenue at <span style="font-family:var(--font-mono);">74%</span> GM. Each <span style="font-family:var(--font-mono);">100bp</span> of mix shift = <span style="font-family:var(--font-mono);">~30bp</span> consolidated GM expansion.</p>
+                </div>
+                <div class="pillar">
+                  <div class="pn">Pillar 02</div>
+                  <p class="pt">AI-on-device as a re-rating catalyst</p>
+                  <p class="pd">Apple Intelligence shifts from free feature to paid tier in late FY26. Conservative <span style="font-family:var(--font-mono);">15%</span> attach on iPhone base = <span style="font-family:var(--font-mono);">~$8B</span> high-margin run-rate.</p>
+                </div>
+                <div class="pillar">
+                  <div class="pn">Pillar 03</div>
+                  <p class="pt">Capital return as a floor under the multiple</p>
+                  <p class="pd"><span style="font-family:var(--font-mono);">$110B</span> annualized buyback + dividend program. Even at flat earnings, <span style="font-family:var(--font-mono);">~3%</span> shrink/yr is meaningful in our terminal.</p>
+                </div>
+              </div>
+              <p style="margin-top:18px;">None of these are individually sufficient for a Buy. Together, they shift the risk/reward favorably — particularly given the cash cushion and a 5-yr mean reversion in iPhone replacement cycles already in our model.</p>
+            </section>
+
+            <!-- 03 Business Overview -->
+            <section class="sec" id="s-business">
+              <div class="sec-num">03 — Business Overview</div>
+              <h2 class="sec-title">Five revenue lines, one operating system, one customer</h2>
+              <p>Apple Inc. (AAPL) designs and sells consumer electronics, software, and digital services from a single integrated stack. The reportable segments are: <strong>iPhone</strong>, <strong>Mac</strong>, <strong>iPad</strong>, <strong>Wearables, Home & Accessories</strong> ("WHA"), and <strong>Services</strong>. Geographically, the largest reporting region is Americas at <span class="num">42%</span> of FY25 revenue, followed by Europe (<span class="num">25%</span>), Greater China (<span class="num">17%</span>), Japan, and Rest of Asia Pacific.<a class="cite" href="#s-sources">[1]</a></p>
+              <h3 class="sub">What's interesting</h3>
+              <p>The company runs a deeply <strong>vertical</strong> stack — silicon (M-series, A-series), OS, distribution (App Store), payments (Apple Pay), and identity. Each layer is a margin pool and a switching-cost moat. The iPhone is the customer-acquisition engine; everything else is monetization.</p>
+            </section>
+
+            <!-- 04 Segments -->
+            <section class="sec" id="s-segments">
+              <div class="sec-num">04 — Segment Breakdown</div>
+              <h2 class="sec-title">FY25 revenue by segment, with NTM growth tag</h2>
+              <div class="seg-chart">
+                <div class="seg-row">
+                  <span class="seg-name">iPhone</span>
+                  <span class="seg-bar"><span class="seg-fill" style="width: 100%;"></span></span>
+                  <span class="seg-val">$210B<span class="grow">+3%</span></span>
+                </div>
+                <div class="seg-row svc">
+                  <span class="seg-name">Services</span>
+                  <span class="seg-bar"><span class="seg-fill" style="width: 50%;"></span></span>
+                  <span class="seg-val">$104B<span class="grow">+14%</span></span>
+                </div>
+                <div class="seg-row">
+                  <span class="seg-name">Wearables</span>
+                  <span class="seg-bar"><span class="seg-fill" style="width: 21%;"></span></span>
+                  <span class="seg-val">$43B<span class="grow">+5%</span></span>
+                </div>
+                <div class="seg-row">
+                  <span class="seg-name">Mac</span>
+                  <span class="seg-bar"><span class="seg-fill" style="width: 17%;"></span></span>
+                  <span class="seg-val">$36B<span class="grow">+8%</span></span>
+                </div>
+                <div class="seg-row">
+                  <span class="seg-name">iPad</span>
+                  <span class="seg-bar"><span class="seg-fill" style="width: 13%;"></span></span>
+                  <span class="seg-val">$27B<span class="grow">+2%</span></span>
+                </div>
+              </div>
+              <p>Services is the only line growing materially above GDP, and it's the only line with consistent <span class="num">70%+</span> gross margins. The mix shift is the story; absolute iPhone units are nearly cycle-noise inside our model.</p>
+            </section>
+
+            <!-- 05 Services -->
+            <section class="sec" id="s-services">
+              <div class="sec-num">05 — Services Growth Engine</div>
+              <h2 class="sec-title">A 14% CAGR with 74% gross margin, sustained</h2>
+              <p>Services revenue grew from <span class="num">$53.8B</span> in FY20 to <span class="num">$104.2B</span> in FY25 — a <span class="num">14.1%</span> CAGR. Gross margin has been remarkably stable at <span class="num">73–74%</span> across the period.<a class="cite" href="#s-sources">[1]</a></p>
+              <div class="services-chart" aria-label="Services revenue FY20–FY25">
+                <div class="svc-bar" style="height: 36%;"><span class="svc-v">$53.8B</span><span class="svc-y">FY20</span></div>
+                <div class="svc-bar" style="height: 45%;"><span class="svc-v">$68.4B</span><span class="svc-y">FY21</span></div>
+                <div class="svc-bar" style="height: 52%;"><span class="svc-v">$78.1B</span><span class="svc-y">FY22</span></div>
+                <div class="svc-bar" style="height: 56%;"><span class="svc-v">$85.2B</span><span class="svc-y">FY23</span></div>
+                <div class="svc-bar" style="height: 64%;"><span class="svc-v">$96.2B</span><span class="svc-y">FY24</span></div>
+                <div class="svc-bar" style="height: 70%;"><span class="svc-v">$104.2B</span><span class="svc-y">FY25</span></div>
+              </div>
+              <div class="chart-cap">FIG 5.1 · Services revenue, $B · Source: Apple 10-K, FY20–FY25</div>
+              <h3 class="sub">What's underwriting the rate?</h3>
+              <p>Three components: <strong>App Store</strong> (still ~40% of segment), <strong>cloud + media subscriptions</strong> (Music, TV+, iCloud+, Fitness+), and <strong>licensing</strong> (notably the Google TAC). The TAC line is a known regulatory overhang — we discuss in Section 11.</p>
+            </section>
+
+            <!-- 06 Vision Pro -->
+            <section class="sec" id="s-vision">
+              <div class="sec-num">06 — Vision Pro Contribution</div>
+              <h2 class="sec-title">Small now, optional later — explicitly not the thesis</h2>
+              <p>Vision Pro shipped an estimated <span class="num">~720k</span> units in FY25 at a blended ASP of <span class="num">~$3,200</span>, contributing roughly <span class="num">$2.3B</span> of revenue plus an additional <span class="num">~$1.1B</span> in attached accessories and developer-side App Store revenue. Total: <span class="num">~$3.4B</span>, or <span class="num">0.8%</span> of FY25 revenue.<a class="cite" href="#s-sources">[2]</a></p>
+              <p>We model Vision Pro at <span class="num">1.0%</span> of revenue in FY27 and <span class="num">1.6%</span> in FY28. The unit economics matter less than the platform — visionOS 3 is the first time Apple has a developer-facing AR runtime worth taking seriously, and the cost of being wrong on the thesis is bounded by the small absolute base.</p>
+            </section>
+
+            <!-- 07 Financials -->
+            <section class="sec" id="s-financials">
+              <div class="sec-num">07 — Financial Snapshot</div>
+              <h2 class="sec-title">Five-year operating picture</h2>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>$ billions</th><th>FY21</th><th>FY22</th><th>FY23</th><th>FY24</th><th>FY25</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Revenue</td><td>365.8</td><td>394.3</td><td>383.3</td><td>391.0</td><td>420.6</td></tr>
+                  <tr><td>Gross profit</td><td>152.8</td><td>170.8</td><td>169.1</td><td>180.7</td><td>198.4</td></tr>
+                  <tr><td>Operating income</td><td>108.9</td><td>119.4</td><td>114.3</td><td>123.2</td><td>134.7</td></tr>
+                  <tr><td>Net income</td><td>94.7</td><td>99.8</td><td>97.0</td><td>103.9</td><td>112.2</td></tr>
+                  <tr><td>EPS, diluted</td><td>5.61</td><td>6.11</td><td>6.13</td><td>6.71</td><td>7.40</td></tr>
+                  <tr><td>FCF</td><td>92.9</td><td>111.4</td><td>99.6</td><td>108.8</td><td>118.7</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr><td>GM %</td><td>41.8</td><td>43.3</td><td>44.1</td><td>46.2</td><td>47.2</td></tr>
+                </tfoot>
+              </table>
+              <p>The trend that matters is the bottom row: gross margin has expanded <span class="num">~540bp</span> over five years on Services mix and silicon vertical integration. We model another <span class="num">120bp</span> over our forecast horizon.</p>
+            </section>
+
+            <!-- 08 Valuation -->
+            <section class="sec" id="s-valuation">
+              <div class="sec-num">08 — Valuation</div>
+              <h2 class="sec-title">$245 target, 28x NTM EPS, triangulated</h2>
+              <p>We triangulate three approaches. <strong>(a) NTM P/E:</strong> $8.75 × 28x = <span class="num">$245</span>. <strong>(b) DCF:</strong> 9.0% WACC, 3.5% terminal, services mix re-rating to 32% by FY30 → <span class="num">$251</span>. <strong>(c) Sum-of-parts:</strong> hardware at 18x, services at 32x → <span class="num">$238</span>. Average rounds to our <span class="num">$245</span> point estimate.<a class="cite" href="#s-sources">[5]</a></p>
+              <h3 class="sub">Why 28x and not the 5-yr mean of 25x?</h3>
+              <p>Three points of premium come from: services mix (+1.5x), AI-on-device optionality (+1.0x), and capital return-driven share count compression (+0.5x). We'd take the multiple back to mean if any one of those legs visibly weakens.</p>
+            </section>
+
+            <!-- 09 Peers -->
+            <section class="sec" id="s-peers">
+              <div class="sec-num">09 — Peer Comparison</div>
+              <h2 class="sec-title">Mega-cap consumer-tech comp set</h2>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ticker</th><th>NTM P/E</th><th>EV/Sales</th><th>Rev. growth</th><th>GM %</th><th>FCF yield</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td><strong>AAPL</strong></td><td>26.4</td><td>7.9</td><td><span class="pos">+7.4%</span></td><td>47.2</td><td>3.5</td></tr>
+                  <tr><td>MSFT</td><td>32.1</td><td>11.4</td><td><span class="pos">+13.1%</span></td><td>69.8</td><td>2.6</td></tr>
+                  <tr><td>GOOGL</td><td>21.7</td><td>5.6</td><td><span class="pos">+11.6%</span></td><td>57.3</td><td>4.4</td></tr>
+                  <tr><td>META</td><td>24.0</td><td>6.8</td><td><span class="pos">+15.4%</span></td><td>81.1</td><td>4.0</td></tr>
+                  <tr><td>AMZN</td><td>33.5</td><td>3.1</td><td><span class="pos">+10.8%</span></td><td>48.6</td><td>3.2</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr><td>Median</td><td>26.4</td><td>6.8</td><td>+11.6%</td><td>57.3</td><td>3.5</td></tr>
+                </tfoot>
+              </table>
+              <p>AAPL trades at the median NTM P/E despite <strong>structurally lower revenue growth</strong> — which we read as the market already pricing in a Services re-rating. Our Buy rests on the rate of mix shift, not the absolute multiple.</p>
+            </section>
+
+            <!-- 10 Catalysts -->
+            <section class="sec" id="s-catalysts">
+              <div class="sec-num">10 — Catalysts</div>
+              <h2 class="sec-title">Six events that move the model in the next 12 months</h2>
+              <div class="timeline">
+                <div class="tl-item hi">
+                  <div class="tl-when">Jun 2026 · WWDC</div>
+                  <p class="tl-what">Apple Intelligence Pro tier announced</p>
+                  <p class="tl-impact"><em>+$245 → $258</em>Confirms the AI-on-device monetization step-up; our model uses 15% attach.</p>
+                </div>
+                <div class="tl-item">
+                  <div class="tl-when">Jul 2026</div>
+                  <p class="tl-what">FQ3 print + first Vision Pro 2 disclosures</p>
+                  <p class="tl-impact"><em>+/−$8</em>Watch installed base growth, services revenue exiting +14%, and any guide on Vision Pro 2 launch window.</p>
+                </div>
+                <div class="tl-item hi">
+                  <div class="tl-when">Sep 2026</div>
+                  <p class="tl-what">iPhone 18 launch event</p>
+                  <p class="tl-impact"><em>+/−$15</em>Replacement-cycle compression watch; we model 4.0-yr cycle, bull case 3.7-yr.</p>
+                </div>
+                <div class="tl-item">
+                  <div class="tl-when">Oct–Nov 2026</div>
+                  <p class="tl-what">DOJ TAC ruling — appellate</p>
+                  <p class="tl-impact"><em>−$22 if adverse</em>Estimated $20B Google licensing exposed; partial offset via search-ad sharing alternatives.</p>
+                </div>
+                <div class="tl-item">
+                  <div class="tl-when">Jan 2027</div>
+                  <p class="tl-what">FQ1 holiday print</p>
+                  <p class="tl-impact"><em>+/−$10</em>The single biggest data point on iPhone 18 demand and Services attach in the new device cohort.</p>
+                </div>
+                <div class="tl-item">
+                  <div class="tl-when">Spring 2027</div>
+                  <p class="tl-what">Vision Pro 2 launch</p>
+                  <p class="tl-impact"><em>+$8</em>Lower price point ($2,499 modeled), expanded developer ecosystem.</p>
+                </div>
+              </div>
+            </section>
+
+            <!-- 11 Risks -->
+            <section class="sec" id="s-risks">
+              <div class="sec-num">11 — Risks</div>
+              <h2 class="sec-title">What would change our call from Buy to Hold</h2>
+              <div class="risks">
+                <div class="risk-col down">
+                  <div class="rl">↓ Downside risks</div>
+                  <ul>
+                    <li><strong>TAC ruling:</strong> An adverse DOJ outcome on the Google search payments would remove ~$20B of high-margin Services revenue; we'd cut PT to $215.</li>
+                    <li><strong>iPhone replacement extension:</strong> Cycle moving from 4.0 to 4.4 yrs cuts FY27 unit forecast by ~9%; ~$10 to PT.</li>
+                    <li><strong>China demand softening:</strong> Greater China is 17% of revenue with above-corporate gross margin. A 10% revenue hit ≈ $7 to PT.</li>
+                    <li><strong>App Store regulation:</strong> EU DMA compliance margin drag; modeled at 50bp consolidated GM by FY27.</li>
+                  </ul>
+                </div>
+                <div class="risk-col up">
+                  <div class="rl">↑ Upside risks</div>
+                  <ul>
+                    <li><strong>AI Pro monetization:</strong> Attach above 20% adds ~$3B / yr at services-class margins; ~+$10 to PT.</li>
+                    <li><strong>Cycle compression:</strong> 3.7-yr replacement on AI-driven utility = +6% FY27 units; +$12 to PT.</li>
+                    <li><strong>Buyback acceleration:</strong> Cash deployment above $120B/yr meaningfully tightens share count.</li>
+                    <li><strong>Vision Pro 2 traction:</strong> Asymmetric — small downside, optionality if it lands.</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <!-- 12 ESG -->
+            <section class="sec" id="s-esg">
+              <div class="sec-num">12 — ESG & Governance</div>
+              <h2 class="sec-title">Quick scan</h2>
+              <p>Apple is on track for its 2030 carbon-neutral commitment across the value chain — Scope 1 and 2 are effectively neutralized; Scope 3 (supply chain + product use) is the work in progress.<a class="cite" href="#s-sources">[6]</a> Governance: dual-class structure absent, board independence is high, CEO comp is 89% performance-linked. Worker-rights disclosures around supply chain remain the most material ESG risk surface.</p>
+            </section>
+
+            <!-- 13 Sources -->
+            <section class="sec" id="s-sources">
+              <div class="sec-num">13 — Sources & Disclosures</div>
+              <h2 class="sec-title">Primary sources cited</h2>
+              <ol class="sources">
+                <li><span class="src-title"><a href="#">Apple Inc. — Form 10-K, fiscal year ended Sep 28, 2025</a></span><span class="src-meta">SEC · 10-K</span></li>
+                <li><span class="src-title"><a href="#">Apple Inc. — Form 10-Q, FQ1 ended Dec 28, 2025</a></span><span class="src-meta">SEC · 10-Q</span></li>
+                <li><span class="src-title"><a href="#">Q1 FY26 Earnings Call Transcript</a></span><span class="src-meta">Investor Relations</span></li>
+                <li><span class="src-title"><a href="#">Apple Capital Return Update — Apr 2026</a></span><span class="src-meta">Press Release</span></li>
+                <li><span class="src-title"><a href="#">OpenLia DCF Workbook — AAPL_v3.4</a></span><span class="src-meta">Internal · Repository</span></li>
+                <li><span class="src-title"><a href="#">Apple 2025 Environmental Progress Report</a></span><span class="src-meta">Apple.com</span></li>
+                <li><span class="src-title"><a href="#">IDC Worldwide Quarterly Personal Computing Device Tracker, Q1 2026</a></span><span class="src-meta">IDC · Subscription</span></li>
+                <li><span class="src-title"><a href="#">Counterpoint Smartphone Tracker — Mar 2026</a></span><span class="src-meta">Counterpoint</span></li>
+                <li><span class="src-title"><a href="#">Sensor Tower — App Store Spend Estimates, Mar 2026</a></span><span class="src-meta">Sensor Tower</span></li>
+                <li><span class="src-title"><a href="#">DOJ v. Google LLC — Remedies Hearing Briefs (filed Jan 2026)</a></span><span class="src-meta">DOJ · Public docket</span></li>
+                <li><span class="src-title"><a href="#">European Commission — DMA Compliance Reports, AAPL Q4 2025</a></span><span class="src-meta">EC · Public docket</span></li>
+              </ol>
+              <h3 class="sub" style="margin-top:24px;">Disclosures</h3>
+              <p style="font-size:12.5px;color:var(--color-text-secondary);">This report is generated by OpenLia for the registered user. The author and TK Chang's personal trading entity do not currently hold a position in AAPL. No part of this report constitutes investment advice. See full disclosure terms in Settings → Compliance.</p>
+            </section>
+
+            <!-- Footer CTA -->
+            <div class="doc-foot">
+              <div class="foot-avatar">LIA</div>
+              <div class="ft">
+                <div class="ft-tag">Continue in chat</div>
+                <p class="ft-text">Ask Lia to stress-test the DCF, drop the TAC line, or generate a one-pager from this report.</p>
+              </div>
+              <button class="ft-cta" onclick="window.location.href='equity-research.html'">
+                Open chat
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </button>
+            </div>
+
+          </article>
+
+          <!-- ===== Right rail ===== -->
+          <aside class="rail">
+
+            <!-- Verdict -->
+            <div class="rail-card">
+              <div class="rc-label">Lia's call <span class="more">EDIT</span></div>
+              <div class="verdict">
+                <div class="v-rating">
+                  <span class="pill">Buy</span>
+                  <span class="v-prev">prev. Not Rated</span>
+                </div>
+                <div class="v-target">$245.00<small>12M PT</small></div>
+                <div class="v-up"><span class="arrow">▲</span> +18.0% upside · vs. $207.62 close</div>
+              </div>
+              <div class="price-spark" aria-hidden="true">
+                <svg viewBox="0 0 280 60" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="sparkFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="#D4FF00" stop-opacity="0.35"/>
+                      <stop offset="100%" stop-color="#D4FF00" stop-opacity="0"/>
+                    </linearGradient>
+                  </defs>
+                  <path d="M0,42 L24,38 L48,44 L72,30 L96,34 L120,22 L144,28 L168,18 L192,24 L216,14 L240,20 L260,10 L280,12 L280,60 L0,60 Z" fill="url(#sparkFill)"/>
+                  <path d="M0,42 L24,38 L48,44 L72,30 L96,34 L120,22 L144,28 L168,18 L192,24 L216,14 L240,20 L260,10 L280,12" fill="none" stroke="#1A1A18" stroke-width="1.5"/>
+                  <circle cx="280" cy="12" r="3" fill="#D4FF00" stroke="#1A1A18" stroke-width="1.2"/>
+                </svg>
+              </div>
+              <div class="spark-foot"><span>52W LO 168.21</span><span>52W HI 235.40</span></div>
+            </div>
+
+            <!-- Quick stats -->
+            <div class="rail-card">
+              <div class="rc-label">Quick stats</div>
+              <div class="quick-stats">
+                <div class="qs-cell"><span class="qs-l">Mkt cap</span><span class="qs-v">$3.18T</span></div>
+                <div class="qs-cell"><span class="qs-l">Net cash</span><span class="qs-v">$165B</span></div>
+                <div class="qs-cell"><span class="qs-l">NTM P/E</span><span class="qs-v">26.4x</span></div>
+                <div class="qs-cell"><span class="qs-l">5y EPS CAGR</span><span class="qs-v">7.2%</span></div>
+                <div class="qs-cell"><span class="qs-l">Div yield</span><span class="qs-v">0.49%</span></div>
+                <div class="qs-cell"><span class="qs-l">Beta</span><span class="qs-v">1.24</span></div>
+                <div class="qs-cell"><span class="qs-l">Short int.</span><span class="qs-v">0.7%</span></div>
+                <div class="qs-cell"><span class="qs-l">Buyback</span><span class="qs-v">$110B/y</span></div>
+              </div>
+            </div>
+
+            <!-- Authors -->
+            <div class="rail-card">
+              <div class="rc-label">Authors</div>
+              <div class="analyst-row">
+                <div class="av lia">LIA</div>
+                <div><span class="an">Lia · Research Engine</span><span class="ar">v0.4.2 · ER agent</span></div>
+              </div>
+              <div class="analyst-row">
+                <div class="av">TK</div>
+                <div><span class="an">TK Chang</span><span class="ar">Reviewer · 2 edits pending</span></div>
+              </div>
+            </div>
+
+            <!-- Related -->
+            <div class="rail-card">
+              <div class="rc-label">Related in repo</div>
+              <div class="related-list">
+                <a href="#"><span>MSFT — Update, Mar 2026</span><span class="tk">MSFT</span></a>
+                <a href="#"><span>GOOGL — Initiation, Feb 2026</span><span class="tk">GOOGL</span></a>
+                <a href="#"><span>Mega-cap GM compression note</span><span class="tk">SECTOR</span></a>
+                <a href="#"><span>AAPL — DCF workbook v3.4</span><span class="tk">MODEL</span></a>
+              </div>
+            </div>
+
+          </aside>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    // Active TOC highlight on scroll
+    (function() {
+      const links = Array.from(document.querySelectorAll('.toc-item'));
+      const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+      const scroller = document.getElementById('reportShell');
+      if (!scroller || !sections.length) return;
+
+      function setActive(id) {
+        links.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+        });
+      }
+
+      const io = new IntersectionObserver((entries) => {
+        // pick the topmost intersecting section
+        const visible = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) setActive(visible[0].target.id);
+      }, {
+        root: scroller,
+        rootMargin: '-10% 0px -70% 0px',
+        threshold: [0, 0.1, 0.5, 1],
+      });
+      sections.forEach(s => io.observe(s));
+
+      // smooth-scroll inside scroller for in-page anchors
+      links.forEach(a => {
+        a.addEventListener('click', (e) => {
+          const href = a.getAttribute('href');
+          const target = document.querySelector(href);
+          if (target) {
+            e.preventDefault();
+            const top = target.offsetTop - 12;
+            scroller.scrollTo({ top, behavior: 'smooth' });
+            history.replaceState(null, '', href);
+            setActive(target.id);
+          }
+        });
+      });
+
+      setActive('s-summary');
+    })();
+
+    // Print on Download click (placeholder)
+    document.getElementById('downloadBtn')?.addEventListener('click', () => window.print());
+  </script>
+<script src="page-anim.js"></script>
+</body>
+</html>
