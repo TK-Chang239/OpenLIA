@@ -23,10 +23,15 @@ function SettingsIcon(): JSX.Element {
   );
 }
 
+// Demo mode pre-seeds a watchlist so the dashboard is populated on load (the
+// real app starts empty and the user adds tickers). No-op in normal builds.
+const DEMO_TICKERS =
+  import.meta.env.VITE_DEMO_MODE === "true" ? ["NVDA", "AAPL", "PLTR"] : [];
+
 export default function RetailSentiment(): JSX.Element {
   const { t } = useTranslation();
-  const [tickers, setTickers] = useState<string[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [tickers, setTickers] = useState<string[]>(DEMO_TICKERS);
+  const [selected, setSelected] = useState<string | null>(DEMO_TICKERS[0] ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const onAddTicker = (ticker: string) => {
