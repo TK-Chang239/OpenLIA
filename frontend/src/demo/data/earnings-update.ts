@@ -26,7 +26,7 @@
 //    byTicker), not a field on the entry itself.
 
 import { register, json, notFound } from "../registry";
-import { DEMO_NOW_ISO, hoursAgo, daysAgo } from "../clock";
+import { DEMO_NOW_ISO, hoursAgo, daysAgo, dateKeyAhead } from "../clock";
 import { registerStream } from "../DemoEventSource";
 import { companyName } from "./persona";
 
@@ -485,31 +485,39 @@ const WATCHLIST: WatchlistEntry[] = WATCH_TICKERS.map((ticker, i) => ({
 // finished notes.
 // ---------------------------------------------------------------------------
 
+// Upcoming earnings, dated as real calendar days (fiscal_date is a YYYY-MM-DD
+// the calendar plots) so the Calendar tab and the "Up Next" feed both populate.
+function upcoming(
+  ticker: string,
+  inDays: number,
+  timing: "pre_market" | "post_market",
+  eps: string,
+  rev: string,
+): EuScheduleEntry {
+  return {
+    id: `sch-${ticker.toLowerCase()}-${inDays}`,
+    ticker,
+    fiscal_date: dateKeyAhead(inDays),
+    release_timing: timing,
+    eps_estimate: eps,
+    revenue_estimate: rev,
+    scheduled_run_at: daysAgo(-inDays),
+    status: "pending",
+    attempts: 0,
+    report_id: null,
+  };
+}
+
 const SCHEDULE: EuScheduleEntry[] = [
-  {
-    id: "sch-amzn-q2",
-    ticker: "AMZN",
-    fiscal_date: "2026-Q2",
-    release_timing: "post_market",
-    eps_estimate: "$1.28",
-    revenue_estimate: "$162.4B",
-    scheduled_run_at: hoursAgo(-6), // ~6h out from DEMO_NOW
-    status: "pending",
-    attempts: 0,
-    report_id: null,
-  },
-  {
-    id: "sch-nvda-q3",
-    ticker: "NVDA",
-    fiscal_date: "2026-Q3",
-    release_timing: "post_market",
-    eps_estimate: "$1.31",
-    revenue_estimate: "$49.6B",
-    scheduled_run_at: daysAgo(-2), // ~2 days out
-    status: "pending",
-    attempts: 0,
-    report_id: null,
-  },
+  upcoming("AMZN", 1, "post_market", "$1.28", "$162.4B"),
+  upcoming("WMT", 2, "pre_market", "$0.72", "$178.5B"),
+  upcoming("AMD", 3, "post_market", "$1.12", "$7.8B"),
+  upcoming("AVGO", 5, "post_market", "$1.68", "$15.9B"),
+  upcoming("CRM", 6, "post_market", "$2.71", "$9.9B"),
+  upcoming("NVDA", 8, "post_market", "$1.31", "$49.6B"),
+  upcoming("META", 9, "post_market", "$6.72", "$47.2B"),
+  // Already-reported rows keep quarter labels — they join to their run cards and
+  // aren't plotted on the calendar (only pending entries are).
   {
     id: "sch-msft-q4",
     ticker: "MSFT",

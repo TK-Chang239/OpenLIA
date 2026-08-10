@@ -16,25 +16,29 @@ interface MockupEmbedProps {
   onReady?: (root: ShadowRoot) => void | (() => void);
 }
 
-// The shared design tokens, scoped to :host so every mockup renders with the
-// exact brand palette regardless of the app's own :root tokens. Fetched once.
-let tokenCssPromise: Promise<string> | null = null;
+// Fetch a shared CSS file once and rehome its tokens/entrance selectors into the
+// shadow scope (:root -> :host; the mockups' `html.om-anim body[data-om-auto]`
+// entrance choreography -> `.om-anim-scope`, the class we add to each page root).
+const cssCache = new Map<string, Promise<string>>();
 
-async function loadTokenCss(): Promise<string> {
-  if (!tokenCssPromise) {
-    tokenCssPromise = fetch("/demo-mockups/colors_and_type.css")
+function loadScopedCss(url: string): Promise<string> {
+  let p = cssCache.get(url);
+  if (!p) {
+    p = fetch(url)
       .then((r) => (r.ok ? r.text() : ""))
       .then((css) =>
         css
           // Fonts come from the document; drop the mockup's own font loading.
           .replace(/@import[^;]+;/g, "")
           .replace(/@font-face\s*\{[^}]*\}/g, "")
-          // Tokens defined on :root won't reach shadow content — rehome to :host.
+          .replace(/html\.om-anim body\[data-om-auto\]/g, ".om-anim-scope")
+          .replace(/html\.om-anim body/g, ".om-anim-scope")
           .replace(/:root/g, ":host"),
       )
       .catch(() => "");
+    cssCache.set(url, p);
   }
-  return tokenCssPromise;
+  return p;
 }
 
 // The mockups lay out as `.app{display:grid;grid-template-columns:220px 1fr;
@@ -67,8 +71,9 @@ export function MockupEmbed({ url, className, strip, onReady }: MockupEmbedProps
     const root = host.shadowRoot ?? host.attachShadow({ mode: "open" });
 
     void (async () => {
-      const [tokenCss, html] = await Promise.all([
-        loadTokenCss(),
+      const [tokenCss, animCss, html] = await Promise.all([
+        loadScopedCss("/demo-mockups/colors_and_type.css"),
+        loadScopedCss("/demo-mockups/page-anim.css"),
         fetch(url).then((r) => (r.ok ? r.text() : "")),
       ]);
       if (cancelled) return;
@@ -86,13 +91,20 @@ export function MockupEmbed({ url, className, strip, onReady }: MockupEmbedProps
         }
       });
 
+      // Tag the page root so the (scoped) entrance choreography plays on mount,
+      // uniformly, even on the mockups whose <body> lacked data-om-auto.
+      (doc.querySelector(".app") ?? doc.body.firstElementChild)?.classList.add(
+        "om-anim-scope",
+      );
+
       const pageCss = Array.from(doc.querySelectorAll("style"))
         .map((s) => s.textContent ?? "")
         .join("\n");
       doc.querySelectorAll("style").forEach((n) => n.remove());
 
       root.innerHTML =
-        `<style>${tokenCss}\n${HOST_BASE}\n${pageCss}</style>` + doc.body.innerHTML;
+        `<style>${tokenCss}\n${animCss}\n${HOST_BASE}\n${pageCss}</style>` +
+        doc.body.innerHTML;
 
       // Sandbox the mockup: its own <a href="*.html"> links would otherwise
       // navigate the SPA to dead routes. Block local/relative/hash navigation so

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import { motion } from 'framer-motion';
 import { ProposalsList } from '../components/memory/ProposalsList';
 import { ConstructsList } from '../components/memory/ConstructsList';
 
@@ -31,7 +32,12 @@ export function MemoryPage(): JSX.Element {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto max-w-3xl space-y-6">
+        <motion.div
+          className="mx-auto max-w-3xl space-y-6"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: 'easeOut' }}
+        >
           <div
             role="tablist"
             aria-label={t('memory_page.sections_aria')}
@@ -67,7 +73,7 @@ export function MemoryPage(): JSX.Element {
           >
             {active === 'pending' ? <ProposalsList /> : <ConstructsList />}
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
