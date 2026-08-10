@@ -33,7 +33,12 @@ interface Props {
 
 function ShellInner({ userRole }: Props): JSX.Element {
   const { t } = useTranslation();
-  const items = ITEMS.filter((i) => !i.adminOnly || userRole === 'admin');
+  const items = ITEMS.filter(
+    (i) =>
+      (!i.adminOnly || userRole === 'admin') &&
+      // Demo build hides the multi-user admin console.
+      !(import.meta.env.VITE_DEMO_MODE === 'true' && i.to === '/settings/admin'),
+  );
   const dirtyCtx = useSettingsDirty();
 
   // In-app navigation guard. `useBlocker` re-evaluates on every navigation

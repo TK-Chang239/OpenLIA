@@ -99,7 +99,11 @@ export function Sidebar(): JSX.Element {
             {t("nav.section_general")}
           </div>
         )}
-        {CORE_NAV.map((entry) => (
+        {CORE_NAV.filter(
+          (entry) =>
+            // Demo build drops the Memory page from navigation.
+            import.meta.env.VITE_DEMO_MODE !== "true" || entry.id !== "memory",
+        ).map((entry) => (
           <NavItem
             key={entry.id}
             label={t(entry.labelKey)}
