@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenLia — Equity Research</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="colors_and_type.css">
+<link rel="stylesheet" href="page-anim.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--color-bg-base); color: var(--color-text-primary); font-family: var(--font-display); -webkit-font-smoothing: antialiased; }
+
+  :root { --motion-normal: var(--duration-normal); }
+
+  .app { display: grid; grid-template-columns: 220px 1fr; height: 100vh; min-height: 0; }
+
+  /* ===== Sidebar (matches index.html) ===== */
+  .sidebar { background: #0D0D0C; color: #B5B3A8; padding: 14px 8px 16px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; }
+  .brand-badge { width: 26px; height: 26px; background: var(--color-accent-primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--color-accent-on); box-shadow: 0 0 10px rgba(212,255,0,0.35); }
+  .brand-name { font-size: 15px; font-weight: 600; color: #F2F1E8; letter-spacing: -0.01em; }
+  .side-group { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #6E6E68; padding: 12px 10px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: #B5B3A8; font-size: 13px; cursor: pointer; position: relative; transition: background var(--motion-normal) var(--ease-out), color var(--motion-normal) var(--ease-out); }
+  .nav-item:hover { background: #1C1C1A; color: #F2F1E8; }
+  .nav-item.active { background: #252522; color: #F2F1E8; }
+  .nav-item.active::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 20px; background: var(--color-accent-primary); }
+  .nav-item.active svg { stroke: var(--color-accent-primary); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent-primary); box-shadow: 0 0 6px rgba(212,255,0,0.7); }
+  .side-spacer { flex: 1; }
+  .user-chip { margin: 8px 4px 0; padding: 14px 10px 10px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #2A2A27; }
+  .user-avatar { width: 28px; height: 28px; border-radius: 6px; background: #2E2E2A; color: #F2F1E8; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+  .user-name { font-size: 13px; color: #F2F1E8; }
+  .user-role { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #6E6E68; }
+
+  /* ===== Content shell ===== */
+  .content { display: grid; grid-template-rows: auto 1fr; overflow: hidden; min-height: 0; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 0 24px; height: 52px; flex-shrink: 0; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-base); }
+  .page-title { font-size: 20px; font-weight: 600; color: var(--color-text-primary); letter-spacing: -0.01em; white-space: nowrap; }
+  .crumb-mode { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--color-border-subtle); white-space: nowrap; }
+  .crumb-mode strong { color: var(--color-feedback-success); font-weight: 500; }
+  .topbar-spacer { flex: 1; }
+  .settings-btn { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; height: 32px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: transparent; color: var(--color-text-secondary); font-family: var(--font-display); font-size: 13px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .settings-btn:hover { background: var(--color-surface-hover); color: var(--color-text-primary); border-color: var(--color-border-strong); }
+  .settings-btn svg { width: 14px; height: 14px; }
+
+  /* ===== Chat shell ===== */
+  .chat-shell { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  .chat-scroll { flex: 1; overflow-y: auto; padding: 24px 24px 12px; min-height: 0; }
+  .chat-inner { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+
+  /* ===== Welcome state ===== */
+  .welcome-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 32px; gap: 22px; min-height: 420px; }
+  .welcome-icon { width: 56px; height: 56px; border-radius: 14px; background: var(--color-accent-primary); color: var(--color-accent-on); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 24px rgba(212,255,0,0.35); animation: floatIn 400ms var(--ease-out) both; }
+  .welcome-icon svg { width: 28px; height: 28px; }
+  .welcome-h1 { font-family: var(--font-display); font-size: 32px; font-weight: 500; letter-spacing: -0.02em; color: var(--color-text-primary); text-align: center; animation: floatIn 400ms var(--ease-out) both; }
+  .welcome-sub { font-size: 15px; color: var(--color-text-secondary); text-align: center; max-width: 520px; line-height: 1.55; animation: floatIn 450ms var(--ease-out) both; }
+  .welcome-mode-row { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border: 1px solid var(--color-border-subtle); border-radius: 9999px; background: var(--color-bg-elevated); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-secondary); animation: floatIn 500ms var(--ease-out) both; }
+  .welcome-mode-row::before { content:""; width: 6px; height: 6px; background: var(--color-accent-primary); border-radius: 50%; box-shadow: 0 0 6px rgba(212,255,0,0.6); }
+  .welcome-mode-row strong { color: var(--color-text-primary); font-weight: 500; }
+
+  .chip-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 600px; margin-top: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 9999px; border: 1px solid var(--color-border-subtle); background: var(--color-bg-elevated); font-family: var(--font-display); font-size: 13px; color: var(--color-text-secondary); cursor: pointer; transition: all var(--motion-normal) var(--ease-out); animation: floatIn 500ms var(--ease-out) both; }
+  .chip:hover { background: var(--color-surface-hover); color: var(--color-text-primary); border-color: var(--color-border-strong); }
+  .chip.ticker { font-family: var(--font-mono); letter-spacing: 0.04em; font-weight: 500; color: var(--color-text-primary); }
+  .chip.portfolio svg { width: 11px; height: 11px; opacity: 0.7; }
+  .chip:nth-child(1) { animation-delay: 80ms; }
+  .chip:nth-child(2) { animation-delay: 120ms; }
+  .chip:nth-child(3) { animation-delay: 160ms; }
+  .chip:nth-child(4) { animation-delay: 200ms; }
+  .chip:nth-child(5) { animation-delay: 240ms; }
+
+  @keyframes floatIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes dotPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ===== Messages ===== */
+  .msg { display: flex; flex-direction: column; gap: 6px; animation: msgIn 220ms var(--ease-out) both; }
+  .msg.user { align-items: flex-end; }
+  .bubble-user { background: var(--color-surface-active); color: var(--color-text-primary); border-radius: 18px 18px 4px 18px; padding: 11px 16px; font-size: 14.5px; line-height: 1.5; max-width: 72%; }
+  .assistant-block { display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+  .assistant-meta { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .assistant-meta::before { content:""; width: 5px; height: 5px; background: var(--color-accent-primary); border-radius: 50%; box-shadow: 0 0 6px rgba(212,255,0,0.6); }
+  .assistant-text { font-size: 14.5px; line-height: 1.7; color: var(--color-text-primary); }
+  .assistant-text strong { font-weight: 600; }
+  .assistant-text .cursor { display: inline-block; width: 2px; background: var(--color-text-primary); margin-left: 2px; transform: translateY(2px); height: 1em; vertical-align: text-bottom; animation: blink 1s step-end infinite; }
+
+  .typing { display: inline-flex; align-items: center; gap: 4px; padding: 6px 0; }
+  .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-tertiary); animation: dotPulse 1.2s var(--ease-in-out) infinite; }
+  .typing span:nth-child(2) { animation-delay: 200ms; }
+  .typing span:nth-child(3) { animation-delay: 400ms; }
+
+  /* ===== Report thumbnail card ===== */
+  .report-card { background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(13,13,11,0.04); max-width: 560px; animation: cardIn 280ms var(--ease-out) both; }
+  .rc-header { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 12px; }
+  .rc-icon { width: 36px; height: 36px; border-radius: 8px; background: rgba(212,255,0,0.16); border: 1px solid rgba(168,204,0,0.3); color: var(--yellow-800); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .rc-icon svg { width: 16px; height: 16px; }
+  .rc-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .rc-title { font-size: 15px; font-weight: 600; color: var(--color-text-primary); letter-spacing: -0.005em; }
+  .rc-sub { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-secondary); letter-spacing: 0.02em; }
+  .rc-sub .dot { color: var(--color-text-tertiary); margin: 0 5px; }
+  .rc-sub strong { color: var(--color-text-primary); font-weight: 500; }
+  .rc-status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 9999px; background: rgba(212,255,0,0.12); border: 1px solid rgba(168,204,0,0.4); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--yellow-800); align-self: flex-start; }
+  .rc-status-pill::before { content:""; width: 5px; height: 5px; background: var(--color-feedback-success); border-radius: 50%; box-shadow: 0 0 4px rgba(168,204,0,0.7); }
+
+  .rc-preview { padding: 0 18px 14px; font-size: 13px; line-height: 1.6; color: var(--color-text-secondary); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .rc-preview .more { color: var(--color-text-primary); font-weight: 500; cursor: pointer; }
+  .rc-preview .more:hover { color: var(--color-feedback-success); }
+
+  .rc-meta-row { display: flex; gap: 14px; padding: 0 18px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--color-text-tertiary); }
+  .rc-meta-row span { display: inline-flex; align-items: center; gap: 5px; }
+  .rc-meta-row svg { width: 11px; height: 11px; }
+
+  .rc-actions { display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: var(--color-bg-base); border-top: 1px solid var(--color-border-subtle); }
+  .rc-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 6px; font-family: var(--font-display); font-size: 13px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); border: 1px solid transparent; }
+  .rc-btn.primary { background: var(--color-accent-primary); color: var(--color-accent-on); font-weight: 500; }
+  .rc-btn.primary:hover { background: var(--color-accent-hover); }
+  .rc-btn.ghost { background: transparent; border-color: var(--color-border-subtle); color: var(--color-text-secondary); }
+  .rc-btn.ghost:hover { background: var(--color-surface-hover); color: var(--color-text-primary); border-color: var(--color-border-strong); }
+  .rc-btn.icon { background: transparent; color: var(--color-text-secondary); padding: 0 10px; }
+  .rc-btn.icon:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+  .rc-btn svg { width: 13px; height: 13px; }
+  .rc-actions-spacer { flex: 1; }
+
+  /* ===== Composer ===== */
+  .composer-wrap { padding: 12px 24px 18px; border-top: 1px solid var(--color-border-subtle); background: var(--color-bg-base); flex-shrink: 0; }
+  .composer { max-width: 720px; margin: 0 auto; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: 12px; padding: 4px; transition: all var(--motion-normal) var(--ease-out); }
+  .composer:focus-within { border-color: var(--color-feedback-success); box-shadow: 0 0 0 3px rgba(212,255,0,0.12); }
+  .composer textarea { width: 100%; min-height: 44px; max-height: 120px; border: none; outline: none; background: transparent; font-family: var(--font-display); font-size: 14.5px; line-height: 1.5; padding: 12px 14px 6px; color: var(--color-text-primary); resize: none; }
+  .composer textarea::placeholder { color: var(--color-text-tertiary); }
+  .composer-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; }
+
+  .mode-pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 8px; border: 1px solid var(--color-border-subtle); border-radius: 9999px; background: var(--color-bg-base); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .mode-pill:hover { border-color: var(--color-border-strong); color: var(--color-text-primary); }
+  .mode-pill .mode-dot { width: 6px; height: 6px; background: var(--color-accent-primary); border-radius: 50%; box-shadow: 0 0 5px rgba(212,255,0,0.6); }
+  .mode-pill strong { color: var(--color-text-primary); font-weight: 500; letter-spacing: 0.06em; }
+  .mode-pill svg { width: 10px; height: 10px; opacity: 0.7; }
+
+  .icon-btn { padding: 7px; border: none; background: transparent; color: var(--color-text-secondary); cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; transition: all var(--motion-normal) var(--ease-out); }
+  .icon-btn:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  .composer-spacer { flex: 1; }
+  .helper-text { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.06em; }
+  .send-btn { width: 32px; height: 32px; background: var(--color-accent-primary); border: none; border-radius: 8px; color: var(--color-accent-on); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all var(--motion-normal) var(--ease-out); }
+  .send-btn:hover { background: var(--color-accent-hover); }
+  .send-btn:active { transform: scale(0.95); }
+  .send-btn svg { width: 14px; height: 14px; }
+  .send-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+  .composer-foot { max-width: 720px; margin: 8px auto 0; display: flex; justify-content: center; }
+
+  /* ===== Modal ===== */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(13,13,11,0.45); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity var(--motion-normal) var(--ease-out); }
+  .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+  .modal { background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: 14px; box-shadow: 0 16px 40px rgba(13,13,11,0.18); width: 100%; max-width: 580px; max-height: 88vh; display: flex; flex-direction: column; transform: scale(0.97); transition: transform var(--motion-normal) var(--ease-out); }
+  .modal-backdrop.open .modal { transform: scale(1); }
+  .modal-header { display: flex; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--color-border-subtle); }
+  .modal-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--color-text-primary); letter-spacing: -0.005em; }
+  .modal-close { margin-left: auto; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--color-text-secondary); cursor: pointer; border-radius: 6px; }
+  .modal-close:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+  .modal-body { flex: 1; overflow-y: auto; }
+  .modal-section { padding: 18px 22px; border-bottom: 1px solid var(--color-border-subtle); }
+  .modal-section:last-child { border-bottom: none; }
+  .modal-label { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 10px; }
+  .modal-label strong { color: var(--color-text-primary); font-weight: 500; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 22px; border-top: 1px solid var(--color-border-subtle); background: var(--color-bg-base); border-radius: 0 0 14px 14px; }
+
+  .seg { display: flex; padding: 3px; background: var(--color-bg-base); border: 1px solid var(--color-border-subtle); border-radius: 8px; gap: 2px; }
+  .seg-opt { flex: 1; padding: 8px 10px; border-radius: 6px; font-family: var(--font-display); font-size: 12.5px; color: var(--color-text-secondary); cursor: pointer; text-align: center; transition: all var(--motion-normal) var(--ease-out); border: none; background: transparent; }
+  .seg-opt:hover { color: var(--color-text-primary); }
+  .seg-opt.active { background: var(--color-bg-elevated); color: var(--color-text-primary); font-weight: 500; box-shadow: 0 1px 2px rgba(13,13,11,0.06); }
+
+  .section-list { display: flex; flex-direction: column; gap: 0; margin: 4px 0 0; }
+  .section-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--color-border-subtle); cursor: pointer; }
+  .section-row:last-child { border-bottom: none; }
+  .section-row:hover .section-name { color: var(--color-feedback-success); }
+  .checkbox { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--color-border-strong); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all var(--motion-normal) var(--ease-out); }
+  .checkbox.checked { background: var(--color-accent-primary); border-color: var(--color-accent-primary); }
+  .checkbox.checked svg { display: block; }
+  .checkbox svg { display: none; width: 10px; height: 10px; color: var(--color-accent-on); stroke-width: 3; }
+  .section-num { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.04em; width: 20px; }
+  .section-name { font-size: 13.5px; color: var(--color-text-primary); flex: 1; transition: color var(--motion-normal) var(--ease-out); }
+
+  .add-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px dashed var(--color-border-strong); border-radius: 6px; background: transparent; color: var(--color-text-secondary); font-family: var(--font-display); font-size: 12px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .add-btn:hover { border-color: var(--color-feedback-success); color: var(--color-feedback-success); border-style: solid; background: rgba(212,255,0,0.05); }
+  .add-btn svg { width: 11px; height: 11px; }
+
+  .modal-btn { display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 7px; font-family: var(--font-display); font-size: 13.5px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); border: 1px solid transparent; font-weight: 500; }
+  .modal-btn.ghost { background: transparent; border-color: var(--color-border-subtle); color: var(--color-text-secondary); }
+  .modal-btn.ghost:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+  .modal-btn.primary { background: var(--color-accent-primary); color: var(--color-accent-on); }
+  .modal-btn.primary:hover { background: var(--color-accent-hover); }
+
+  /* ===== Template cards ===== */
+  .modal-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .modal-section-head .modal-label { margin-bottom: 0; }
+  .upload-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-family: var(--font-display); font-size: 12px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .upload-btn:hover { border-color: var(--color-feedback-success); color: var(--color-feedback-success); background: rgba(212,255,0,0.06); }
+  .upload-btn svg { width: 12px; height: 12px; }
+
+  .tpl-list { display: flex; flex-direction: column; gap: 8px; }
+  .tpl-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--color-border-subtle); border-radius: 9px; background: var(--color-bg-elevated); cursor: pointer; transition: all var(--motion-normal) var(--ease-out); position: relative; }
+  .tpl-card:hover { border-color: var(--color-border-strong); background: var(--color-surface-hover); }
+  .tpl-card.active { border-color: var(--color-feedback-success); background: rgba(212,255,0,0.06); box-shadow: inset 3px 0 0 var(--color-accent-primary); }
+  .tpl-radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--color-border-strong); flex-shrink: 0; position: relative; transition: all var(--motion-normal) var(--ease-out); }
+  .tpl-card.active .tpl-radio { border-color: var(--color-feedback-success); background: var(--color-accent-primary); }
+  .tpl-card.active .tpl-radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--color-accent-on); }
+  .tpl-icon { width: 32px; height: 32px; border-radius: 7px; background: var(--color-bg-base); border: 1px solid var(--color-border-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--color-text-secondary); }
+  .tpl-card.active .tpl-icon { background: rgba(212,255,0,0.16); border-color: rgba(168,204,0,0.4); color: var(--yellow-800); }
+  .tpl-icon svg { width: 15px; height: 15px; }
+  .tpl-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .tpl-name { font-size: 13.5px; font-weight: 500; color: var(--color-text-primary); display: flex; align-items: center; gap: 8px; }
+  .tpl-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-text-tertiary); letter-spacing: 0.02em; }
+  .tpl-meta .dot { margin: 0 5px; color: var(--color-text-tertiary); }
+  .tpl-badge { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 9999px; background: rgba(168,204,0,0.12); border: 1px solid rgba(168,204,0,0.35); color: var(--yellow-800); }
+  .tpl-acts { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .tpl-icon-btn { width: 26px; height: 26px; border-radius: 5px; border: none; background: transparent; color: var(--color-text-tertiary); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all var(--motion-normal) var(--ease-out); }
+  .tpl-icon-btn:hover { background: var(--color-surface-active); color: var(--color-text-primary); }
+  .tpl-icon-btn.danger:hover { background: rgba(224,92,48,0.10); color: var(--color-feedback-error); }
+  .tpl-icon-btn svg { width: 13px; height: 13px; }
+
+  .upload-zone { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1px dashed var(--color-border-strong); border-radius: 9px; background: transparent; color: var(--color-text-secondary); font-size: 12.5px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); margin-top: 2px; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--color-feedback-success); color: var(--color-feedback-success); background: rgba(212,255,0,0.05); border-style: solid; }
+  .upload-zone svg { width: 14px; height: 14px; flex-shrink: 0; }
+  .upload-zone .formats { margin-left: auto; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em; color: var(--color-text-tertiary); }
+
+  /* Info card when a custom template is selected */
+  .tpl-info-card { padding: 14px 16px; background: var(--color-bg-base); border: 1px solid var(--color-border-subtle); border-radius: 9px; display: flex; gap: 12px; align-items: flex-start; }
+  .tpl-info-card .ii { width: 22px; height: 22px; border-radius: 6px; background: rgba(212,255,0,0.16); border: 1px solid rgba(168,204,0,0.3); color: var(--yellow-800); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .tpl-info-card .ii svg { width: 12px; height: 12px; }
+  .tpl-info-body { flex: 1; min-width: 0; }
+  .tpl-info-title { font-size: 13px; color: var(--color-text-primary); font-weight: 500; margin-bottom: 3px; }
+  .tpl-info-desc { font-size: 12.5px; color: var(--color-text-secondary); line-height: 1.5; }
+  .tpl-info-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .tpl-info-link { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-display); font-size: 12px; color: var(--color-feedback-success); font-weight: 500; cursor: pointer; text-decoration: none; padding: 4px 8px; border-radius: 5px; transition: background var(--motion-normal) var(--ease-out); }
+  .tpl-info-link:hover { background: rgba(212,255,0,0.10); }
+  .tpl-info-link svg { width: 11px; height: 11px; }
+
+  /* Hide default-only sections when custom template selected */
+  .default-only { display: contents; }
+  .default-only.hidden { display: none; }
+
+  /* ===== Template config view (post-upload) ===== */
+  .tpl-empty { font-size: 12.5px; color: var(--color-text-tertiary); padding: 14px 4px 4px; font-style: italic; }
+  .tpl-mode-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .tpl-mode-chip { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border-radius: 9999px; background: var(--color-surface-hover); border: 1px solid var(--color-border-subtle); color: var(--color-text-secondary); }
+  .tpl-mode-chip.all { background: rgba(212,255,0,0.10); border-color: rgba(168,204,0,0.35); color: var(--yellow-800); }
+
+  .tpl-config { display: flex; flex-direction: column; gap: 18px; }
+  .tpl-config-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid rgba(168,204,0,0.35); background: rgba(212,255,0,0.06); border-radius: 9px; }
+  .tpl-config-head .tpl-icon { background: rgba(212,255,0,0.16); border-color: rgba(168,204,0,0.4); color: var(--yellow-800); }
+  .tpl-config-file { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .tpl-config-filename { font-size: 13.5px; font-weight: 500; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tpl-config-filemeta { font-family: var(--font-mono); font-size: 10.5px; color: var(--color-text-tertiary); letter-spacing: 0.02em; }
+  .tpl-config-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 9999px; background: rgba(107,130,0,0.10); border: 1px solid rgba(107,130,0,0.30); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-feedback-success); flex-shrink: 0; }
+  .tpl-config-status svg { width: 9px; height: 9px; }
+
+  .cfg-field { display: flex; flex-direction: column; gap: 6px; }
+  .cfg-field label { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+  .cfg-field input[type="text"] { height: 38px; border-radius: 7px; border: 1px solid var(--color-border-subtle); background: var(--color-bg-base); padding: 0 12px; font-family: var(--font-display); font-size: 13.5px; color: var(--color-text-primary); outline: none; transition: all var(--motion-normal) var(--ease-out); }
+  .cfg-field input[type="text"]:focus { border-color: var(--color-feedback-success); box-shadow: 0 0 0 3px rgba(212,255,0,0.12); background: var(--color-bg-elevated); }
+  .cfg-helper { font-size: 11.5px; color: var(--color-text-tertiary); line-height: 1.45; }
+  .cfg-error { font-size: 11.5px; color: var(--color-feedback-error); margin-top: 2px; }
+
+  .mode-check-list { display: flex; flex-direction: column; gap: 6px; }
+  .mode-check { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--color-border-subtle); border-radius: 8px; background: var(--color-bg-base); cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .mode-check:hover { border-color: var(--color-border-strong); background: var(--color-surface-hover); }
+  .mode-check.checked { border-color: var(--color-feedback-success); background: rgba(212,255,0,0.05); }
+  .mc-box { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--color-border-strong); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all var(--motion-normal) var(--ease-out); background: var(--color-bg-elevated); }
+  .mode-check.checked .mc-box { background: var(--color-accent-primary); border-color: var(--color-accent-primary); }
+  .mc-box svg { width: 11px; height: 11px; color: var(--color-accent-on); display: none; }
+  .mode-check.checked .mc-box svg { display: block; }
+  .mc-info { display: flex; flex-direction: column; gap: 1px; }
+  .mc-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+  .mc-sub { font-size: 11.5px; color: var(--color-text-secondary); }
+
+  .cfg-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+
+  /* Config view entrance + attention */
+  @keyframes cfgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes cfgHeadIn { 0% { opacity: 0; transform: translateY(-6px); } 100% { opacity: 1; transform: translateY(0); } }
+  @keyframes pulseRing { 0% { box-shadow: 0 0 0 0 rgba(212,255,0,0.55); } 70% { box-shadow: 0 0 0 8px rgba(212,255,0,0); } 100% { box-shadow: 0 0 0 0 rgba(212,255,0,0); } }
+  @keyframes checkPop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+  .tpl-config.entering { animation: cfgIn 320ms var(--ease-out) both; }
+  .tpl-config.entering .tpl-config-head { animation: cfgHeadIn 280ms var(--ease-out) both; }
+  .tpl-config.entering .tpl-config-status svg { animation: checkPop 360ms var(--ease-spring) both 120ms; }
+  .tpl-config.entering .cfg-field { animation: cfgIn 320ms var(--ease-out) both; }
+  .tpl-config.entering .cfg-field:nth-of-type(1) { animation-delay: 100ms; }
+  .tpl-config.entering .cfg-field:nth-of-type(2) { animation-delay: 180ms; }
+  .tpl-config.entering .cfg-actions { animation: cfgIn 320ms var(--ease-out) both 260ms; }
+  .cfg-step { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .cfg-step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent-primary); color: var(--color-accent-on); font-family: var(--font-mono); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(212,255,0,0.18); }
+  .cfg-step-title { font-size: 14px; font-weight: 600; color: var(--color-text-primary); letter-spacing: -0.005em; }
+  .cfg-step-sub { font-size: 12.5px; color: var(--color-text-secondary); line-height: 1.5; margin: -2px 0 6px 32px; }
+  .cfg-field input[type="text"].attn { animation: pulseRing 1.4s var(--ease-out) 2; border-color: var(--color-feedback-success); }
+  .back-link { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-display); font-size: 12px; color: var(--color-text-secondary); cursor: pointer; padding: 4px 8px 4px 4px; border-radius: 5px; margin-bottom: 10px; transition: all var(--motion-normal) var(--ease-out); }
+  .back-link:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+  .back-link svg { width: 12px; height: 12px; }
+
+  a.nav-item, .nav-item { text-decoration: none; }
+</style>
+</head>
+<body data-om-auto data-screen-label="Equity Research — Chat">
+
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+      <div class="brand"><div class="brand-badge">LIA</div><span class="brand-name">OpenLia</span></div>
+      <div class="side-group">General</div>
+      <a class="nav-item" href="index-empty.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
+      <a class="nav-item" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Secretary</a>
+      <a class="nav-item" href="portfolio.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Portfolio</a>
+      <a class="nav-item" href="repository.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v9a2 2 0 0 1-2 2H6z"/></svg>Repository</a>
+
+      <div class="side-group">Departments</div>
+      <a class="nav-item active" href="equity-research.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Equity Research</a>
+      <a class="nav-item" href="earnings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>Earnings Update</a>
+      <a class="nav-item" href="morning-briefing-redesign.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>Morning Briefings<span class="nav-dot" title="New report"></span></a>
+      <a class="nav-item" href="retail-sentiment.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>Retail Sentiment</a>
+      <a class="nav-item" href="macro-summary-v2.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Macro Research</a>
+      <a class="nav-item" href="panic-thermometer.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>Panic Thermometer</a>
+
+      <div class="side-spacer"></div>
+      <a class="nav-item" href="settings.html" style="margin: 0 0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82 2 2 0 0 1-2.83 2.83 1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33 2 2 0 0 1-2.83-2.83 1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82 2 2 0 0 1 2.83-2.83 1.65 1.65 0 0 0 1.82.33A1.65 1.65 0 0 0 9 4.68V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33 2 2 0 0 1 2.83 2.83 1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div class="user-chip">
+        <div class="user-avatar">TK</div>
+        <div style="display:flex;flex-direction:column;gap:2px;"><span class="user-name">TK Chang</span><span class="user-role">PERSONAL · v0.4.2</span></div>
+      </div>
+    </aside>
+
+  <!-- ============ CONTENT ============ -->
+  <section class="content">
+    <div class="topbar">
+      <span class="page-title">Equity Research</span>
+      <span class="crumb-mode">MODE · <strong id="topMode">Stock Initiation</strong> · NORMAL LENGTH</span>
+      <div class="topbar-spacer"></div>
+    </div>
+
+    <!-- ===== Chat shell ===== -->
+    <div class="chat-shell">
+      <div class="chat-scroll" id="chatScroll">
+        <div class="chat-inner" id="chatInner">
+
+          <!-- USER MSG -->
+          <div class="msg user">
+            <div class="bubble-user">Initiate coverage on AAPL — focus on services growth and Vision Pro contribution.</div>
+          </div>
+
+          <!-- ASSISTANT — generating -->
+          <div class="msg">
+            <div class="assistant-block">
+              <span class="assistant-meta">Equity Research · Stock Initiation Report</span>
+              <div class="assistant-text">
+                Pulling Apple's latest 10-Q, segment data, peer comp set, and 5-year financials. Drafting the full initiation framework now — <strong>13 sections</strong>, ~6,200 words at Normal length.
+              </div>
+            </div>
+          </div>
+
+          <!-- REPORT CARD -->
+          <div class="msg">
+            <div class="report-card">
+              <div class="rc-header">
+                <div class="rc-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                </div>
+                <div class="rc-titles">
+                  <span class="rc-title">Stock Initiation Report</span>
+                  <span class="rc-sub"><strong>AAPL</strong><span class="dot">·</span>Apple Inc.<span class="dot">·</span>Apr 29, 2026</span>
+                </div>
+                <span class="rc-status-pill">Ready</span>
+              </div>
+              <div class="rc-preview">
+                Apple Inc. is a global technology leader headquartered in Cupertino, CA. The company designs and sells consumer electronics, software, and digital services, with iPhone contributing ~52% of FY25 revenue and Services growing at a sustained <strong>14% CAGR</strong>. We initiate at <strong>Buy</strong> with a 12-month price target of $245 (≈18% upside), driven by Services margin expansion and a credible re-rating path on the AI-on-device thesis. <span class="more">read more →</span>
+              </div>
+              <div class="rc-meta-row">
+                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>13 sections</span>
+                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Generated in 2.4s</span>
+                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18"/></svg>11 sources cited</span>
+              </div>
+              <div class="rc-actions">
+                <a class="rc-btn primary" href="report-aapl.html" style="text-decoration:none;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  Open Report
+                </a>
+                <button class="rc-btn ghost">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="rc-actions-spacer"></div>
+                <button class="rc-btn icon" title="Save to Repository">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                  Save to Repo
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- USER FOLLOW-UP -->
+          <div class="msg user">
+            <div class="bubble-user">What would change your call from Buy to Hold?</div>
+          </div>
+
+          <!-- ASSISTANT STREAMING -->
+          <div class="msg">
+            <div class="assistant-block">
+              <span class="assistant-meta">Streaming · 0.8s</span>
+              <div class="assistant-text">
+                Two things would push us to <strong>Hold</strong>: (1) Services growth decelerating below 10% Y/Y for two consecutive quarters — that's the linchpin of the multiple — and (2) iPhone replacement-cycle data showing extension past 4.4 years, which would compress hardware revenue more than our base case assumes. A modest miss on either alone isn't enough; both together would warrant the downgrade<span class="cursor"></span>
+              </div>
+              <div class="typing" style="margin-top:4px;"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ===== Composer ===== -->
+      <div class="composer-wrap">
+        <div class="composer">
+          <textarea id="composerInput" placeholder="Ask a follow-up question about the company, sector, or report…">Run a peer comp vs. MSFT and GOOGL on EV/EBITDA and FCF yield.</textarea>
+          <div class="composer-row">
+            <button class="icon-btn" title="Attach">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <span class="mode-pill" id="modePill">
+              <span class="mode-dot"></span>
+              <strong id="modePillLabel">Stock Initiation</strong>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </span>
+            <div class="composer-spacer"></div>
+            <span class="helper-text">↵ SEND · ⇧↵ NEW LINE</span>
+            <button class="send-btn" title="Send">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- ============ REPORT SETTINGS MODAL ============ -->
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal" role="dialog" aria-labelledby="modalTitle">
+    <div class="modal-header">
+      <h3 id="modalTitle">Report Settings</h3>
+      <button class="modal-close" id="closeSettings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+
+      <div class="modal-section">
+        <span class="modal-label">Report Mode</span>
+        <div class="seg" id="modeSeg">
+          <button class="seg-opt active" data-mode="initiation">Stock Initiation</button>
+          <button class="seg-opt" data-mode="update">Stock Update</button>
+          <button class="seg-opt" data-mode="sector">Sector Research</button>
+        </div>
+      </div>
+
+      <div class="modal-section">
+        <span class="modal-label">Report Length</span>
+        <div class="seg" id="lengthSeg">
+          <button class="seg-opt" data-length="concise">Concise</button>
+          <button class="seg-opt active" data-length="normal">Normal</button>
+          <button class="seg-opt" data-length="elaborate">Elaborative</button>
+        </div>
+      </div>
+
+      <!-- ===== Report Templates ===== -->
+      <div class="modal-section" id="tplSection">
+        <div class="modal-section-head">
+          <span class="modal-label">Report Template · <strong id="tplModeLabel">Stock Initiation</strong></span>
+          <button class="upload-btn" id="uploadBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload template
+          </button>
+        </div>
+
+        <!-- List view -->
+        <div id="tplListView">
+          <div class="tpl-list" id="tplList"></div>
+          <div class="tpl-empty" id="tplEmpty" style="display:none;">No custom templates yet for this mode. Upload one to apply your firm's house style.</div>
+          <input type="file" id="tplFileInput" accept=".docx,.pdf,.md,.txt" style="display:none;" />
+          <label class="upload-zone" id="uploadZone" for="tplFileInput">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+            <span>Drop a file here or click to upload your own template</span>
+            <span class="formats">DOCX · PDF · MD</span>
+          </label>
+        </div>
+
+        <!-- Configure view (after upload) -->
+        <div id="tplConfigView" style="display:none;">
+          <span class="back-link" id="cfgBack" title="Back to template list">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            Back to templates
+          </span>
+          <div class="tpl-config" id="tplConfig">
+            <div class="tpl-config-head">
+              <div class="tpl-icon" id="cfgIcon"></div>
+              <div class="tpl-config-file">
+                <div class="tpl-config-filename" id="cfgFilename">filename.docx</div>
+                <div class="tpl-config-filemeta" id="cfgFilemeta">42 KB · uploaded just now</div>
+              </div>
+              <span class="tpl-config-status">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Uploaded
+              </span>
+            </div>
+
+            <div class="cfg-field">
+              <div class="cfg-step">
+                <span class="cfg-step-num">1</span>
+                <span class="cfg-step-title">Name this template</span>
+              </div>
+              <div class="cfg-step-sub">Shown in the template picker. Defaults to the file name — edit if you want something cleaner.</div>
+              <input type="text" id="cfgNameInput" placeholder="e.g. House Initiation Template" />
+            </div>
+
+            <div class="cfg-field">
+              <div class="cfg-step">
+                <span class="cfg-step-num">2</span>
+                <span class="cfg-step-title">Apply to report modes</span>
+              </div>
+              <div class="cfg-step-sub">Pick the report types where this template should be available. Choose at least one.</div>
+              <div class="mode-check-list" id="cfgModes">
+                <label class="mode-check" data-mode="initiation">
+                  <span class="mc-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <span class="mc-info">
+                    <span class="mc-title">Stock Initiation</span>
+                    <span class="mc-sub">Full coverage initiation report</span>
+                  </span>
+                </label>
+                <label class="mode-check" data-mode="update">
+                  <span class="mc-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <span class="mc-info">
+                    <span class="mc-title">Stock Update</span>
+                    <span class="mc-sub">Post-event or earnings update</span>
+                  </span>
+                </label>
+                <label class="mode-check" data-mode="sector">
+                  <span class="mc-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <span class="mc-info">
+                    <span class="mc-title">Sector Research</span>
+                    <span class="mc-sub">Industry-wide thematic report</span>
+                  </span>
+                </label>
+              </div>
+              <span class="cfg-error" id="cfgModesError" style="display:none;">Select at least one report mode.</span>
+            </div>
+
+            <div class="cfg-actions">
+              <button class="modal-btn ghost" id="cfgCancel">Cancel</button>
+              <button class="modal-btn primary" id="cfgSave">Save Template</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Info card shown when a non-default template is active -->
+      <div class="modal-section" id="customTplInfoSection" style="display:none;">
+        <span class="modal-label">Template Structure</span>
+        <div class="tpl-info-card">
+          <div class="ii">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          </div>
+          <div class="tpl-info-body">
+            <div class="tpl-info-title">Sections defined by <span id="customTplName">your template</span></div>
+            <div class="tpl-info-desc">Report mode, length, and section structure are inherited from the template file. To change the structure, edit the source file and re-upload, or switch back to the OpenLia Default.</div>
+            <div class="tpl-info-actions">
+              <span class="tpl-info-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Preview template
+              </span>
+              <span class="tpl-info-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download original
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Default-template-only configuration ===== -->
+      <div id="defaultTplSections">
+        <div class="modal-section">
+          <span class="modal-label">Sections · <strong id="sectionsModeLabel">Stock Initiation Report</strong></span>
+          <div class="section-list" id="sectionList"></div>
+        </div>
+
+        <div class="modal-section">
+          <span class="modal-label">Custom Sections</span>
+          <button class="add-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add custom section
+          </button>
+        </div>
+      </div><!-- /defaultTplSections -->
+
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn ghost" id="cancelSettings">Cancel</button>
+      <button class="modal-btn primary" id="saveSettings">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // === Mode + section data per spec ===
+  const SECTIONS = {
+    initiation: {
+      label: 'Stock Initiation Report',
+      pillLabel: 'Stock Initiation',
+      list: [
+        'Company Overview',
+        'Industry Overview',
+        'Products and Services',
+        'Business Model',
+        'Competitive Analysis',
+        'Management Team',
+        'Competitive Advantages and Weaknesses',
+        'Risk Analysis',
+        'Historical Financial Data',
+        'Financial Analysis',
+        'Financial Projections',
+        'Valuation Analysis',
+        'Investment Recommendation',
+      ]
+    },
+    update: {
+      label: 'Stock Update Report',
+      pillLabel: 'Stock Update',
+      list: [
+        'Investment Thesis / Key Takeaway',
+        'Event Analysis',
+        'Financial Results Summary',
+        'Estimate Revisions',
+        'Valuation and Price Target',
+        'Bull / Bear / Base Scenarios',
+        'Risks',
+      ]
+    },
+    sector: {
+      label: 'Sector Research Report',
+      pillLabel: 'Sector Research',
+      list: [
+        'Sector Thesis / Key Takeaway',
+        'Industry Overview and Market Sizing',
+        'Key Drivers and Trends',
+        'Market Data and Analysis',
+        'Competitive Landscape and Value Chain',
+        'Company Analysis and Stock Implications',
+        'Valuation',
+        'Risks',
+      ]
+    }
+  };
+
+  // checked state per mode (default all checked)
+  const checked = {
+    initiation: new Set(SECTIONS.initiation.list),
+    update:     new Set(SECTIONS.update.list),
+    sector:     new Set(SECTIONS.sector.list),
+  };
+
+  let currentMode = 'initiation';
+
+  function renderSections(mode) {
+    const ul = document.getElementById('sectionList');
+    ul.innerHTML = '';
+    SECTIONS[mode].list.forEach((name, idx) => {
+      const isChecked = checked[mode].has(name);
+      const row = document.createElement('div');
+      row.className = 'section-row';
+      row.innerHTML = `
+        <div class="checkbox ${isChecked ? 'checked' : ''}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <span class="section-num">${String(idx + 1).padStart(2, '0')}</span>
+        <span class="section-name">${name}</span>
+      `;
+      row.addEventListener('click', () => {
+        if (checked[mode].has(name)) checked[mode].delete(name);
+        else checked[mode].add(name);
+        renderSections(mode);
+      });
+      ul.appendChild(row);
+    });
+    document.getElementById('sectionsModeLabel').textContent = SECTIONS[mode].label;
+  }
+
+  function setMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('#modeSeg .seg-opt').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    document.getElementById('modePillLabel').textContent = SECTIONS[mode].pillLabel;
+    document.getElementById('topMode').textContent = SECTIONS[mode].pillLabel;
+    renderSections(mode);
+    if (typeof renderTemplates === 'function') {
+      renderTemplates();
+      applyTemplateMode();
+    }
+  }
+
+  // === Length seg ===
+  document.querySelectorAll('#lengthSeg .seg-opt').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#lengthSeg .seg-opt').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+
+  // === Mode seg ===
+  document.querySelectorAll('#modeSeg .seg-opt').forEach(b => {
+    b.addEventListener('click', () => setMode(b.dataset.mode));
+  });
+
+  // === Modal open/close ===
+  const modal = document.getElementById('settingsModal');
+  const open = () => modal.classList.add('open');
+  const close = () => modal.classList.remove('open');
+  document.getElementById('closeSettings').addEventListener('click', close);
+  document.getElementById('cancelSettings').addEventListener('click', close);
+  document.getElementById('saveSettings').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+  // mode pill in composer also opens settings
+  document.getElementById('modePill').addEventListener('click', open);
+
+  // ===== Templates =====
+  const ALL_MODES = ['initiation', 'update', 'sector'];
+  const MODE_LABELS = { initiation: 'Initiation', update: 'Update', sector: 'Sector' };
+  const TEMPLATES = [
+    { id: 'default', name: 'OpenLia Default', meta: 'Adaptive sections per report mode', kind: 'default', locked: true, modes: ['initiation','update','sector'] },
+    { id: 'gs-init', name: 'GS Initiation Template', meta: '42 KB · DOCX · Uploaded Apr 12, 2026', kind: 'docx', modes: ['initiation'] },
+    { id: 'sector-onepager', name: 'Sector One-Pager', meta: '128 KB · PDF · Uploaded Mar 02, 2026', kind: 'pdf', modes: ['sector'] },
+  ];
+  // active template per mode (default for all initially)
+  const activeTplByMode = { initiation: 'default', update: 'default', sector: 'default' };
+
+  function fileIconSvg(kind) {
+    if (kind === 'default') {
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6z"/><path d="m9 12 2 2 4-4"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+  }
+
+  function templatesForMode(mode) {
+    return TEMPLATES.filter(t => t.locked || t.modes.includes(mode));
+  }
+
+  function renderTemplates() {
+    const list = document.getElementById('tplList');
+    const empty = document.getElementById('tplEmpty');
+    list.innerHTML = '';
+    const mode = currentMode;
+    const visible = templatesForMode(mode);
+    document.getElementById('tplModeLabel').textContent = SECTIONS[mode].pillLabel;
+    const customCount = visible.filter(t => !t.locked).length;
+    empty.style.display = customCount === 0 ? 'block' : 'none';
+
+    visible.forEach(t => {
+      const isActive = activeTplByMode[mode] === t.id;
+      const card = document.createElement('div');
+      card.className = 'tpl-card' + (isActive ? ' active' : '');
+
+      const allModes = t.modes.length === ALL_MODES.length;
+      const chipsHtml = t.locked
+        ? `<span class="tpl-mode-chip all">All report modes</span>`
+        : t.modes.map(m => `<span class="tpl-mode-chip">${MODE_LABELS[m]}</span>`).join('');
+
+      card.innerHTML = `
+        <div class="tpl-radio"></div>
+        <div class="tpl-icon">${fileIconSvg(t.kind)}</div>
+        <div class="tpl-info">
+          <div class="tpl-name">${t.name}${t.locked ? '<span class="tpl-badge">Default</span>' : ''}</div>
+          <div class="tpl-meta">${t.meta}</div>
+          <div class="tpl-mode-chips">${chipsHtml}</div>
+        </div>
+        <div class="tpl-acts">
+          ${t.locked ? `
+            <button class="tpl-icon-btn" title="OpenLia Default — cannot be removed" disabled style="cursor:default;opacity:.5;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </button>` : `
+            <button class="tpl-icon-btn" title="Edit template settings" data-action="edit" data-id="${t.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+            </button>
+            <button class="tpl-icon-btn danger" title="Delete template" data-action="delete" data-id="${t.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>`}
+        </div>`;
+
+      card.addEventListener('click', (e) => {
+        const action = e.target.closest('[data-action]');
+        if (action) {
+          e.stopPropagation();
+          const id = action.dataset.id;
+          if (action.dataset.action === 'delete') {
+            const idx = TEMPLATES.findIndex(x => x.id === id);
+            if (idx > -1) {
+              TEMPLATES.splice(idx, 1);
+              ALL_MODES.forEach(m => { if (activeTplByMode[m] === id) activeTplByMode[m] = 'default'; });
+              renderTemplates();
+              applyTemplateMode();
+            }
+          }
+          return;
+        }
+        activeTplByMode[mode] = t.id;
+        renderTemplates();
+        applyTemplateMode();
+      });
+      list.appendChild(card);
+    });
+  }
+
+  function applyTemplateMode() {
+    const activeId = activeTplByMode[currentMode];
+    const isDefault = activeId === 'default';
+    const defSections = document.getElementById('defaultTplSections');
+    const infoSec = document.getElementById('customTplInfoSection');
+    defSections.style.display = isDefault ? '' : 'none';
+    infoSec.style.display = isDefault ? 'none' : '';
+    if (!isDefault) {
+      const tpl = TEMPLATES.find(t => t.id === activeId);
+      if (tpl) document.getElementById('customTplName').textContent = tpl.name;
+    }
+  }
+
+  // ===== Upload + Configure flow =====
+  const listView = document.getElementById('tplListView');
+  const configView = document.getElementById('tplConfigView');
+  let pendingUpload = null; // { file, ext, sizeStr }
+
+  function enterConfigView(file) {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const kb = Math.max(1, Math.round(file.size / 1024));
+    const sizeStr = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB';
+    pendingUpload = { file, ext, sizeStr };
+
+    document.getElementById('cfgIcon').innerHTML = fileIconSvg(ext);
+    document.getElementById('cfgFilename').textContent = file.name;
+    document.getElementById('cfgFilemeta').textContent = `${sizeStr} · ${ext.toUpperCase()} · just now`;
+    const nameInput = document.getElementById('cfgNameInput');
+    nameInput.value = file.name.replace(/\.[^.]+$/, '');
+    // Default: select only the current mode
+    document.querySelectorAll('#cfgModes .mode-check').forEach(el => {
+      el.classList.toggle('checked', el.dataset.mode === currentMode);
+    });
+    document.getElementById('cfgModesError').style.display = 'none';
+
+    listView.style.display = 'none';
+    configView.style.display = 'block';
+
+    // Trigger entrance animation
+    const cfg = document.getElementById('tplConfig');
+    cfg.classList.remove('entering');
+    void cfg.offsetWidth; // force reflow to restart animation
+    cfg.classList.add('entering');
+
+    // Scroll the modal body so the config view sits at the top
+    const body = document.querySelector('.modal-body');
+    const tplSection = document.getElementById('tplSection');
+    requestAnimationFrame(() => {
+      if (body && tplSection) {
+        body.scrollTo({ top: tplSection.offsetTop - 4, behavior: 'smooth' });
+      }
+    });
+
+    // Attention pulse + select on the name input, after entrance settles
+    setTimeout(() => {
+      nameInput.classList.remove('attn');
+      void nameInput.offsetWidth;
+      nameInput.classList.add('attn');
+      nameInput.focus();
+      nameInput.select();
+    }, 380);
+  }
+
+  function exitConfigView() {
+    pendingUpload = null;
+    listView.style.display = 'block';
+    configView.style.display = 'none';
+  }
+
+  // Mode checkbox toggles
+  document.querySelectorAll('#cfgModes .mode-check').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      el.classList.toggle('checked');
+    });
+  });
+
+  // Cancel
+  document.getElementById('cfgCancel').addEventListener('click', exitConfigView);
+  document.getElementById('cfgBack').addEventListener('click', exitConfigView);
+
+  // Clear attention pulse once user starts typing
+  document.getElementById('cfgNameInput').addEventListener('input', (e) => {
+    e.target.classList.remove('attn');
+  });
+
+  // Save
+  document.getElementById('cfgSave').addEventListener('click', () => {
+    if (!pendingUpload) return;
+    const name = document.getElementById('cfgNameInput').value.trim() || pendingUpload.file.name.replace(/\.[^.]+$/, '');
+    const modes = [...document.querySelectorAll('#cfgModes .mode-check.checked')].map(el => el.dataset.mode);
+    if (modes.length === 0) {
+      document.getElementById('cfgModesError').style.display = 'block';
+      return;
+    }
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    const id = 'tpl-' + Date.now();
+    TEMPLATES.push({
+      id,
+      name,
+      meta: `${pendingUpload.sizeStr} · ${pendingUpload.ext.toUpperCase()} · Uploaded ${today}`,
+      kind: pendingUpload.ext,
+      modes,
+    });
+    // Auto-activate for the current mode if applicable
+    if (modes.includes(currentMode)) activeTplByMode[currentMode] = id;
+    exitConfigView();
+    renderTemplates();
+    applyTemplateMode();
+  });
+
+  // Upload trigger
+  document.getElementById('uploadBtn').addEventListener('click', () => {
+    document.getElementById('tplFileInput').click();
+  });
+  document.getElementById('tplFileInput').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    enterConfigView(file);
+    e.target.value = '';
+  });
+
+  // Drag & drop on upload zone
+  const zone = document.getElementById('uploadZone');
+  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, (e) => { e.preventDefault(); zone.classList.remove('dragover'); }));
+  zone.addEventListener('drop', (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) enterConfigView(file);
+  });
+
+  renderTemplates();
+  applyTemplateMode();
+
+  // initial render
+  setMode('initiation');
+
+  // Auto-open settings modal so the new Report Template section is visible
+  open();
+</script>
+
+<script src="page-anim.js"></script>
+</body>
+</html>
