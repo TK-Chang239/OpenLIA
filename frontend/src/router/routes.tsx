@@ -22,6 +22,28 @@ import MorningBriefing from "../pages/departments/MorningBriefing";
 import RetailSentiment from "../pages/departments/RetailSentiment";
 /* MacroResearch is lazy-loaded — pulls in echarts which is ~400KB gz. */
 const MacroResearch = lazy(() => import("../pages/departments/MacroResearch"));
+
+/* Demo mode swaps four pages for the adopted mockup designs (Shadow-DOM
+   embeds). Guarded so none of this ships in the normal build. */
+const DEMO = import.meta.env.VITE_DEMO_MODE === "true";
+const DemoSecretary = DEMO ? lazy(() => import("../demo/pages/DemoSecretary")) : null;
+const DemoEquityResearch = DEMO ? lazy(() => import("../demo/pages/DemoEquityResearch")) : null;
+const DemoMorningBriefing = DEMO ? lazy(() => import("../demo/pages/DemoMorningBriefing")) : null;
+const DemoRepository = DEMO ? lazy(() => import("../demo/pages/DemoRepository")) : null;
+
+function demoOr(
+  Demo: React.LazyExoticComponent<React.ComponentType> | null,
+  real: React.ReactNode,
+): React.ReactNode {
+  if (DEMO && Demo) {
+    return (
+      <Suspense fallback={null}>
+        <Demo />
+      </Suspense>
+    );
+  }
+  return real;
+}
 import PanicThermometer from "../pages/departments/PanicThermometer";
 import ReportPrintPage from "../pages/ReportPrintPage";
 import { DeptDisabledBanner } from "../components/sidebar/DeptDisabledBanner";
@@ -99,26 +121,28 @@ export const routes: RouteObject[] = [
                 children: [
                   { path: "/", element: <Home /> },
                   { path: "/home", element: <Navigate to="/" replace /> },
-                  { path: "/repository", element: <Repository /> },
+                  { path: "/repository", element: demoOr(DemoRepository, <Repository />) },
                   { path: "/portfolio", element: <Navigate to="/portfolio/us" replace /> },
                   { path: "/portfolio/:market", element: <PortfolioPage /> },
                   { path: "/memory", element: <MemoryPage /> },
                   { path: "/settings/*", element: <SettingsPage /> },
                   {
                     path: "/secretary",
-                    element: (
+                    element: demoOr(
+                      DemoSecretary,
                       <WithDeptBanner departmentId="secretary">
                         <SecretaryRoute />
-                      </WithDeptBanner>
+                      </WithDeptBanner>,
                     ),
                   },
                   {
                     // v3 single-model engine — the sole equity-research engine.
                     path: "/equity-research",
-                    element: (
+                    element: demoOr(
+                      DemoEquityResearch,
                       <WithDeptBanner departmentId="equity_research">
                         <EquityResearchV3 />
-                      </WithDeptBanner>
+                      </WithDeptBanner>,
                     ),
                   },
                   {
@@ -131,10 +155,11 @@ export const routes: RouteObject[] = [
                   },
                   {
                     path: "/morning-briefing",
-                    element: (
+                    element: demoOr(
+                      DemoMorningBriefing,
                       <WithDeptBanner departmentId="morning_briefing">
                         <MorningBriefing />
-                      </WithDeptBanner>
+                      </WithDeptBanner>,
                     ),
                   },
                   {

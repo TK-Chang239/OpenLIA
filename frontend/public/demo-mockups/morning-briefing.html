@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenLia — Morning Briefings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="colors_and_type.css">
+<link rel="stylesheet" href="page-anim.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--color-bg-base); color: var(--color-text-primary); font-family: var(--font-display); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  :root { --motion-normal: var(--duration-normal); --rule: 1px solid var(--color-border-subtle); }
+  a { color: inherit; }
+
+  .app { display: grid; grid-template-columns: 220px 1fr; height: 100vh; min-height: 0; }
+
+  /* ====================== Sidebar (app shell) ====================== */
+  .sidebar { background: #0D0D0C; color: #B5B3A8; padding: 14px 8px 16px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; }
+  .brand-badge { width: 26px; height: 26px; background: var(--color-accent-primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--color-accent-on); box-shadow: 0 0 10px rgba(212,255,0,0.35); font-family: var(--font-mono); }
+  .brand-name { font-size: 15px; font-weight: 600; color: #F2F1E8; letter-spacing: -0.01em; }
+  .side-group { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #6E6E68; padding: 12px 10px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: #B5B3A8; font-size: 13px; cursor: pointer; position: relative; text-decoration: none; transition: background var(--motion-normal) var(--ease-out), color var(--motion-normal) var(--ease-out); }
+  .nav-item:hover { background: #1C1C1A; color: #F2F1E8; }
+  .nav-item.active { background: #252522; color: #F2F1E8; }
+  .nav-item.active::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 20px; background: var(--color-accent-primary); }
+  .nav-item.active svg { stroke: var(--color-accent-primary); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-pill { margin-left: auto; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; padding: 2px 6px; border-radius: 3px; background: rgba(212,255,0,0.18); color: var(--color-accent-primary); text-transform: uppercase; }
+  .nav-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent-primary); box-shadow: 0 0 6px rgba(212,255,0,0.7); }
+  .side-spacer { flex: 1; }
+  .user-chip { margin: 8px 4px 0; padding: 14px 10px 10px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #2A2A27; }
+  .user-avatar { width: 28px; height: 28px; border-radius: 6px; background: #2E2E2A; color: #F2F1E8; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+  .user-name { font-size: 13px; color: #F2F1E8; }
+  .user-role { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #6E6E68; }
+
+  /* ====================== Content shell ====================== */
+  .content { display: grid; grid-template-rows: auto 1fr; overflow: hidden; min-height: 0; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 0 24px; height: 52px; flex-shrink: 0; border-bottom: var(--rule); background: var(--color-bg-base); }
+  .page-title { font-size: 20px; font-weight: 600; color: var(--color-text-primary); letter-spacing: -0.01em; }
+  .crumb-mode { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); margin-left: 12px; padding-left: 14px; border-left: var(--rule); }
+  .crumb-mode strong { color: var(--color-feedback-success); font-weight: 500; }
+  .topbar-spacer { flex: 1; }
+  .live-pill { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 9999px; background: rgba(212,255,0,0.12); border: 1px solid rgba(212,255,0,0.30); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-feedback-success); }
+  .live-pill::before { content:""; width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent-primary); box-shadow: 0 0 6px rgba(212,255,0,0.7); animation: livePulse 1.6s var(--ease-in-out) infinite; }
+  @keyframes livePulse { 0%,100% { opacity: 0.45; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+  .top-btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border: var(--rule); border-radius: 6px; background: transparent; color: var(--color-text-secondary); font-family: var(--font-display); font-size: 12.5px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .top-btn:hover { background: var(--color-surface-hover); color: var(--color-text-primary); border-color: var(--color-border-strong); }
+  .top-btn svg { width: 14px; height: 14px; }
+  .top-btn .tnum { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); padding-left: 2px; }
+  .top-btn.primary { background: var(--color-accent-primary); color: var(--color-accent-on); border-color: transparent; font-weight: 500; }
+  .top-btn.primary:hover { background: var(--color-accent-hover); color: var(--color-accent-on); }
+
+  .scroll { overflow-y: auto; min-height: 0; padding: 0 0 72px; }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 32px; }
+
+  /* ====================== LEAD — greeting ====================== */
+  .lead { position: relative; padding: 38px 0 24px; overflow: hidden; }
+  .lead > * { position: relative; z-index: 1; }
+  .lead-glow { position: absolute; top: -80px; right: -40px; width: 420px; height: 250px; background: radial-gradient(circle, var(--yellow-200) 0%, transparent 68%); opacity: 0.20; filter: blur(90px); pointer-events: none; z-index: 0; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 9px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--color-feedback-success); }
+  .eyebrow::before { content:""; width: 6px; height: 6px; background: var(--color-accent-primary); border-radius: 50%; box-shadow: 0 0 0 4px rgba(212,255,0,0.18); }
+  .eyebrow .muted { color: var(--color-text-tertiary); }
+  .lead h1 { font-size: clamp(34px, 4.4vw, 46px); font-weight: 500; letter-spacing: -0.025em; line-height: 1.04; margin: 16px 0 0; max-width: 22ch; color: var(--color-text-primary); text-wrap: balance; }
+  .lead h1 .cont { color: var(--color-text-tertiary); }
+  .lead .dek { font-size: 16px; color: var(--color-text-secondary); margin: 16px 0 0; max-width: 70ch; line-height: 1.62; text-wrap: pretty; }
+  .lead .dek strong { color: var(--color-text-primary); font-weight: 500; }
+  .lead .dek .pos { color: var(--color-feedback-success); font-family: var(--font-mono); font-size: 14px; }
+  .lead .dek .neg { color: var(--color-feedback-error); font-family: var(--font-mono); font-size: 14px; }
+
+  /* KPI strip */
+  .kpis { display: flex; flex-wrap: wrap; gap: 0; margin-top: 28px; border-top: var(--rule); border-bottom: var(--rule); }
+  .kpi { flex: 1 1 0; min-width: 150px; padding: 16px 22px 16px 0; display: flex; flex-direction: column; gap: 7px; }
+  .kpi + .kpi { padding-left: 22px; border-left: var(--rule); }
+  .kpi .k { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .kpi .v { font-family: var(--font-mono); font-size: 24px; font-weight: 500; color: var(--color-text-primary); font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -0.01em; }
+  .kpi .v.live { display: inline-flex; align-items: center; gap: 9px; }
+  .kpi .v.live::before { content:""; width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent-primary); box-shadow: 0 0 8px rgba(212,255,0,0.6); animation: livePulse 1.6s var(--ease-in-out) infinite; }
+  .kpi .sub { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; }
+  .kpi .sub .accent { color: var(--color-feedback-success); }
+
+  /* ====================== Controls row ====================== */
+  .controls { display: flex; align-items: center; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+  .search { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: var(--rule); border-radius: 8px; background: var(--color-bg-elevated); flex: 1; max-width: 340px; transition: border-color var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out); }
+  .search:focus-within { border-color: var(--color-border-strong); box-shadow: var(--shadow-input-focus); }
+  .search svg { width: 14px; height: 14px; color: var(--color-text-tertiary); flex-shrink: 0; }
+  .search input { border: 0; background: transparent; outline: none; font-family: var(--font-display); font-size: 13px; color: var(--color-text-primary); width: 100%; }
+  .search input::placeholder { color: var(--color-text-tertiary); }
+  .seg { display: inline-flex; padding: 3px; border: var(--rule); border-radius: 8px; background: var(--color-bg-elevated); }
+  .seg button { background: transparent; border: 0; padding: 5px 12px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-tertiary); cursor: pointer; border-radius: 5px; transition: all var(--motion-normal) var(--ease-out); }
+  .seg button.on { background: var(--color-text-primary); color: var(--color-bg-base); }
+  .seg button:not(.on):hover { color: var(--color-text-primary); }
+  .controls-spacer { flex: 1; }
+  .ghost-link { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-tertiary); cursor: pointer; text-decoration: none; transition: color var(--motion-normal) var(--ease-out); }
+  .ghost-link:hover { color: var(--color-text-primary); }
+  .ghost-link svg { width: 13px; height: 13px; }
+
+  /* ====================== Section labels ====================== */
+  .sec-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-text-tertiary); margin: 34px 0 14px; display: flex; align-items: center; gap: 12px; }
+  .sec-label .t { color: var(--color-text-secondary); white-space: nowrap; flex-shrink: 0; }
+  .sec-label .ln { flex: 1; height: 1px; background: var(--color-border-subtle); min-width: 24px; }
+  .sec-label .count { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); white-space: nowrap; flex-shrink: 0; }
+
+  /* Pre / Post pill */
+  .mkpill { display: inline-flex; align-items: center; gap: 5px; height: 19px; padding: 0 7px; border-radius: 4px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; }
+  .mkpill::before { content:""; width: 4px; height: 4px; border-radius: 50%; }
+  .mkpill.pre { background: rgba(107,130,0,0.12); color: var(--color-feedback-success); }
+  .mkpill.pre::before { background: var(--color-feedback-success); }
+  .mkpill.post { background: rgba(220,150,20,0.14); color: var(--color-feedback-warning); }
+  .mkpill.post::before { background: var(--color-feedback-warning); }
+
+  /* ====================== Generating (live) card ====================== */
+  .gen-card { position: relative; background: var(--color-bg-elevated); border: 1px solid var(--color-border-secondary); border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
+  .gen-card::after { content:""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--color-accent-primary), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: genSweep 1.5s var(--ease-in-out) infinite; }
+  @keyframes genSweep { 0% { background-position: -60% 0; } 100% { background-position: 160% 0; } }
+  .gen-top { display: flex; align-items: center; gap: 12px; padding: 16px 20px 12px; }
+  .gen-spin { width: 30px; height: 30px; border-radius: 8px; background: var(--color-bg-base); border: var(--rule); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .gen-spin svg { width: 16px; height: 16px; color: var(--color-feedback-success); animation: genRot 1s linear infinite; }
+  @keyframes genRot { to { transform: rotate(360deg); } }
+  .gen-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .gen-meta .t { font-size: 15px; font-weight: 500; color: var(--color-text-primary); letter-spacing: -0.01em; }
+  .gen-meta .s { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-feedback-success); display: flex; align-items: center; gap: 8px; }
+  .gen-meta .s .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--color-text-tertiary); }
+  .gen-meta .s .muted { color: var(--color-text-tertiary); }
+  .gen-cancel { margin-left: auto; align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border: var(--rule); border-radius: 6px; background: transparent; color: var(--color-text-secondary); font-family: var(--font-display); font-size: 12px; cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .gen-cancel:hover { border-color: var(--color-feedback-error); color: var(--color-feedback-error); }
+  .gen-steps { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 20px 18px; }
+  .gen-step { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 9999px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; border: var(--rule); background: var(--color-bg-base); color: var(--color-text-tertiary); }
+  .gen-step.done { color: var(--color-feedback-success); border-color: rgba(107,130,0,0.3); background: rgba(107,130,0,0.06); }
+  .gen-step.active { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+  .gen-step svg { width: 11px; height: 11px; }
+  .gen-step.active svg { animation: genRot 1s linear infinite; }
+
+  /* ====================== Featured card (latest briefing) ====================== */
+  .feat { position: relative; display: grid; grid-template-columns: 232px 1fr; background: var(--color-bg-elevated); border: var(--rule); border-radius: 14px; overflow: hidden; cursor: pointer; transition: border-color var(--motion-normal) var(--ease-out), transform var(--motion-normal) var(--ease-out); }
+  .feat::after { content:""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--color-accent-primary); transform: scaleX(0); transform-origin: left; transition: transform var(--duration-slow) var(--ease-out); }
+  .feat:hover { border-color: var(--color-feedback-success); transform: translateY(-3px); }
+  .feat:hover::after { transform: scaleX(1); }
+  .feat-rail { background: #111110; color: #EDECEA; padding: 24px 22px; display: flex; flex-direction: column; gap: 0; position: relative; overflow: hidden; }
+  .feat-rail .rail-glow { position: absolute; bottom: -90px; left: -30px; width: 260px; height: 200px; background: radial-gradient(circle, var(--yellow-200) 0%, transparent 68%); opacity: 0.14; filter: blur(70px); pointer-events: none; }
+  .feat-rail .ed { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #8A8A80; position: relative; }
+  .feat-rail .big-date { font-size: 30px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.04; margin: 12px 0 2px; color: #F4F3EF; position: relative; }
+  .feat-rail .yr { font-family: var(--font-mono); font-size: 12px; color: #8A8A80; position: relative; }
+  .feat-rail .rail-mid { flex: 1; }
+  .feat-rail .rail-row { display: flex; align-items: center; gap: 9px; padding: 14px 0 0; position: relative; }
+  .feat-rail .stamp { font-family: var(--font-mono); font-size: 11px; color: #CFCDC2; font-variant-numeric: tabular-nums; }
+  .feat-rail .rail-foot { display: flex; gap: 18px; padding-top: 16px; margin-top: 16px; border-top: 1px solid #26261F; position: relative; }
+  .feat-rail .rf { display: flex; flex-direction: column; gap: 4px; }
+  .feat-rail .rf .k { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #6E6E64; }
+  .feat-rail .rf .vv { font-family: var(--font-mono); font-size: 13px; color: #EDECEA; font-variant-numeric: tabular-nums; }
+
+  .feat-main { padding: 24px 26px 22px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .feat-byline { display: flex; align-items: center; gap: 11px; }
+  .lia-badge { width: 34px; height: 34px; border-radius: 8px; background: var(--color-accent-primary); color: var(--color-accent-on); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; font-weight: 700; box-shadow: 0 0 12px rgba(212,255,0,0.32); flex-shrink: 0; }
+  .feat-byline .who { display: flex; flex-direction: column; gap: 3px; }
+  .feat-byline .who .n { font-size: 12.5px; color: var(--color-text-primary); font-weight: 500; }
+  .feat-byline .who .m { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); display: flex; align-items: center; gap: 7px; }
+  .feat-byline .who .m .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--color-text-tertiary); }
+  .new-badge { margin-left: auto; align-self: flex-start; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 9999px; background: var(--color-accent-primary); color: var(--color-accent-on); font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+  .feat-head { font-size: 23px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.26; margin: 0; color: var(--color-text-primary); text-wrap: pretty; }
+  .feat-highlights { display: flex; flex-direction: column; gap: 9px; margin: 2px 0 0; }
+  .fh { display: grid; grid-template-columns: 16px 1fr; gap: 9px; align-items: start; }
+  .fh .tick { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent-primary); margin-top: 7px; justify-self: center; box-shadow: 0 0 0 3px rgba(212,255,0,0.16); }
+  .fh p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--color-text-secondary); }
+  .fh p strong { color: var(--color-text-primary); font-weight: 600; }
+  .feat-foot { display: flex; align-items: center; gap: 10px; padding-top: 14px; margin-top: 2px; border-top: var(--rule); flex-wrap: wrap; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tk { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--color-text-secondary); padding: 3px 7px; background: var(--color-bg-code); border-radius: 4px; letter-spacing: 0.02em; }
+  .feat-actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border-radius: 6px; font-family: var(--font-display); font-size: 13px; cursor: pointer; border: var(--rule); background: transparent; color: var(--color-text-secondary); transition: all var(--motion-normal) var(--ease-out); }
+  .btn svg { width: 14px; height: 14px; }
+  .btn.primary { background: var(--color-accent-primary); color: var(--color-accent-on); border-color: transparent; font-weight: 500; }
+  .btn.primary:hover { background: var(--color-accent-hover); }
+  .btn.outline:hover { border-color: var(--color-border-strong); color: var(--color-text-primary); background: var(--color-surface-hover); }
+
+  /* ====================== Report rows ====================== */
+  .rows { display: flex; flex-direction: column; gap: 8px; }
+  .row { position: relative; display: grid; grid-template-columns: 116px 1fr auto; gap: 18px; align-items: center; padding: 15px 18px; background: var(--color-bg-elevated); border: var(--rule); border-radius: 10px; cursor: pointer; transition: border-color var(--motion-normal) var(--ease-out), transform var(--motion-normal) var(--ease-out); }
+  .row::after { content:""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--color-accent-primary); transform: scaleX(0); transform-origin: left; transition: transform var(--duration-slow) var(--ease-out); border-radius: 0 0 10px 10px; }
+  .row:hover { border-color: var(--color-feedback-success); transform: translateY(-2px); }
+  .row:hover::after { transform: scaleX(1); }
+  .row-time { display: flex; flex-direction: column; gap: 7px; }
+  .row-time .clk { font-family: var(--font-mono); font-size: 13px; color: var(--color-text-primary); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+  .row-body { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .row-body .rt { display: flex; align-items: baseline; gap: 9px; }
+  .row-body .rt .ti { font-size: 14.5px; font-weight: 500; color: var(--color-text-primary); letter-spacing: -0.01em; }
+  .row-body .rt .dt { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.04em; }
+  .row-body .sum { font-size: 13px; color: var(--color-text-secondary); line-height: 1.45; margin: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+  .row-body .sum strong { color: var(--color-text-primary); font-weight: 600; }
+  .row-right { display: flex; align-items: center; gap: 16px; }
+  .row-tags { display: flex; gap: 5px; }
+  .row-tags .tk { font-size: 9.5px; padding: 2px 6px; }
+  .row-srcs { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); letter-spacing: 0.04em; white-space: nowrap; }
+  .row-open { width: 30px; height: 30px; border-radius: 6px; border: var(--rule); display: flex; align-items: center; justify-content: center; color: var(--color-text-tertiary); background: var(--color-bg-base); transition: all var(--motion-normal) var(--ease-out); flex-shrink: 0; }
+  .row-open svg { width: 15px; height: 15px; }
+  .row:hover .row-open { border-color: var(--color-feedback-success); color: var(--color-feedback-success); }
+
+  @media (max-width: 1080px) {
+    .feat { grid-template-columns: 1fr; }
+    .feat-rail { flex-direction: row; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .feat-rail .rail-mid { display: none; }
+    .feat-rail .rail-foot { margin-top: 0; padding-top: 0; border-top: none; margin-left: auto; }
+    .row { grid-template-columns: 100px 1fr; }
+    .row-right { display: none; }
+  }
+  @media (max-width: 720px) {
+    .kpi { min-width: 50%; }
+  }
+
+  /* ====================== Run Now modal ====================== */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(13,13,11,0.75); display: none; align-items: center; justify-content: center; z-index: 50; padding: 24px; }
+  .modal-backdrop.open { display: flex; animation: om-fade 160ms var(--ease-out) both; }
+  .modal { width: 100%; max-width: 500px; background: var(--color-bg-elevated); border: var(--rule); border-radius: 12px; box-shadow: var(--shadow-lg); overflow: hidden; animation: modalIn 240ms var(--ease-out) both; }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+  .modal-head { display: flex; align-items: flex-start; gap: 12px; padding: 20px 22px 16px; border-bottom: var(--rule); }
+  .modal-head .mh-ic { width: 36px; height: 36px; border-radius: 8px; background: var(--color-accent-primary); color: var(--color-accent-on); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 12px rgba(212,255,0,0.3); }
+  .modal-head .mh-ic svg { width: 18px; height: 18px; }
+  .modal-head .mh-txt { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  .modal-head h3 { margin: 0; font-size: 17px; font-weight: 600; color: var(--color-text-primary); letter-spacing: -0.01em; }
+  .modal-head .sub { font-size: 12.5px; color: var(--color-text-secondary); line-height: 1.4; }
+  .modal-close { width: 30px; height: 30px; border-radius: 6px; border: 0; background: transparent; color: var(--color-text-tertiary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--motion-normal) var(--ease-out); flex-shrink: 0; }
+  .modal-close:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+  .modal-close svg { width: 17px; height: 17px; }
+  .modal-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 20px; }
+  .field { display: flex; flex-direction: column; gap: 9px; }
+  .field .flbl { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); display: flex; align-items: center; justify-content: space-between; }
+  .field .flbl .hint { text-transform: none; letter-spacing: 0; color: var(--color-text-tertiary); }
+  .selectish { display: flex; align-items: center; justify-content: space-between; height: 42px; padding: 0 14px; border: var(--rule); border-radius: 8px; background: var(--color-bg-input); font-size: 14px; color: var(--color-text-primary); cursor: pointer; transition: border-color var(--motion-normal) var(--ease-out); }
+  .selectish:hover { border-color: var(--color-border-strong); }
+  .selectish .si-meta { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); margin-left: auto; margin-right: 10px; }
+  .selectish svg { width: 15px; height: 15px; color: var(--color-text-tertiary); }
+  .seg-full { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: var(--rule); border-radius: 8px; background: var(--color-bg-input); gap: 3px; }
+  .seg-full button { background: transparent; border: 0; padding: 8px 6px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-tertiary); cursor: pointer; border-radius: 5px; transition: all var(--motion-normal) var(--ease-out); }
+  .seg-full button.on { background: var(--color-text-primary); color: var(--color-bg-base); }
+  .seg-full button:not(.on):hover { color: var(--color-text-primary); }
+  .sec-toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sectog { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 9px; border-radius: 9999px; border: var(--rule); background: var(--color-bg-base); font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--color-text-tertiary); cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .sectog svg { width: 11px; height: 11px; opacity: 0; transition: opacity var(--motion-normal) var(--ease-out); }
+  .sectog.on { color: var(--color-feedback-success); border-color: rgba(107,130,0,0.3); background: rgba(107,130,0,0.06); }
+  .sectog.on svg { opacity: 1; }
+  .ref-row { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border: var(--rule); border-radius: 8px; background: var(--color-bg-base); }
+  .ref-row .rr-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ref-row .rr-txt .n { font-size: 13.5px; font-weight: 500; color: var(--color-text-primary); }
+  .ref-row .rr-txt .s { font-size: 11.5px; color: var(--color-text-secondary); line-height: 1.4; }
+  .toggle { position: relative; width: 38px; height: 22px; border-radius: 9999px; background: var(--color-surface-active); border: var(--rule); cursor: pointer; transition: background var(--motion-normal) var(--ease-out), border-color var(--motion-normal) var(--ease-out); flex-shrink: 0; margin-left: auto; }
+  .toggle::after { content:""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-bg-elevated); box-shadow: var(--shadow-xs); transition: transform var(--motion-normal) var(--ease-spring); }
+  .toggle.on { background: var(--color-accent-primary); border-color: transparent; }
+  .toggle.on::after { transform: translateX(16px); background: var(--color-accent-on); }
+  .modal-foot { display: flex; align-items: center; gap: 10px; padding: 16px 22px; border-top: var(--rule); background: var(--color-bg-base); }
+  .modal-foot .est { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; color: var(--color-text-tertiary); }
+  .modal-foot .mf-actions { margin-left: auto; display: flex; gap: 10px; }
+  .mbtn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 16px; border-radius: 6px; font-family: var(--font-display); font-size: 13px; cursor: pointer; border: var(--rule); background: transparent; color: var(--color-text-secondary); transition: all var(--motion-normal) var(--ease-out); }
+  .mbtn svg { width: 14px; height: 14px; }
+  .mbtn.primary { background: var(--color-accent-primary); color: var(--color-accent-on); border-color: transparent; font-weight: 500; }
+  .mbtn.primary:hover { background: var(--color-accent-hover); }
+  .mbtn.outline:hover { border-color: var(--color-border-strong); color: var(--color-text-primary); background: var(--color-surface-hover); }
+</style>
+</head>
+<body data-om-auto data-screen-label="Morning Briefings — Department">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-badge">LIA</div><span class="brand-name">OpenLia</span></div>
+      <div class="side-group">General</div>
+      <a class="nav-item" href="index-empty.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
+      <a class="nav-item" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Secretary</a>
+      <a class="nav-item" href="portfolio.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Portfolio</a>
+      <a class="nav-item" href="repository.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v9a2 2 0 0 1-2 2H6z"/></svg>Repository</a>
+
+      <div class="side-group">Departments</div>
+      <a class="nav-item" href="equity-research.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Equity Research</a>
+      <a class="nav-item" href="earnings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>Earnings Update</a>
+      <a class="nav-item active" href="morning-briefing-redesign.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>Morning Briefings<span class="nav-dot" title="New report"></span></a>
+      <a class="nav-item" href="retail-sentiment.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>Retail Sentiment</a>
+      <a class="nav-item" href="macro-summary-v2.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Macro Research</a>
+      <a class="nav-item" href="panic-thermometer.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>Panic Thermometer</a>
+
+      <div class="side-spacer"></div>
+      <a class="nav-item" href="settings.html" style="margin: 0 0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82 2 2 0 0 1-2.83 2.83 1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33 2 2 0 0 1-2.83-2.83 1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82 2 2 0 0 1 2.83-2.83 1.65 1.65 0 0 0 1.82.33A1.65 1.65 0 0 0 9 4.68V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33 2 2 0 0 1 2.83 2.83 1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div class="user-chip">
+        <div class="user-avatar">TK</div>
+        <div style="display:flex;flex-direction:column;gap:2px;"><span class="user-name">TK Chang</span><span class="user-role">PERSONAL · v0.4.2</span></div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <span class="page-title">Morning Briefings</span>
+        <span class="crumb-mode">Department · <strong>Active</strong></span>
+        <div class="topbar-spacer"></div>
+        <span class="live-pill">1 Generating</span>
+        <button class="top-btn" onclick="location.href='morning-briefing-schedules.html'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/></svg>Schedules<span class="tnum">2</span></button>
+        <button class="top-btn" onclick="location.href='morning-briefing-library.html'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>Library</button>
+        <button class="top-btn primary" id="runBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Run now</button>
+      </header>
+
+      <div class="scroll">
+        <div class="wrap">
+
+          <!-- ============ LEAD ============ -->
+          <section class="lead">
+            <div class="lead-glow"></div>
+            <span class="eyebrow">Morning Briefings <span class="muted">· Edition #218 · Tue 05 May 2026</span></span>
+            <h1>Good morning, TK. <span class="cont">Quiet tape into payrolls.</span></h1>
+            <p class="dek">Asia closed mixed; Europe leaning red on a soft German IFO. S&amp;P futures <span class="pos">+0.18%</span> with yields drifting lower after a strong 10Y auction overnight. Eight watchlist names printed news — <strong>three</strong> matter before the open.</p>
+
+            <div class="kpis">
+              <div class="kpi">
+                <span class="k">Briefings this week</span>
+                <span class="v">9</span>
+                <span class="sub">2 today · <span class="accent">1 live now</span></span>
+              </div>
+              <div class="kpi">
+                <span class="k">Active schedules</span>
+                <span class="v">2</span>
+                <span class="sub">Pre-market · Post-market</span>
+              </div>
+              <div class="kpi">
+                <span class="k">Next briefing</span>
+                <span class="v live">4:30 PM</span>
+                <span class="sub">Post-market · in 9h 14m</span>
+              </div>
+              <div class="kpi">
+                <span class="k">Coverage</span>
+                <span class="v">24</span>
+                <span class="sub">7 sections · 24 topics</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- ============ CONTROLS ============ -->
+          <div class="controls">
+            <label class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
+              <input type="text" placeholder="Search briefings, tickers, topics…">
+            </label>
+            <div class="seg" role="tablist" aria-label="Filter">
+              <button class="on" aria-selected="true">All</button>
+              <button aria-selected="false">Pre-market</button>
+              <button aria-selected="false">Post-market</button>
+            </div>
+            <div class="controls-spacer"></div>
+            <a class="ghost-link" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Coverage list</a>
+          </div>
+
+          <!-- ============ TODAY ============ -->
+          <div class="sec-label"><span class="t">Today</span><span class="ln"></span><span class="count">Tue · 05 May · 2 briefings</span></div>
+
+          <!-- Live generating card -->
+          <article class="gen-card">
+            <div class="gen-top">
+              <div class="gen-spin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></div>
+              <div class="gen-meta">
+                <span class="t">Generating mid-session briefing…</span>
+                <span class="s">Live <span class="dot"></span> <span class="muted">started 11:48 ET · ~40s remaining</span></span>
+              </div>
+              <button class="gen-cancel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M18 6 6 18M6 6l12 12"/></svg>Cancel</button>
+            </div>
+            <div class="gen-steps">
+              <span class="gen-step done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Executive summary</span>
+              <span class="gen-step done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Global macro</span>
+              <span class="gen-step done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Country news</span>
+              <span class="gen-step active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Stock news</span>
+              <span class="gen-step">Sector news</span>
+              <span class="gen-step">Upcoming preview</span>
+            </div>
+          </article>
+
+          <!-- Featured latest briefing -->
+          <article class="feat">
+            <div class="feat-rail">
+              <div class="rail-glow"></div>
+              <span class="ed">Edition #218</span>
+              <div class="big-date">May 5</div>
+              <span class="yr">2026 · Tuesday</span>
+              <div class="rail-mid"></div>
+              <div class="rail-row"><span class="mkpill pre">Pre-market</span><span class="stamp">07:00 ET</span></div>
+              <div class="rail-foot">
+                <div class="rf"><span class="k">Sources</span><span class="vv">38</span></div>
+                <div class="rf"><span class="k">Read</span><span class="vv">6 min</span></div>
+              </div>
+            </div>
+            <div class="feat-main">
+              <div class="feat-byline">
+                <div class="lia-badge">LIA</div>
+                <div class="who">
+                  <span class="n">Morning Briefing</span>
+                  <span class="m">Compiled 06:58 ET <span class="dot"></span> Confidence 78</span>
+                </div>
+                <span class="new-badge">New</span>
+              </div>
+              <h2 class="feat-head">Payrolls Friday is the only chart that matters this week — and the tape is positioned for a soft print.</h2>
+              <div class="feat-highlights">
+                <div class="fh"><span class="tick"></span><p><strong>NVDA</strong> — Blackwell B200 yields ahead of internal plan; CoWoS allocation expanded for H2. Removes the top supply-side overhang into the May 22 print. Pre +1.8%.</p></div>
+                <div class="fh"><span class="tick"></span><p><strong>UBER</strong> — Q1 bookings $39.8B beat $39.0B; adj. EBITDA +71% y/y. Buyback expanded $7B. Pre +4.2%.</p></div>
+                <div class="fh"><span class="tick"></span><p><strong>PFE</strong> — FDA AdCom votes 13–2 against danuglipron on hepatic safety. Oral-GLP1 narrative shifts to LLY. Pre −6.1%.</p></div>
+              </div>
+              <div class="feat-foot">
+                <div class="tags">
+                  <span class="tk">NFP FRI</span><span class="tk">NVDA</span><span class="tk">UBER</span><span class="tk">PFE</span><span class="tk">10Y</span>
+                </div>
+                <div class="feat-actions">
+                  <button class="btn outline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</button>
+                  <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>Open report</button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ============ THIS WEEK ============ -->
+          <div class="sec-label"><span class="t">This week</span><span class="ln"></span><span class="count">5 briefings</span></div>
+
+          <div class="rows">
+            <article class="row">
+              <div class="row-time"><span class="clk">4:30 PM ET</span><span class="mkpill post">Post-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Mon · May 4</span></div>
+                <p class="sum"><strong>AMD</strong> beat with cautious DC commentary; <strong>SMCI</strong> guidance trimmed on margin pressure. Indices closed mixed.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">AMD</span><span class="tk">SMCI</span></div>
+                <span class="row-srcs">31 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+
+            <article class="row">
+              <div class="row-time"><span class="clk">7:00 AM ET</span><span class="mkpill pre">Pre-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Mon · May 4</span></div>
+                <p class="sum">Soft European data; <strong>10Y</strong> auction strong. Two earnings calls into the open — <strong>UBER</strong>, <strong>BP</strong>.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">UBER</span><span class="tk">BP</span></div>
+                <span class="row-srcs">28 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+
+            <article class="row">
+              <div class="row-time"><span class="clk">4:30 PM ET</span><span class="mkpill post">Post-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Fri · May 1</span></div>
+                <p class="sum">Payrolls 158k vs 175k consensus. Yields lower across the curve; <strong>SMH</strong> +1.8% led semis higher.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">NFP</span><span class="tk">SMH</span></div>
+                <span class="row-srcs">34 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+
+            <article class="row">
+              <div class="row-time"><span class="clk">7:00 AM ET</span><span class="mkpill pre">Pre-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Fri · May 1</span></div>
+                <p class="sum"><strong>AAPL</strong> after-hours strong; cautious tone into payrolls. ISM manufacturing in focus pre-open.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">AAPL</span><span class="tk">ISM</span></div>
+                <span class="row-srcs">26 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+
+            <article class="row">
+              <div class="row-time"><span class="clk">4:30 PM ET</span><span class="mkpill post">Post-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Thu · Apr 30</span></div>
+                <p class="sum">FOMC held; <strong>Powell</strong> pushed back on June. Dot plot revised lower for 2026; duration bid into the close.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">FOMC</span><span class="tk">FED</span></div>
+                <span class="row-srcs">40 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+          </div>
+
+          <!-- ============ EARLIER ============ -->
+          <div class="sec-label"><span class="t">Earlier</span><span class="ln"></span><span class="count">35 in archive</span></div>
+
+          <div class="rows">
+            <article class="row">
+              <div class="row-time"><span class="clk">7:00 AM ET</span><span class="mkpill pre">Pre-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Thu · Apr 30</span></div>
+                <p class="sum">Pre-FOMC drift. <strong>ADP</strong> softer than consensus; quarterly refunding announcement balanced.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">ADP</span><span class="tk">FOMC</span></div>
+                <span class="row-srcs">29 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+
+            <article class="row">
+              <div class="row-time"><span class="clk">4:30 PM ET</span><span class="mkpill post">Post-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Wed · Apr 29</span></div>
+                <p class="sum"><strong>MSFT</strong> and <strong>GOOGL</strong> beat on cloud; capex guides raised. Mega-cap breadth firms into month-end.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">MSFT</span><span class="tk">GOOGL</span></div>
+                <span class="row-srcs">36 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+
+            <article class="row">
+              <div class="row-time"><span class="clk">7:00 AM ET</span><span class="mkpill pre">Pre-market</span></div>
+              <div class="row-body">
+                <div class="rt"><span class="ti">Morning Briefing</span><span class="dt">Wed · Apr 29</span></div>
+                <p class="sum">JOLTS preview; <strong>JPY</strong> intervention chatter resurfaces after USD/JPY tags 155. Crude steady.</p>
+              </div>
+              <div class="row-right">
+                <div class="row-tags"><span class="tk">JPY</span><span class="tk">JOLTS</span></div>
+                <span class="row-srcs">25 sources</span>
+                <span class="row-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+              </div>
+            </article>
+          </div>
+
+          <div style="display:flex;justify-content:center;margin-top:24px;">
+            <button class="btn outline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>Open library — 42 briefings</button>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ============ RUN NOW MODAL ============ -->
+  <div class="modal-backdrop" id="runModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="runTitle">
+      <div class="modal-head">
+        <div class="mh-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></div>
+        <div class="mh-txt">
+          <h3 id="runTitle">Run a briefing now</h3>
+          <span class="sub">On-demand edition. Doesn't change your schedule — LIA emails you when it's ready.</span>
+        </div>
+        <button class="modal-close" id="runClose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <span class="flbl">Template</span>
+          <div class="selectish">Standard Morning Briefing <span class="si-meta">7 sections</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+
+        <div class="field">
+          <span class="flbl">Edition</span>
+          <div class="seg-full" id="editionSeg" role="tablist">
+            <button aria-selected="false">Pre-market</button>
+            <button class="on" aria-selected="true">Mid-session</button>
+            <button aria-selected="false">Post-market</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="flbl">Sections <span class="hint">tap to include</span></span>
+          <div class="sec-toggles" id="secToggles">
+            <span class="sectog on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Exec summary</span>
+            <span class="sectog on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Global macro</span>
+            <span class="sectog on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Country news</span>
+            <span class="sectog on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Market news</span>
+            <span class="sectog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sector news</span>
+            <span class="sectog on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Stock news</span>
+            <span class="sectog on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Upcoming</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="ref-row">
+            <div class="rr-txt">
+              <span class="n">Reference portfolio</span>
+              <span class="s">Pull tickers from your Portfolio into Stock news</span>
+            </div>
+            <span class="toggle on" id="refToggle" role="switch" aria-checked="true"></span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="est">~45s · 24 topics</span>
+        <div class="mf-actions">
+          <button class="mbtn outline" id="runCancel">Cancel</button>
+          <button class="mbtn primary" id="runGenerate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>Generate briefing</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="page-anim.js"></script>
+  <script>
+    // Segmented filter toggle (display only)
+    document.querySelectorAll('.seg button, .seg-full button').forEach(function(b){
+      b.addEventListener('click', function(){
+        b.parentElement.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); x.setAttribute('aria-selected','false'); });
+        b.classList.add('on'); b.setAttribute('aria-selected','true');
+      });
+    });
+
+    // Run Now modal
+    (function(){
+      var modal = document.getElementById('runModal');
+      function close(){ modal.classList.remove('open'); }
+      document.getElementById('runBtn').addEventListener('click', function(){ modal.classList.add('open'); });
+      document.getElementById('runClose').addEventListener('click', close);
+      document.getElementById('runCancel').addEventListener('click', close);
+      modal.addEventListener('click', function(e){ if (e.target === modal) close(); });
+      document.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+      document.getElementById('runGenerate').addEventListener('click', function(){
+        close();
+        var gen = document.querySelector('.gen-card');
+        if (gen) { gen.style.outline = '2px solid var(--color-accent-primary)'; gen.style.outlineOffset = '3px'; setTimeout(function(){ gen.style.outline = ''; gen.style.outlineOffset = ''; }, 1400); }
+      });
+      // Section include toggles
+      document.querySelectorAll('#secToggles .sectog').forEach(function(s){
+        s.addEventListener('click', function(){ s.classList.toggle('on'); });
+      });
+      // Reference portfolio toggle
+      var ref = document.getElementById('refToggle');
+      ref.addEventListener('click', function(){ var on = ref.classList.toggle('on'); ref.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    })();
+  </script>
+</body>
+</html>

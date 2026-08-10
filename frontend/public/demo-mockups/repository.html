@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenLia — Repository</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="colors_and_type.css">
+<link rel="stylesheet" href="page-anim.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--color-bg-base); color: var(--color-text-primary); font-family: var(--font-display); -webkit-font-smoothing: antialiased; }
+
+  .app { display: grid; grid-template-columns: 220px 1fr; height: 100vh; min-height: 720px; }
+
+  /* ===== Sidebar (matches portfolio) ===== */
+  .sidebar { background: #0D0D0C; color: #B5B3A8; padding: 14px 8px 16px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; }
+  .brand-badge { width: 26px; height: 26px; background: var(--color-accent-primary); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--color-accent-on); box-shadow: 0 0 10px rgba(212,255,0,0.35); }
+  .brand-name { font-size: 15px; font-weight: 600; color: #F2F1E8; letter-spacing: -0.01em; }
+  .side-group { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #6E6E68; padding: 12px 10px 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; color: #B5B3A8; font-size: 13px; cursor: pointer; position: relative; transition: background var(--motion-normal) var(--ease-out), color var(--motion-normal) var(--ease-out); }
+  .nav-item:hover { background: #1C1C1A; color: #F2F1E8; }
+  .nav-item.active { background: #252522; color: #F2F1E8; }
+  .nav-item.active::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 2px; height: 20px; background: var(--color-accent-primary); }
+  .nav-item.active svg { stroke: var(--color-accent-primary); }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent-primary); box-shadow: 0 0 6px rgba(212,255,0,0.7); }
+  .side-spacer { flex: 1; }
+  .user-chip { margin: 8px 4px 0; padding: 14px 10px 10px; display: flex; align-items: center; gap: 10px; border-top: 1px solid #2A2A27; }
+  .user-avatar { width: 28px; height: 28px; border-radius: 6px; background: #2E2E2A; color: #F2F1E8; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+  .user-name { font-size: 13px; color: #F2F1E8; }
+  .user-role { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #6E6E68; }
+
+  /* ===== Content shell ===== */
+  .content { display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 14px 28px; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-base); }
+  .crumb { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-secondary); }
+  .crumb strong { color: var(--color-text-primary); font-weight: 600; }
+  .status-row { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  .pill-live { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 8px; border-radius: 9999px; border: 1px solid var(--yellow-600); background: rgba(212,255,0,0.08); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--color-feedback-success); }
+  .pulse { width: 7px; height: 7px; background: var(--yellow-600); border-radius: 50%; animation: pulse 1.8s var(--ease-in-out) infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(168,204,0,0.6);} 50% { box-shadow: 0 0 0 6px rgba(168,204,0,0); } }
+  .stamp { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--color-text-tertiary); }
+
+  /* ===== Repository main ===== */
+  .repo { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Page header (56px per spec) */
+  .repo-head { height: 56px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid var(--color-border-subtle); background: var(--color-bg-base); flex-shrink: 0; }
+  .repo-title { font-size: 20px; font-weight: 600; color: var(--color-text-primary); letter-spacing: -0.01em; white-space: nowrap; }
+  .repo-title .count { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); margin-left: 12px; font-weight: 400; white-space: nowrap; }
+
+  /* Controls bar (search + filters) */
+  .controls { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--color-border-subtle); }
+  .search { flex: 1; height: 36px; position: relative; }
+  .search input { width: 100%; height: 100%; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md, 6px); padding: 0 12px 0 36px; font-family: var(--font-display); font-size: 13.5px; color: var(--color-text-primary); outline: none; transition: border var(--motion-normal) var(--ease-out), box-shadow var(--motion-normal) var(--ease-out); }
+  .search input::placeholder { color: var(--color-text-tertiary); }
+  .search input:focus { border-color: var(--color-text-secondary); box-shadow: 0 0 0 3px rgba(212,255,0,0.10); }
+  .search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--color-text-tertiary); pointer-events: none; }
+  .search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 10px; color: var(--color-text-tertiary); border: 1px solid var(--color-border-subtle); border-radius: 3px; padding: 1px 5px; background: var(--color-bg-base); }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: var(--radius-md, 6px); border: 1px solid var(--color-border-subtle); background: var(--color-bg-elevated); font-family: var(--font-display); font-size: 12.5px; font-weight: 500; color: var(--color-text-secondary); cursor: pointer; transition: all var(--motion-normal) var(--ease-out); }
+  .btn:hover { border-color: var(--color-text-secondary); color: var(--color-text-primary); }
+  .btn svg { width: 14px; height: 14px; }
+  .btn.active-filters { border-color: var(--color-accent-primary); color: var(--color-accent-on); background: rgba(212,255,0,0.10); }
+  .btn .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 5px; border-radius: 9999px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; background: var(--color-accent-primary); color: var(--color-accent-on); margin-left: 2px; }
+
+  /* Active filter chips row */
+  .chips-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--color-border-subtle); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px 0 10px; border-radius: 9999px; background: rgba(212,255,0,0.10); border: 1px solid rgba(168,204,0,0.45); font-size: 12px; color: var(--color-accent-on); font-weight: 500; }
+  .chip-x { display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 9999px; cursor: pointer; opacity: 0.7; transition: opacity var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out); }
+  .chip-x:hover { opacity: 1; background: rgba(61,77,0,0.10); }
+  .chip-x svg { width: 9px; height: 9px; }
+  .chip-clear { margin-left: auto; font-size: 12px; color: var(--color-text-secondary); cursor: pointer; transition: color var(--motion-fast) var(--ease-out); }
+  .chip-clear:hover { color: var(--color-text-primary); }
+
+  /* Sort row */
+  .sort-row { display: flex; align-items: center; padding: 10px 24px 6px; gap: 12px; }
+  .sort-trigger { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--color-text-secondary); cursor: pointer; transition: color var(--motion-fast) var(--ease-out); }
+  .sort-trigger:hover { color: var(--color-text-primary); }
+  .sort-trigger svg { width: 12px; height: 12px; }
+  .sort-trigger b { color: var(--color-text-primary); font-weight: 500; margin-left: 3px; }
+  .sort-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--color-text-tertiary); margin-left: auto; text-transform: uppercase; white-space: nowrap; }
+
+  /* Reports list */
+  .list-wrap { flex: 1; overflow-y: auto; padding: 4px 24px 28px; }
+  .list { border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg, 10px); overflow: hidden; background: var(--color-bg-base); }
+  .row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--color-border-subtle); cursor: pointer; transition: background var(--motion-fast) var(--ease-out); position: relative; }
+  .row:last-child { border-bottom: none; }
+  .row:hover { background: var(--color-surface-hover, rgba(212,255,0,0.04)); }
+  .row.hover-state { background: var(--color-surface-hover, rgba(212,255,0,0.05)); }
+
+  .file-icon { width: 36px; height: 36px; flex-shrink: 0; border-radius: 6px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary); }
+  .file-icon svg { width: 18px; height: 18px; }
+  .row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .row-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .row-title .name { font-size: 14.5px; font-weight: 500; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .ext-pill { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; padding: 1px 5px; border-radius: 3px; background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); color: var(--color-text-tertiary); flex-shrink: 0; white-space: nowrap; }
+  .row-meta { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--color-text-secondary); flex-wrap: wrap; }
+  .row-meta .dot { width: 2px; height: 2px; border-radius: 50%; background: var(--color-text-tertiary); display: inline-block; }
+  .row-meta .ts { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--color-text-tertiary); white-space: nowrap; }
+  .row-meta .ts b { color: var(--color-text-secondary); font-weight: 500; }
+
+  /* Department badges (per spec, distinct muted tints) */
+  .dept { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 9999px; line-height: 1.4; white-space: nowrap; }
+  .dept.equity { background: rgba(60,120,180,0.10); color: #2D5A8A; border: 1px solid rgba(60,120,180,0.25); }
+  .dept.earnings { background: rgba(168,204,0,0.10); color: var(--color-accent-on); border: 1px solid rgba(168,204,0,0.30); }
+  .dept.morning { background: rgba(212,255,0,0.12); color: var(--color-accent-on); border: 1px solid rgba(212,255,0,0.40); }
+  .dept.retail { background: rgba(60,120,180,0.10); color: #2D5A8A; border: 1px solid rgba(60,120,180,0.25); }
+  .dept.macro { background: rgba(200,140,40,0.10); color: #8A5A0F; border: 1px solid rgba(200,140,40,0.25); }
+  .dept.secretary { background: rgba(120,80,160,0.10); color: #5C3D80; border: 1px solid rgba(120,80,160,0.25); }
+
+  /* Row actions */
+  .row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; opacity: 0; transition: opacity var(--motion-fast) var(--ease-out); }
+  .row:hover .row-actions, .row.hover-state .row-actions { opacity: 1; }
+  .icon-btn { width: 30px; height: 30px; border-radius: 5px; border: none; background: transparent; color: var(--color-text-secondary); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all var(--motion-fast) var(--ease-out); }
+  .icon-btn:hover { background: var(--color-surface-active, rgba(0,0,0,0.05)); color: var(--color-text-primary); }
+  .icon-btn.danger:hover { background: rgba(196,46,46,0.10); color: var(--color-feedback-error); }
+  .icon-btn svg { width: 14px; height: 14px; }
+
+  /* End-of-list indicator */
+  .end-of-list { text-align: center; padding: 18px 0 4px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-text-tertiary); }
+
+  /* Modal — Remove confirmation */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(20,20,18,0.45); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { width: 400px; max-width: calc(100vw - 32px); background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg, 10px); box-shadow: 0 12px 32px rgba(20,20,18,0.18); padding: 22px 22px 18px; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .modal-title { font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
+  .modal-close { width: 24px; height: 24px; border-radius: 4px; border: none; background: transparent; color: var(--color-text-tertiary); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .modal-close:hover { color: var(--color-text-primary); background: var(--color-surface-hover, rgba(0,0,0,0.04)); }
+  .modal-close svg { width: 12px; height: 12px; }
+  .modal-body { font-size: 13.5px; line-height: 1.55; color: var(--color-text-secondary); }
+  .modal-body b { color: var(--color-text-primary); font-weight: 500; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 22px; }
+  .btn-cancel { height: 34px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--color-border-subtle); background: var(--color-bg-base); font-size: 13px; color: var(--color-text-secondary); cursor: pointer; }
+  .btn-cancel:hover { border-color: var(--color-text-secondary); color: var(--color-text-primary); }
+  .btn-remove { height: 34px; padding: 0 14px; border-radius: 6px; border: none; background: var(--color-feedback-error); color: #FFFFFF; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-remove:hover { opacity: 0.9; }
+
+  /* Toast (status only — not actively shown but stub for verifier) */
+  a.nav-item, .nav-item { text-decoration: none; }
+
+  /* ============================================================
+     OPENING ANIMATIONS — repository page
+     ============================================================ */
+
+  /* Sidebar slides in from the left — feels like the rail "snaps in" */
+  @keyframes repo-side-in {
+    from { transform: translateX(-24px); opacity: 0; }
+    to   { transform: none; opacity: 1; }
+  }
+  .sidebar { animation: repo-side-in 380ms cubic-bezier(.2,.7,.2,1) both; }
+  .sidebar .brand        { animation: om-fade-up 360ms cubic-bezier(.2,.7,.2,1) both; animation-delay: 80ms; }
+  .sidebar .side-group,
+  .sidebar .nav-item,
+  .sidebar .side-spacer + .nav-item,
+  .sidebar .user-chip    { animation: om-fade-up 320ms cubic-bezier(.2,.7,.2,1) both; }
+  .sidebar > *:nth-child(2)  { animation-delay: 120ms; }
+  .sidebar > *:nth-child(3)  { animation-delay: 150ms; }
+  .sidebar > *:nth-child(4)  { animation-delay: 180ms; }
+  .sidebar > *:nth-child(5)  { animation-delay: 210ms; }
+  .sidebar > *:nth-child(6)  { animation-delay: 240ms; }
+  .sidebar > *:nth-child(7)  { animation-delay: 280ms; }
+  .sidebar > *:nth-child(8)  { animation-delay: 305ms; }
+  .sidebar > *:nth-child(9)  { animation-delay: 330ms; }
+  .sidebar > *:nth-child(10) { animation-delay: 355ms; }
+  .sidebar > *:nth-child(11) { animation-delay: 380ms; }
+  .sidebar > *:nth-child(12) { animation-delay: 405ms; }
+  .sidebar > *:nth-child(13) { animation-delay: 430ms; }
+
+  /* Active nav-item gets a special accent bar that draws */
+  @keyframes repo-active-mark {
+    from { transform: translateY(-50%) scaleY(0); }
+    to   { transform: translateY(-50%) scaleY(1); }
+  }
+  .sidebar .nav-item.active::before {
+    transform-origin: center;
+    animation: repo-active-mark 280ms cubic-bezier(.4,1.6,.5,1) both;
+    animation-delay: 520ms;
+  }
+
+  /* Content shell fades on top of the sidebar entrance */
+  .content {
+    animation: om-fade 280ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 60ms;
+  }
+
+  /* Topbar fade-down */
+  @keyframes repo-topbar-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .topbar { animation: repo-topbar-in 320ms cubic-bezier(.2,.7,.2,1) both; animation-delay: 100ms; }
+
+  /* Page header — title slides in from left, then the count scrambles */
+  .repo-head { overflow: hidden; }
+  .repo-title {
+    animation: om-slide-in-left 380ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 280ms;
+  }
+
+  /* Bottom border of section dividers draws in */
+  @keyframes repo-rule-draw { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+  .repo-head::after,
+  .controls::after,
+  .chips-row::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: var(--color-border-subtle);
+    transform-origin: left center;
+    animation: repo-rule-draw 480ms cubic-bezier(.2,.7,.2,1) both;
+  }
+  .repo-head, .controls, .chips-row { position: relative; }
+  .repo-head::after { animation-delay: 300ms; }
+  .controls::after  { animation-delay: 360ms; }
+  .chips-row::after { animation-delay: 480ms; }
+
+  /* Search input — width grows from the right side as it appears */
+  @keyframes repo-search-in {
+    from { opacity: 0; clip-path: inset(0 100% 0 0); }
+    to   { opacity: 1; clip-path: inset(0 0 0 0); }
+  }
+  .controls .search {
+    animation: repo-search-in 460ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 360ms;
+  }
+  .controls .btn {
+    animation: om-pop 320ms cubic-bezier(.4,1.6,.5,1) both;
+    animation-delay: 560ms;
+  }
+  /* Filter "2" badge — spring in after button */
+  .controls .btn .badge {
+    animation: om-pop 320ms cubic-bezier(.4,1.6,.5,1) both;
+    animation-delay: 720ms;
+  }
+
+  /* Filter chips pop in with a spring */
+  .chips-row .chip {
+    animation: om-pop 340ms cubic-bezier(.4,1.6,.5,1) both;
+  }
+  .chips-row .chip:nth-of-type(1) { animation-delay: 620ms; }
+  .chips-row .chip:nth-of-type(2) { animation-delay: 700ms; }
+  .chips-row .chip-clear {
+    animation: om-fade 280ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 800ms;
+  }
+
+  /* Sort row fades in */
+  .sort-row {
+    animation: om-fade 280ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 760ms;
+  }
+
+  /* ---------- List ---------- */
+
+  /* The list container itself gets a faint border-draw + scanline sweep.
+     We animate ONLY the border colour so child rows can fade in
+     independently without being multiplied by a low-opacity parent. */
+  @keyframes repo-list-frame-in {
+    from { border-color: transparent; box-shadow: 0 0 0 0 rgba(212,255,0,0); }
+    to   { border-color: var(--color-border-subtle); box-shadow: 0 0 0 0 rgba(212,255,0,0); }
+  }
+  .list-wrap .list {
+    position: relative;
+    animation: repo-list-frame-in 420ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 820ms;
+  }
+
+  /* Terminal scanline sweep over the list (yellow horizontal bar) */
+  @keyframes repo-scanline-sweep {
+    0%   { top: -2px; opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+  .list-wrap .list::before {
+    content: "";
+    position: absolute; left: 0; right: 0; top: -2px; height: 2px;
+    background: linear-gradient(90deg, transparent 0%, rgba(212,255,0,0.55) 18%, rgba(212,255,0,0.85) 50%, rgba(212,255,0,0.55) 82%, transparent 100%);
+    box-shadow: 0 0 18px rgba(212,255,0,0.55), 0 0 6px rgba(212,255,0,0.85);
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    animation: repo-scanline-sweep 900ms cubic-bezier(.4,.0,.4,1) both;
+    animation-delay: 900ms;
+  }
+
+  /* Each row slides in from left with a tighter rhythm */
+  @keyframes repo-row-in {
+    from { opacity: 0; transform: translate3d(-18px,0,0); }
+    to   { opacity: 1; transform: none; }
+  }
+  /* Override the generic data-om-stagger fade-up for these rows */
+  .list[data-om-stagger] > .row { animation: repo-row-in 380ms cubic-bezier(.2,.7,.2,1) both; }
+  .list[data-om-stagger] > .row:nth-child(1)  { animation-delay: 920ms; }
+  .list[data-om-stagger] > .row:nth-child(2)  { animation-delay: 980ms; }
+  .list[data-om-stagger] > .row:nth-child(3)  { animation-delay: 1030ms; }
+  .list[data-om-stagger] > .row:nth-child(4)  { animation-delay: 1075ms; }
+  .list[data-om-stagger] > .row:nth-child(5)  { animation-delay: 1115ms; }
+  .list[data-om-stagger] > .row:nth-child(6)  { animation-delay: 1150ms; }
+  .list[data-om-stagger] > .row:nth-child(7)  { animation-delay: 1180ms; }
+  .list[data-om-stagger] > .row:nth-child(8)  { animation-delay: 1208ms; }
+  .list[data-om-stagger] > .row:nth-child(9)  { animation-delay: 1232ms; }
+  .list[data-om-stagger] > .row:nth-child(10) { animation-delay: 1252ms; }
+
+  /* File icon pops in slightly AFTER the row arrives */
+  @keyframes repo-icon-pop {
+    0%   { opacity: 0; transform: scale(.6) rotate(-6deg); }
+    60%  { opacity: 1; transform: scale(1.06) rotate(2deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0); }
+  }
+  .row .file-icon {
+    animation: repo-icon-pop 380ms cubic-bezier(.4,1.6,.5,1) both;
+  }
+  .row:nth-child(1)  .file-icon { animation-delay: 1020ms; }
+  .row:nth-child(2)  .file-icon { animation-delay: 1080ms; }
+  .row:nth-child(3)  .file-icon { animation-delay: 1130ms; }
+  .row:nth-child(4)  .file-icon { animation-delay: 1175ms; }
+  .row:nth-child(5)  .file-icon { animation-delay: 1215ms; }
+  .row:nth-child(6)  .file-icon { animation-delay: 1250ms; }
+  .row:nth-child(7)  .file-icon { animation-delay: 1280ms; }
+  .row:nth-child(8)  .file-icon { animation-delay: 1308ms; }
+  .row:nth-child(9)  .file-icon { animation-delay: 1332ms; }
+  .row:nth-child(10) .file-icon { animation-delay: 1352ms; }
+
+  /* The selected (hover-state) row gets a left accent bar that DRAWS in last */
+  .row.hover-state { overflow: hidden; }
+  .row.hover-state::before {
+    content: "";
+    position: absolute; left: 0; top: 6px; bottom: 6px;
+    width: 2px; background: var(--color-accent-primary);
+    box-shadow: 0 0 8px rgba(212,255,0,0.7);
+    transform-origin: top center;
+    transform: scaleY(0);
+    animation: repo-mark-draw 520ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 1500ms;
+  }
+  @keyframes repo-mark-draw {
+    0%   { transform: scaleY(0); opacity: 0; }
+    20%  { opacity: 1; }
+    100% { transform: scaleY(1); opacity: 1; }
+  }
+  /* And its background "selected" tint eases in */
+  .row.hover-state {
+    background: transparent;
+    animation: repo-row-in 380ms cubic-bezier(.2,.7,.2,1) both,
+               repo-hover-tint 480ms cubic-bezier(.2,.7,.2,1) 1450ms both;
+  }
+  @keyframes repo-hover-tint {
+    from { background-color: transparent; }
+    to   { background-color: var(--color-surface-hover, rgba(212,255,0,0.05)); }
+  }
+
+  /* End-of-list label fades + scrambles in at the very end */
+  .end-of-list {
+    animation: om-fade 320ms cubic-bezier(.2,.7,.2,1) both;
+    animation-delay: 1600ms;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+      <div class="brand"><div class="brand-badge">LIA</div><span class="brand-name">OpenLia</span></div>
+      <div class="side-group">General</div>
+      <a class="nav-item" href="index-empty.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</a>
+      <a class="nav-item" href="index.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Secretary</a>
+      <a class="nav-item" href="portfolio.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Portfolio</a>
+      <a class="nav-item active" href="repository.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v9a2 2 0 0 1-2 2H6z"/></svg>Repository</a>
+
+      <div class="side-group">Departments</div>
+      <a class="nav-item" href="equity-research.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Equity Research</a>
+      <a class="nav-item" href="earnings.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>Earnings Update</a>
+      <a class="nav-item" href="morning-briefing-redesign.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>Morning Briefings<span class="nav-dot" title="New report"></span></a>
+      <a class="nav-item" href="retail-sentiment.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>Retail Sentiment</a>
+      <a class="nav-item" href="macro-summary-v2.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>Macro Research</a>
+      <a class="nav-item" href="panic-thermometer.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>Panic Thermometer</a>
+
+      <div class="side-spacer"></div>
+      <a class="nav-item" href="settings.html" style="margin: 0 0 6px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82 2 2 0 0 1-2.83 2.83 1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33 2 2 0 0 1-2.83-2.83 1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82 2 2 0 0 1 2.83-2.83 1.65 1.65 0 0 0 1.82.33A1.65 1.65 0 0 0 9 4.68V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33 2 2 0 0 1 2.83 2.83 1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+      <div class="user-chip">
+        <div class="user-avatar">TK</div>
+        <div style="display:flex;flex-direction:column;gap:2px;"><span class="user-name">TK Chang</span><span class="user-role">PERSONAL · v0.4.2</span></div>
+      </div>
+    </aside>
+
+  <!-- CONTENT -->
+  <section class="content">
+    <div class="topbar">
+      <span class="crumb">Home <span style="color:var(--color-text-tertiary);margin:0 6px;">/</span> <strong>Repository</strong></span>
+      <div class="status-row" data-om-stagger="left">
+        <span class="pill-live"><span class="pulse"></span><span data-om-scramble>LIVE_FEED_ACTIVE</span></span>
+        <span class="stamp" data-om-scramble data-om-delay="80">TUE · 08:14 UTC</span>
+        <span class="stamp" data-om-scramble data-om-delay="160">CONGRESS_ACTIVE: 119</span>
+      </div>
+    </div>
+
+    <div class="repo">
+      <!-- Page header -->
+      <div class="repo-head">
+        <span class="repo-title om-fade-up">Repository <span class="count" data-om-scramble data-om-delay="200">52 SAVED REPORTS</span></span>
+      </div>
+
+      <!-- Search + Filters -->
+      <div class="controls">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" placeholder="Search reports by filename…" />
+          <kbd>⌘K</kbd>
+        </div>
+        <button class="btn active-filters">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="14" y2="6"/><line x1="18" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="6" y2="12"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/><line x1="18" y1="18" x2="20" y2="18"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></svg>
+          Filters
+          <span class="badge">2</span>
+        </button>
+      </div>
+
+      <!-- Active filter chips row -->
+      <div class="chips-row">
+        <span class="chip">
+          Department: Equity Research
+          <span class="chip-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="4" x2="20" y2="20"/><line x1="20" y1="4" x2="4" y2="20"/></svg></span>
+        </span>
+        <span class="chip">
+          Date Saved: Apr 1 – Apr 30, 2026
+          <span class="chip-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="4" x2="20" y2="20"/><line x1="20" y1="4" x2="4" y2="20"/></svg></span>
+        </span>
+        <span class="chip-clear">Clear all</span>
+      </div>
+
+      <!-- Sort -->
+      <div class="sort-row">
+        <span class="sort-trigger">
+          Sort: <b>Date Saved (newest)</b>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </span>
+        <span class="sort-meta" data-om-scramble data-om-delay="500">Showing 14 of 52 · 2 filters applied</span>
+      </div>
+
+      <!-- List -->
+      <div class="list-wrap">
+        <div class="list" data-om-stagger>
+
+          <!-- Row 1 -->
+          <div class="row hover-state">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">AAPL-initiation-coverage.pdf</span>
+                <span class="ext-pill">PDF · 12 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept equity">Equity Research</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>APR 3</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>APR 5</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 2 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">AAPL-earnings-q1-2026.pdf</span>
+                <span class="ext-pill">PDF · 8 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept earnings">Earnings Update</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>APR 2</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>APR 4</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 3 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">q1-macro-briefing.pdf</span>
+                <span class="ext-pill">PDF · 24 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept macro">Macro Research</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>APR 1</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>APR 1</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 4 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">NVDA-q3-deep-dive.pdf</span>
+                <span class="ext-pill">PDF · 18 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept equity">Equity Research</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>MAR 28</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>MAR 29</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 5 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">morning-briefing-apr-04.pdf</span>
+                <span class="ext-pill">PDF · 4 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept morning">Morning Briefing</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>APR 4</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>APR 4</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 6 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">retail-flow-meme-cohort-apr.pdf</span>
+                <span class="ext-pill">PDF · 9 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept retail">Retail Sentiment</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>MAR 31</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>MAR 31</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 7 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">TSM-foundry-supply-chain-memo.pdf</span>
+                <span class="ext-pill">PDF · 14 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept equity">Equity Research</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>MAR 27</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>MAR 28</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 8 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">META-q4-earnings-recap.pdf</span>
+                <span class="ext-pill">PDF · 6 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept earnings">Earnings Update</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>MAR 25</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>MAR 26</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 9 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">china-rare-earth-supply-memo.pdf</span>
+                <span class="ext-pill">PDF · 11 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept macro">Macro Research</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>MAR 22</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>MAR 24</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Row 10 -->
+          <div class="row">
+            <div class="file-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+            </div>
+            <div class="row-text">
+              <div class="row-title">
+                <span class="name">secretary-weekly-recap-w14.md</span>
+                <span class="ext-pill">MD · 2 PG</span>
+              </div>
+              <div class="row-meta">
+                <span class="dept secretary">Secretary</span>
+                <span class="dot"></span>
+                <span class="ts">Generated <b>MAR 22</b></span>
+                <span class="dot"></span>
+                <span class="ts">Saved <b>MAR 22</b></span>
+              </div>
+            </div>
+            <div class="row-actions">
+              <button class="icon-btn" title="Download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <button class="icon-btn danger" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+            </div>
+          </div>
+
+        </div>
+        <div class="end-of-list">— Loading more · 14 of 52 shown —</div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<!-- Remove confirmation modal (visible to demonstrate state) -->
+<div class="modal-overlay" id="removeModal" style="display: none;">
+  <div class="modal" role="dialog" aria-labelledby="removeTitle">
+    <div class="modal-head">
+      <span class="modal-title" id="removeTitle">Remove from Repository?</span>
+      <button class="modal-close" aria-label="Close" onclick="document.getElementById('removeModal').style.display='none'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="4" y1="4" x2="20" y2="20"/><line x1="20" y1="4" x2="4" y2="20"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <b>"q1-macro-briefing.pdf"</b> will be removed from your Repository. You can re-save it from the original department at any time.
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('removeModal').style.display='none'">Cancel</button>
+      <button class="btn-remove">Remove</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Demo: clicking any trash button opens the confirmation modal
+  document.querySelectorAll('.icon-btn.danger').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      document.getElementById('removeModal').style.display = 'flex';
+    });
+  });
+</script>
+<script src="page-anim.js"></script>
+</body>
+</html>
