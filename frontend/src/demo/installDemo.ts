@@ -23,7 +23,12 @@ export function installDemo(): void {
 
   // Personal-mode disclaimer acceptance lives in localStorage; pre-seed it to
   // the demo disclaimer version so the entry modal doesn't gate the click-through.
+  // Also default the theme to light (matching the brand/mockups) rather than the
+  // visitor's OS preference — a toggle still persists it.
   try {
+    if (!localStorage.getItem("openlia:theme")) {
+      localStorage.setItem("openlia:theme", "light");
+    }
     localStorage.setItem(
       "lia_disclaimer_accepted",
       JSON.stringify({ version: DISCLAIMER_VERSION, accepted_at: DEMO_NOW_ISO }),
