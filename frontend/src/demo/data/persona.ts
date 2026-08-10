@@ -15,8 +15,8 @@ export interface Holding {
 }
 
 export const INVESTOR = {
-  displayName: "Jordan Avery",
-  firstName: "Jordan",
+  displayName: "TK Chang",
+  firstName: "TK",
 } as const;
 
 export const US_HOLDINGS: Holding[] = [

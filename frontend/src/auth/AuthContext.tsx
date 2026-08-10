@@ -42,7 +42,7 @@ const LOCAL_USER: AuthUser = {
   // Demo build personalizes the single local user so the greeting and sidebar
   // read naturally. No-op in normal builds.
   ...(import.meta.env.VITE_DEMO_MODE === "true"
-    ? { display_name: "Jordan Avery" }
+    ? { display_name: "TK Chang" }
     : {}),
 };
 
