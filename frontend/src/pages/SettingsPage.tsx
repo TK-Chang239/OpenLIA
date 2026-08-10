@@ -48,7 +48,7 @@ export function SettingsPage(): JSX.Element {
         <Route path="skills" element={<SkillsSection />} />
         <Route path="report-templates" element={<CustomTemplatesSection />} />
         <Route path="cache" element={<CacheAdmin />} />
-        {isAdmin ? (
+        {isAdmin && import.meta.env.VITE_DEMO_MODE !== 'true' ? (
           <Route path="admin" element={<AdminSection />}>
             <Route index element={<Navigate to="invites" replace />} />
             <Route path="invites" element={<InvitesPanel />} />
