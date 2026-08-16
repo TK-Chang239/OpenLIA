@@ -174,15 +174,15 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
             <KpiBand analytics={analytics} loading={loading && holdings.length === 0} />
           </Reveal>
 
-          {analytics?.fx_unavailable ? (
+          {(analytics?.currencies_present?.length ?? 0) > 1 ? (
             <Reveal delay={1}>
               <div
                 className="rounded-md border border-[--color-feedback-error] bg-[--color-bg-elevated] px-4 py-2 text-xs text-[--color-text-secondary]"
-                data-testid="fx-unavailable-banner"
+                data-testid="mixed-currency-banner"
               >
                 {t("portfolio_page.fx_unavailable", {
-                  currencies: analytics.currencies_present?.join(", ") ?? "",
-                  display: analytics.display_currency ?? "USD",
+                  currencies: analytics?.currencies_present?.join(", ") ?? "",
+                  display: analytics?.display_currency ?? "USD",
                 })}
               </div>
             </Reveal>

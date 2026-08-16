@@ -23,6 +23,11 @@ export function computeAllocation(
   analytics: AnalyticsResponse | null,
 ): AllocationRow[] {
   if (!analytics) return [];
+  // Group allocation is only meaningful within a single currency: summing raw market
+  // values across currencies (or dividing by a cross-currency total) is not valid
+  // without FX conversion, which is intentionally not performed.
+  if ((analytics.currencies_present?.length ?? 0) > 1) return [];
+
   const totalMv = Number(analytics.total_market_value);
   if (!Number.isFinite(totalMv) || totalMv <= 0) return [];
 
