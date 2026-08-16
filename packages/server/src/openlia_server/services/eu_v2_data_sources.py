@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from openlia_server.services import connectors_service, eu_v2_settings
 from openlia_server.services.eu_v2_wiring import resolve_eodhd_api_key
+from openlia_server.services.llm_providers import get_capability_override
 
 _REASON_EODHD = "eodhd_unconfigured"
 _REASON_WS = "model_no_web_search"
@@ -102,9 +103,13 @@ def compute_data_sources(
             )
         )
 
-    # 3. Model-native web-search slot.
+    # 3. Model-native web-search slot. Resolve the SAME capability override the
+    # run/session path applies, so the preview and the actual run agree — a
+    # user who enables web_search_native in Settings -> Models sees the slot
+    # available here too.
+    ws_override = get_capability_override(db, provider_kind=effective_kind, model=effective_model)
     ws_available = capabilities_for(
-        provider_kind=effective_kind, model=effective_model
+        provider_kind=effective_kind, model=effective_model, override=ws_override
     ).web_search_native
     sources.append(
         DataSource(

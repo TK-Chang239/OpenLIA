@@ -202,7 +202,19 @@ def build_run_request(
         )
 
     eodhd_available = resolve_eodhd_api_key(db) is not None
-    caps = capabilities_for(provider_kind=settings.provider_kind, model=settings.model)
+    # Resolve the SAME capability override the session applies via
+    # LLMSession.create (start_run_async / _run_in_background), so the
+    # web-search gate and the session agree. A user who enables
+    # web_search_native in Settings -> Models otherwise gets a session with
+    # web search but a gate that computed no native tools.
+    capability_override = get_capability_override(
+        db, provider_kind=settings.provider_kind, model=settings.model
+    )
+    caps = capabilities_for(
+        provider_kind=settings.provider_kind,
+        model=settings.model,
+        override=capability_override,
+    )
     providers = set(settings.enabled_provider_ids)
     # AND-gate the settings-enabled set by the validated connector registry:
     # a provider the user enabled is only honored if a validated connector

@@ -286,3 +286,31 @@ def test_run_to_cache_fails_loud_without_emit(db_session, make_user):
 
     rows = db_session.query(RsDashboardCache).filter_by(user_id=user.id, ticker="AAPL").all()
     assert rows == []
+
+
+def test_resolve_enabled_connectors_honors_capability_override(db_session):
+    """Gate must honor the same web_search_native override the session applies.
+
+    A model that defaults web_search_native=False plus a user override enabling
+    it must produce a gate with web_search=True, matching the session built by
+    LLMSession.create in run_to_cache. Regression for the audit's 1.B.3 finding
+    (gate used override-free capabilities_for, session honored the override).
+    """
+    from openlia_server.services import rs_dash_run_service
+    from openlia_server.services.llm_providers import set_capability_override
+
+    base = rs_dash_run_service._resolve_enabled_connectors(
+        db_session, provider_kind="anthropic", model="claude-haiku-4-6"
+    )
+    assert base.web_search is False
+
+    set_capability_override(
+        db_session,
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+        override={"web_search_native": True},
+    )
+    gated = rs_dash_run_service._resolve_enabled_connectors(
+        db_session, provider_kind="anthropic", model="claude-haiku-4-6"
+    )
+    assert gated.web_search is True

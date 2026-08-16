@@ -385,3 +385,41 @@ def test_summary_data_context_notes_missing_frameworks(db_session, make_user):
 def test_other_slug_data_context_is_none(db_session, make_user):
     user = make_user()
     assert _build_data_context(db_session, user_id=user.id, dashboard_slug="debt_cycle") is None
+
+
+def test_build_run_request_honors_capability_override(db_session, make_user):
+    """Gate must honor the same web_search_native override the session applies.
+
+    Regression for the audit's 1.B.3 finding: build_run_request's web-search
+    gate used override-free capabilities_for while run_to_cache's session
+    honored the override, so a user-enabled web_search_native produced a
+    session with web search but a gate that computed no native tools.
+    """
+    from openlia_server.services import mr_dash_run_service
+    from openlia_server.services.llm_providers import set_capability_override
+
+    user = make_user()
+
+    base = mr_dash_run_service.build_run_request(
+        db_session,
+        user_id=user.id,
+        dashboard_slug="debt_cycle",
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+    )
+    assert base.enabled_connectors.web_search is False
+
+    set_capability_override(
+        db_session,
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+        override={"web_search_native": True},
+    )
+    gated = mr_dash_run_service.build_run_request(
+        db_session,
+        user_id=user.id,
+        dashboard_slug="debt_cycle",
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+    )
+    assert gated.enabled_connectors.web_search is True

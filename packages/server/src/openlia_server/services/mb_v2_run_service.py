@@ -311,6 +311,12 @@ def _build_enabled_connectors(
     validated connector backs it), EODHD is curated and bypasses that gate
     but still requires a resolvable key, and ``web_search`` is gated by the
     selected model's native web-search capability.
+
+    The web-search gate resolves the SAME capability override the session
+    applies via ``LLMSession.create`` (start_run_async / _run_in_background /
+    run_to_completion), so the gate and the session agree. A user who enables
+    web_search_native in Settings -> Models otherwise gets a session with web
+    search but a gate that computed no native tools.
     """
     raw = enabled_connectors or {}
     provider_ids_raw = raw.get("provider_ids") or []
@@ -321,7 +327,8 @@ def _build_enabled_connectors(
     web_search_flag = bool(raw.get("web_search", False))
 
     eodhd_available = resolve_eodhd_api_key(db) is not None
-    caps = capabilities_for(provider_kind=provider_kind, model=model)
+    capability_override = get_capability_override(db, provider_kind=provider_kind, model=model)
+    caps = capabilities_for(provider_kind=provider_kind, model=model, override=capability_override)
     validated_provider_ids = {
         row.provider_id
         for row in connectors_service.list_connectors(db)
