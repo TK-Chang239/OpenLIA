@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
+from openlia_server.db.bootstrap import LOCAL_USER_ID
 from openlia_server.db.models.auth import AuthEvent, User
 from openlia_server.services.auth import password_reset, passwords, sessions
 
@@ -108,3 +109,60 @@ class TestAdminDirectResetWithExplicitPassword:
         assert returned == "explicit-strong-pass"
         db_session.refresh(u)
         assert passwords.verify_password(u.password_hash, "explicit-strong-pass")
+
+
+class TestLocalUserMigrationGuard:
+    """personal -> company migration: the synthetic `local` user (is_admin=True,
+    owns all pre-migration data) must never be granted a password."""
+
+    def _seed_local_user(self, db_session) -> User:
+        local = db_session.get(User, LOCAL_USER_ID)
+        if local is None:
+            local = User(
+                id=LOCAL_USER_ID,
+                email="local@openlia.local",
+                display_name="Local",
+                password_hash=None,
+                is_admin=True,
+                is_disabled=False,
+                must_change_password=False,
+            )
+            db_session.add(local)
+            db_session.commit()
+        return local
+
+    def test_admin_direct_reset_refuses_local_user(self, db_session, make_user):
+        self._seed_local_user(db_session)
+        admin = make_user(email="admin-local@example.com", is_admin=True)
+        with pytest.raises(password_reset.LocalUserProtectedError):
+            password_reset.admin_direct_reset(
+                db_session,
+                user_id=LOCAL_USER_ID,
+                new_password="should-not-be-set-pass",
+                admin_user_id=admin.id,
+            )
+        # The local user still has no password: login remains impossible.
+        db_session.refresh(db_session.get(User, LOCAL_USER_ID))
+        assert db_session.get(User, LOCAL_USER_ID).password_hash is None
+
+    def test_admin_direct_reset_still_works_for_normal_user(self, db_session, make_user):
+        self._seed_local_user(db_session)
+        u = make_user(email="normal@example.com")
+        admin = make_user(email="admin-normal@example.com", is_admin=True)
+        returned = password_reset.admin_direct_reset(
+            db_session,
+            user_id=u.id,
+            new_password="normal-strong-pass",
+            admin_user_id=admin.id,
+        )
+        assert returned == "normal-strong-pass"
+        db_session.refresh(u)
+        assert passwords.verify_password(u.password_hash, "normal-strong-pass")
+
+    def test_request_reset_is_silent_noop_for_local_user(self, db_session):
+        from openlia_server.db.models.auth import PasswordResetRequest
+
+        self._seed_local_user(db_session)
+        password_reset.request_reset(db_session, email="local@openlia.local")
+        rows = db_session.query(PasswordResetRequest).all()
+        assert rows == []

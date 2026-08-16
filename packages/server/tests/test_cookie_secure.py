@@ -21,19 +21,35 @@ from fastapi.testclient import TestClient
 from openlia_server.app import create_app
 from openlia_server.db import session as session_mod
 from openlia_server.db.models.auth import SignupInvite
-from openlia_server.routes.auth import build_auth_router
+from openlia_server.routes.auth import build_auth_router, resolve_cookie_secure
 from openlia_server.services.auth import signup_policy, tokens
 
 
-def _cookie_secure_helper() -> bool:
-    """Reproduce auth.py::_cookie_secure() so we can probe its decision in
-    personal mode where the router itself is not mounted."""
-    import os
-
-    override = os.environ.get("OPENLIA_COOKIE_SECURE")
-    if override is not None:
-        return override.lower() in ("1", "true", "yes")
-    return os.environ.get("OPENLIA_MODE", "personal").lower() == "company"
+@pytest.mark.parametrize(
+    ("mode", "override", "expected"),
+    [
+        # personal mode, no override -> not secure
+        ("personal", None, False),
+        # company mode, no override -> secure (production-safe default)
+        ("company", None, True),
+        # explicit override wins in either mode
+        ("company", "false", False),
+        ("company", "0", False),
+        ("company", "no", False),
+        ("company", "true", True),
+        ("company", "1", True),
+        ("personal", "true", True),
+        ("personal", "yes", True),
+    ],
+)
+def test_resolve_cookie_secure_matrix(monkeypatch, mode, override, expected):
+    """The single shared helper decides Secure across mode + env-override."""
+    monkeypatch.setenv("OPENLIA_MODE", mode)
+    if override is None:
+        monkeypatch.delenv("OPENLIA_COOKIE_SECURE", raising=False)
+    else:
+        monkeypatch.setenv("OPENLIA_COOKIE_SECURE", override)
+    assert resolve_cookie_secure() is expected
 
 
 @pytest.fixture
@@ -84,9 +100,9 @@ def test_personal_mode_default(monkeypatch):
     decision matches the documented contract (no Secure flag)."""
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.delenv("OPENLIA_COOKIE_SECURE", raising=False)
-    # Probe the helper to keep the personal-mode contract testable without
-    # mounting a non-existent /auth router.
-    assert _cookie_secure_helper() is False
+    # Probe the shared helper to keep the personal-mode contract testable
+    # without mounting a non-existent /auth router.
+    assert resolve_cookie_secure() is False
     # Sanity check: the auth router builder still constructs successfully so
     # company-mode wiring is not silently broken.
     router = build_auth_router(db_session_factory=session_mod.SessionLocal)
