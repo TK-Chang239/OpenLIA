@@ -1759,7 +1759,10 @@
     "download_as_pdf": "Download as PDF",
     "download_as_word": "Download as Word",
     "delete_this_report_title": "Delete this report?",
-    "delete_description_prefix": "and its version history will be permanently removed. The card will remain in your chat history showing \"no longer available.\" This cannot be undone."
+    "delete_description_prefix": "and its version history will be permanently removed. The card will remain in your chat history showing \"no longer available.\" This cannot be undone.",
+    "tombstone_heading": "This report is no longer available",
+    "tombstone_message": "This report was removed under the data-retention policy and can no longer be viewed or downloaded.",
+    "tombstone_removed_on": "Removed on {{date}}"
   },
   "primitives": {
     "aria_notifications": "Notifications",

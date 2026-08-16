@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchReport, reportPdfUrl } from '../reports';
+import {
+  fetchReport,
+  reportPdfUrl,
+  downloadReportBlob,
+  DownloadError,
+} from '../reports';
 
 describe('fetchReport', () => {
   beforeEach(() => {
@@ -37,5 +42,42 @@ describe('fetchReport', () => {
 describe('reportPdfUrl', () => {
   it('returns the PDF export route', () => {
     expect(reportPdfUrl('abc')).toBe('/api/reports/abc/export/pdf');
+  });
+});
+
+describe('downloadReportBlob — expired (410) export', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('surfaces the structured detail.message from a tombstone 410 body', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 410,
+      json: async () => ({
+        detail: {
+          code: 'report_expired',
+          message: 'This report has expired and is no longer available.',
+        },
+      }),
+    } as Response);
+
+    const err = await downloadReportBlob('abc', 'pdf').catch((e) => e);
+    expect(err).toBeInstanceOf(DownloadError);
+    expect((err as DownloadError).status).toBe(410);
+    expect((err as DownloadError).message).toBe(
+      'This report has expired and is no longer available.',
+    );
+  });
+
+  it('still surfaces a plain string detail body', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ detail: 'Forbidden' }),
+    } as Response);
+
+    const err = await downloadReportBlob('abc', 'pdf').catch((e) => e);
+    expect((err as DownloadError).message).toBe('Forbidden');
   });
 });

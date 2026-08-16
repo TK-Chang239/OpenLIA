@@ -472,8 +472,18 @@ export async function downloadReportBlob(
     let detail = `Download failed (${resp.status})`;
     try {
       const body = await resp.json();
-      if (body && typeof body.detail === "string") {
-        detail = body.detail;
+      const raw = (body as { detail?: unknown } | null)?.detail;
+      if (typeof raw === "string") {
+        detail = raw;
+      } else if (
+        raw &&
+        typeof raw === "object" &&
+        typeof (raw as { message?: unknown }).message === "string"
+      ) {
+        // Tombstone/retention 410s send a structured detail dict
+        // ({code, message}) — surface the specific, non-retriable message
+        // rather than the generic "Download failed (410)".
+        detail = (raw as { message: string }).message;
       }
     } catch {
       // body wasn't JSON; keep generic message

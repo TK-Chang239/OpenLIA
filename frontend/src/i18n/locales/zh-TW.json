@@ -1759,7 +1759,10 @@
     "download_as_pdf": "下載為 PDF",
     "download_as_word": "下載為 Word",
     "delete_this_report_title": "確定要刪除此報告？",
-    "delete_description_prefix": "及其版本紀錄將被永久移除。對話紀錄中的卡片仍會保留，並顯示為「已不再提供」。此動作無法復原。"
+    "delete_description_prefix": "及其版本紀錄將被永久移除。對話紀錄中的卡片仍會保留，並顯示為「已不再提供」。此動作無法復原。",
+    "tombstone_heading": "此報告已不再提供",
+    "tombstone_message": "此報告已依資料保存政策移除，無法再檢視或下載。",
+    "tombstone_removed_on": "移除日期：{{date}}"
   },
   "primitives": {
     "aria_notifications": "通知",
