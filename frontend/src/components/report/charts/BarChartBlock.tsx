@@ -107,7 +107,8 @@ export function BarChartBlock({
       <svg
         className="report-line-chart"
         viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto' }}
         role="img"
         aria-label={title}
       >

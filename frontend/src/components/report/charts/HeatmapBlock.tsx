@@ -53,7 +53,8 @@ export function HeatmapBlock({ title, x_labels, y_labels, values, options }: Hea
       <svg
         className="report-line-chart"
         viewBox={`0 0 ${W} ${totalH}`}
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto' }}
         role="img"
         aria-label={title}
       >

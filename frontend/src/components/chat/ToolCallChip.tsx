@@ -78,10 +78,13 @@ function buildOnClick(
         : fallbackLabel;
 
   if (reportId) {
+    // Open with kind "report" so FileViewer mounts StructuredReportRenderer.
+    // Any other kind routes through useFileFetch -> sourceUrl(), which throws
+    // for report sources (no fetchable body URL) and crashes the viewer.
     return () =>
       viewer.open({
         filename,
-        kind: "markdown",
+        kind: "report",
         metadata: "REPORT",
         source: { kind: "report", reportId },
       });

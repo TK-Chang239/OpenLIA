@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
 import { euHtmlUrl, mbHtmlUrl } from "../../api/reports";
+import { v3HtmlUrl } from "../../api/equity-research-v3";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { FileDownloadButton } from "../chat/FileDownloadButton";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
@@ -59,7 +60,19 @@ export function ViewerHeader({
         {source.kind === "report" ? (
           <ReportDownloadButton reportId={source.reportId} />
         ) : source.kind === "v3_report" ? (
-          <ReportDownloadButton reportId={source.reportId} engine="v3" />
+          <>
+            <ReportDownloadButton reportId={source.reportId} engine="v3" />
+            <a
+              href={v3HtmlUrl(source.reportId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open the printable HTML in a new tab (use the browser's Save As to grab a Word or PDF copy)"
+              className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[12px] text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-secondary"
+            >
+              <ExternalLink size={12} strokeWidth={1.7} />
+              Standalone
+            </a>
+          </>
         ) : source.kind === "eu_v2_report" ? (
           <>
             <ReportDownloadButton reportId={source.reportId} engine="eu" />

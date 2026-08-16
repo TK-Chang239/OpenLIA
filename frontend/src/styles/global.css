@@ -499,17 +499,17 @@ body {
 }
 @media print {
   body {
-    background: #ffffff \!important;
+    background: #ffffff !important;
   }
   .report-print-root {
     padding: 0;
   }
   /* No app chrome ever bleeds into print. */
   .ol-app-shell, .ol-sidebar, header[role="banner"] {
-    display: none \!important;
+    display: none !important;
   }
   .report__toc {
-    display: none \!important;
+    display: none !important;
   }
   /* Keep headings glued to the first line of their content. */
   .report__main h2,

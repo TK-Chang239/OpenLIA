@@ -1,14 +1,19 @@
 import { useEffect, useState, useCallback } from "react";
-import { fetchReport, type ReportSchema } from "../../../api/reports";
+import {
+  fetchReportDetail,
+  isReportExpired,
+  type ReportSchema,
+} from "../../../api/reports";
 import { fetchCapabilities } from "../../../api/capabilities";
 import { ReportRenderer } from "../../report/ReportRenderer";
+import { ReportTombstoneCard } from "../../report/ReportTombstoneCard";
 import { RendererError, RendererLoading } from "./RendererStates";
 import { type FileSource } from "../FileViewerContext";
 import { V3ReportRenderer } from "./V3ReportRenderer";
 import { EUV2ReportRenderer } from "./EUV2ReportRenderer";
 import { MBReportRenderer } from "./MBReportRenderer";
 
-type Status = "loading" | "ok" | "error";
+type Status = "loading" | "ok" | "expired" | "error";
 
 /**
  * Dispatcher for "report"-kind FileViewer entries. v1 reports (e.g.
@@ -40,6 +45,7 @@ function V1SchemaReportRenderer({
 }): JSX.Element {
   const [status, setStatus] = useState<Status>("loading");
   const [schema, setSchema] = useState<ReportSchema | null>(null);
+  const [expiredAt, setExpiredAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [devMode, setDevMode] = useState(false);
 
@@ -50,8 +56,16 @@ function V1SchemaReportRenderer({
     setStatus("loading");
     setError(null);
     try {
-      const next = await fetchReport(reportId);
-      setSchema(next);
+      const detail = await fetchReportDetail(reportId);
+      // Tombstoned rows come back with the schema blanked and expired_at
+      // stamped. Render the designed "no longer available" card instead of
+      // the raw RendererError (the old fetchReport() throw path).
+      if (isReportExpired(detail) || detail.schema === null) {
+        setExpiredAt(detail.expired_at);
+        setStatus("expired");
+        return;
+      }
+      setSchema(detail.schema);
       setStatus("ok");
     } catch (e) {
       setError((e as Error).message);
@@ -90,6 +104,8 @@ function V1SchemaReportRenderer({
     );
   }
   if (status === "loading") return <RendererLoading />;
+  if (status === "expired")
+    return <ReportTombstoneCard expiredAt={expiredAt} />;
   if (status === "error" || !schema)
     return (
       <RendererError
