@@ -1,5 +1,7 @@
 # Equity Research Department Spec
 
+> **⚠️ HISTORICAL ONLY (2026-08-16).** This v1 spec's engine was **REMOVED** (PRs #220/#222). The live Equity Research surface is the **v3 single-model engine** — see `planning/2026-05-27-equity-research-v3-single-model-spec.md` and `planning/specs/pages/departments/EquityResearchV3PageSpec.md`. Kept for historical reference only.
+
 ## Page Overview
 The Equity Research Department (EqR) is used by the user to research companies, stocks, and sectors by generating reports. The user will prompt EqR with a company or sector that he is interested in, and any specific topics that he would like the report to focus or elaborate on. EqR supports three report modes that the user can toggle between before generating a report.
 

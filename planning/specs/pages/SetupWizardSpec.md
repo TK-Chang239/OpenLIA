@@ -355,13 +355,15 @@ All tables are defined in `database-design.md`. The wizard writes to:
 - **`config_store`** -- KV table for `wizard.completed` flag and miscellaneous settings.
 - **`users`** -- inserts the admin user (Step 2b, company mode) or seeds the `local` user (personal mode).
 - **`signup_policy`** -- singleton row written on Step 5 (company) or seeded as `closed` (personal).
-- **`llm_providers`** -- one row per configured provider credential set (Step 3). API keys are encrypted at rest with AES-256-GCM per `database-design.md` Section 5.
+- **`llm_providers`** -- one row per configured provider credential set (Step 3). Provider/connector secrets are encrypted at rest with **Fernet** (AES-128-CBC + HMAC-SHA256), keyed by `OPENLIA_SECRET_KEY` / `~/.openlia/secret.key`.
 - **`llm_models`** -- one row per admin-added model, assigned to a tier with optional `is_tier_default` flag (Step 3).
-- **`data_providers`** -- one row per configured data source (Step 4). API keys encrypted at rest.
-- **`data_provider_requirement_mapping`** -- requirement-to-provider priority mapping (populated by Step 4 / Step 6 AI review).
-- **`web_search_providers`** -- optional web search backends (Step 4 Web Search tab). API keys encrypted at rest.
+- **`connectors`** -- one row per configured data source / tool provider (Step 4), replacing the dropped `data_providers` table. Carries the multi-mode `LaunchSpec` JSON; secrets are stored in the encrypted `secrets` column.
+- **`runner_callable_specs`** -- the resolved `(department_id, need_id) -> CallableSpec` mapping, replacing the dropped `data_provider_requirement_mapping` table (populated by connector resolve/approve).
+- **`web_search_providers`** -- optional web search backends (Step 4 Web Search tab). Secrets encrypted at rest.
 
-Secrets are **never** stored in `config_store`. Each provider table has its own `api_key_encrypted` column (or `env_var_name` as an alternative). See `database-design.md` Section 5 for the encryption scheme.
+> **Note (2026-08-16):** the legacy `data_providers` and `data_provider_requirement_mapping` tables were removed in connector-redesign-v2 (see `projectStructure.md` §Database tables). This section previously still named them; corrected to the `connectors` / `runner_callable_specs` model.
+
+Secrets are **never** stored in `config_store`. Encryption uses Fernet, not AES-256-GCM; see `secrets_crypto.py` and `database-design.md` for the scheme.
 
 ---
 

@@ -22,7 +22,7 @@ frontend              -- React/TypeScript/Vite, talks to server via REST + SSE
 - `packages/core/` must never import FastAPI, uvicorn, or anything HTTP-related. Test: `from openlia import EquityResearchDepartment` must work with only `openlia-core` installed, no server running.
 - Route handlers in `packages/server/` call core methods and return results. Business logic belongs in core, not routes.
 - Frontend communicates only through the server's REST API.
-- Config flows one direction: `.env`/env vars → `core/config.py` → server passes to core at startup. Frontend never touches config directly.
+- Config flows one direction: `.env`/env vars are loaded at startup by the server CLI (`packages/server/src/openlia_server/cli.py`, via python-dotenv) and read from `os.environ` where needed; the server passes config to core at startup. (`core/config.py` is a reserved placeholder stub, not an active loader.) Frontend never touches config directly.
 
 ## Project Structure
 
@@ -36,7 +36,7 @@ openlia/
 │   │       ├── data/           # Data source adapters (eodhd, news)
 │   │       ├── prompts/        # YAML prompt templates per department
 │   │       ├── reports/        # Report generation + templates
-│   │       ├── config.py       # Config loader
+│   │       ├── config.py       # Reserved placeholder stub (not an active loader; .env is loaded by server cli.py)
 │   │       └── exceptions.py
 │   └── server/             # Package: openlia (server + CLI)
 │       └── src/openlia_server/

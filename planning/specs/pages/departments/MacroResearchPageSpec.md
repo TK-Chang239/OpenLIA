@@ -1,5 +1,10 @@
 # Macro Research Department Spec
 
+> **SUPERSEDED (data architecture) — 2026-08-16.** The *data* behind these dashboards was rebuilt. The authoritative design is now:
+> - **`planning/specs/systems/macro-research-llm-dashboard-redesign.md`** (the shipped engine: a single-model LLM tool-use loop with the model's *native* web search as the macro backbone; no required connector; supersedes the old need-id / tiered-assembler data architecture).
+>
+> The page **layout/visual** design below still holds; only how the data is produced changed. **Shipped state (verified in `frontend/src/pages/departments/MacroResearch.tsx`):** the dashboards are **live** — a **Summary** tab plus five framework tabs (T1 Debt Cycle, T2 Four Seasons, T3 All-Weather, T4 World Order, T5 Five Forces), each polling `getDashboard(slug)` with an auto-refresh cadence control and a Settings panel. (Known cosmetic gaps flagged in the 2026-08-16 audit Stage 5.C: the header's date and "42 streaming series" count are still hardcoded, and `IMPLEMENTED_DASHBOARDS` is hardcoded.)
+
 ## Page Overview
 
 The Macro Research Department (MR) provides five framework-driven dashboards based on Ray Dalio's macro investing methodology. Each dashboard maps 1:1 to a Dalio framework: Debt Cycle, Four Economic Seasons, All-Weather Portfolio Audit, Long-Term World Order, and Five Interlocking Forces. Dashboards update periodically with live market data, formula engine evaluations, and LLM assessments.

@@ -1,250 +1,476 @@
 # Endpoint Contract Matrix
 
-Date: 2026-04-21
-Source: REM-P0-005 (see `planning/audits/2026-04-21-remediation-checklist.md`).
+Regenerated: 2026-08-16 (Stage 4.4 of `docs/audit-2026-08-16.md`).
+Supersedes the 2026-04-21 version, which listed Plan-9–23 placeholders and
+still referenced removed v1/v2/v2.3 engine and data-provider endpoints.
 
-This matrix is the single source of truth for every HTTP endpoint in OpenLIA. Every existing route and every planned Plan 9-23 route is listed once with its backend path, backend function, frontend client (if any), auth dependency, request DTO, response DTO, owning plan, and test file. New routes cannot merge without updating this matrix and adding tests.
+This matrix is the endpoint-level companion to `route-authorization-matrix.md`
+(which owns the auth/owner-scoping semantics). It enumerates the live HTTP
+surface of `create_app()`, grouped by router, with method, path, and a short
+contract note. It is reconciled against the running app — regenerate by
+iterating `app.routes` (see `packages/server/tests/test_route_matrix_coverage.py`).
 
 ## Conventions
 
-- **Backend paths** are unprefixed (FastAPI routers mount with bare prefixes: `/auth`, `/notifications`, `/jobs`, `/settings/...`, `/admin`).
-- **Frontend paths** are the `/api/<rest>` form. The Vite dev proxy strips `/api` — see `frontend/vite.config.ts` and the proxy rewrite rule documented in `README.md`.
-- **TestClient** hits bare paths (e.g. `client.post("/auth/login")`), matching backend mounts.
-- **Auth column values:**
-  - `public` — no auth dependency.
-  - `require_auth` — `build_require_auth(db_session_factory, mode)`; personal-mode resolves to the bootstrapped `local` user, company-mode requires a valid `openlia_session` cookie.
-  - `require_admin` — `build_require_admin(...)`; same as `require_auth` plus `user.is_admin`.
-  - `cookie-optional` — endpoint inspects the session cookie itself (e.g. logout).
-  - `wizard-session` — planned; setup routes gate on wizard session token.
-- **Mode column values:** `both` (personal + company), `company` (mounted only when `OPENLIA_MODE=company`), `personal`.
+- **Paths** are the FastAPI mount paths. At runtime the frontend calls the
+  `/api/<path>` form; `_StripApiPrefixMiddleware` strips `/api` so the same
+  bundle works in dev (Vite proxy) and prod.
+- **Auth** values: `public`, `authed`, `active-user`, `admin`, `wizard-session`,
+  `cookie-optional` — defined in the authorization matrix.
+- **Mode**: `both` unless marked `company` (auth + admin routers only).
+- SSE endpoints are marked `(SSE)`.
 
-## Shipped routes (Phases 0-9)
+## Setup — `build_setup_router` · `/setup` · both
 
-### Auth — `build_auth_router(db_session_factory)` · mounted only in company mode
+| Path | Method | Auth | Note |
+|---|---|---|---|
+| `/setup/status` | GET | public | `{mode, current_step, completed, ...}`; only public setup route. |
+| `/setup/state` | GET | wizard-session | Full wizard state snapshot. |
+| `/setup/mode` | POST | wizard-session | Choose personal vs company. |
+| `/setup/identity` | POST | wizard-session | Instance identity. |
+| `/setup/providers` | POST | wizard-session | Connector/provider config during wizard. |
+| `/setup/models` | POST | wizard-session | Slot model selection. |
+| `/setup/models/test` | POST | wizard-session | Test a model selection. |
+| `/setup/access_control` | POST | wizard-session | Signup policy / access mode. |
+| `/setup/admin` | POST | wizard-session | Bootstrap first admin (company). |
+| `/setup/takeover` | POST | wizard-session | Reclaim an abandoned wizard session; Stage 0.2 adds `require_wizard_active`. |
+| `/setup/finish` | POST | wizard-session | Flips `wizard.completed = true`; subsequent writes 410. |
 
-| Backend path | Method | Frontend path | Client fn | Auth | Request DTO | Response DTO | Mode | Plan | Test file |
-|---|---|---|---|---|---|---|---|---|---|
-| `/auth/register` | POST | `/api/auth/register` | `register` (`frontend/src/api/auth.ts`) | public + rate-limited | `RegisterIn {email, password, display_name?, invite_token}` | `{user_id, email, display_name}` + Set-Cookie | company | 2, 9 | `packages/server/tests/test_routes/test_auth_routes.py` |
-| `/auth/login` | POST | `/api/auth/login` | `login` | public + rate-limited | `LoginIn {email, password, persistent}` | `{user_id, email, display_name, is_admin, must_change_password}` + Set-Cookie | company | 2, 9 | same |
-| `/auth/logout` | POST (204) | `/api/auth/logout` | `logout` | cookie-optional | — | 204 No Content | company | 2, 9 | same |
-| `/auth/logout-all` | POST (204) | `/api/auth/logout-all` | `logoutAll` | `require_auth` | — | 204 | company | 2, 9 | same |
-| `/auth/session` | GET | `/api/auth/session` | `getSession` | `require_auth` | — | `{user_id, email, display_name, is_admin}` | company | 2, 9 | same |
-| `/auth/signup-policy` | GET | `/api/auth/signup-policy` | `getSignupPolicy` | public | — | `{mode, invite_required}` | company | 2, 9 | same |
-| `/auth/password-reset/request` | POST | `/api/auth/password-reset/request` | `requestPasswordReset` | public + rate-limited | `{email}` | `{status: "ok"}` | company | 2, 9 | same |
-| `/auth/password-reset/consume` | POST | `/api/auth/password-reset/consume` | `consumePasswordReset` | public | `{token, new_password}` | `{status: "ok"}` | company | 2, 9 | same |
-| `/auth/change-password` | POST | `/api/auth/change-password` | `changePassword` | `require_auth` | `{current_password, new_password}` | `{status: "ok"}` | company | 2, 9 | same |
+All writes: loopback-gated + `wizard-active`; personal mode rejects non-loopback.
 
-### Admin — `build_admin_router(db_session_factory)` · mounted only in company mode
+## Auth — `build_auth_router` · `/auth` · company
 
-| Backend path | Method | Frontend path | Client fn | Auth | Request DTO | Response DTO | Mode | Plan | Test file |
-|---|---|---|---|---|---|---|---|---|---|
-| `/admin/invites` | GET | `/api/admin/invites` | *(Plan 11)* | `require_admin` | — | `{invites: [...]}` | company | 7, 11 | `test_admin_routes.py` |
-| `/admin/invites` | POST (201) | `/api/admin/invites` | *(Plan 11)* | `require_admin` | `{email?, role, expires_at?}` | created invite | company | 7, 11 | same |
-| `/admin/invites/{invite_id}/revoke` | POST (204) | `/api/admin/invites/{id}/revoke` | *(Plan 11)* | `require_admin` | — | 204 | company | 7, 11 | same |
-| `/admin/users` | GET | `/api/admin/users` | *(Plan 11)* | `require_admin` | — | `{users: [...]}` | company | 7, 11 | same |
-| `/admin/users/{user_id}/disable` | POST (204) | `/api/admin/users/{id}/disable` | *(Plan 11)* | `require_admin` | — | 204 | company | 7, 11 | same |
-| `/admin/users/{user_id}/enable` | POST (204) | `/api/admin/users/{id}/enable` | *(Plan 11)* | `require_admin` | — | 204 | company | 7, 11 | same |
-| `/admin/users/{user_id}/reset-password` | POST (204) | `/api/admin/users/{id}/reset-password` | *(Plan 11)* | `require_admin` | — | 204 | company | 7, 11 | same |
-| `/admin/password-reset-requests` | GET | `/api/admin/password-reset-requests` | *(Plan 11)* | `require_admin` | — | list | company | 7, 11 | same |
-| `/admin/password-reset-requests/{id}/approve` | POST | `/api/admin/password-reset-requests/{id}/approve` | *(Plan 11)* | `require_admin` | — | approval payload | company | 7, 11 | same |
-| `/admin/password-reset-requests/{id}/reject` | POST (204) | `/api/admin/password-reset-requests/{id}/reject` | *(Plan 11)* | `require_admin` | — | 204 | company | 7, 11 | same |
+| Path | Method | Auth | Request → Response |
+|---|---|---|---|
+| `/auth/register` | POST | public (rate-limited) | `RegisterIn` → `{user_id, email, display_name}` + Set-Cookie |
+| `/auth/login` | POST | public (rate-limited) | `LoginIn` → `{..., is_admin, must_change_password}` + Set-Cookie |
+| `/auth/logout` | POST | cookie-optional | → 204; clears cookie regardless of validity |
+| `/auth/logout-all` | POST | authed | Revoke all sessions → 204 |
+| `/auth/session` | GET | authed | `{user_id, email, display_name, is_admin}` |
+| `/auth/sessions` | GET | authed | List active sessions for the user |
+| `/auth/sessions/{session_id}` | DELETE | authed | Revoke one session |
+| `/auth/signup-policy` | GET | public | `{mode, invite_required}` |
+| `/auth/password-reset/request` | POST | public (rate-limited) | `{email}` → `{status:"ok"}` (no account-existence leak) |
+| `/auth/password-reset/consume` | POST | public (token) | `{token, new_password}` → `{status:"ok"}` |
+| `/auth/change-password` | POST | authed (primary unblock) | `{current_password, new_password}` → `{status:"ok"}` |
 
-### Jobs — `build_jobs_router(db_session_factory, mode)`
+Register error-code → HTTP map (unchanged from 2026-04): `weak_password`→400,
+`registration_failed`→400, `signup_closed`→403, `invite_required`→403,
+`invite_invalid`→403, `email_domain_not_allowed`→403, `rate_limited`→429.
+`must_change_password` is a response-body flag, not an `_STATUS_MAP` code.
 
-| Backend path | Method | Frontend path | Client fn | Auth | Request DTO | Response DTO | Mode | Plan | Test file |
-|---|---|---|---|---|---|---|---|---|---|
-| `/jobs/history` | GET | `/api/jobs/history` | *(Plan 11)* | `require_auth` | query: `department?`, `status?`, `limit` | `JobsHistoryOut` | both | 6, 11 | `packages/server/tests/test_scheduler/test_routes_jobs.py` |
-| `/jobs/{run_id}/retry` | POST (202) | `/api/jobs/{id}/retry` | *(Plan 11)* | `require_auth` | — | `RetryAck` (503 if scheduler disabled) | both | 6, 11 | same |
+## Admin — `build_admin_router` · `/admin` · company
 
-### Notifications — `build_notifications_router(db_session_factory, mode)`
+All `admin`.
 
-| Backend path | Method | Frontend path | Client fn | Auth | Request DTO | Response DTO | Mode | Plan | Test file |
-|---|---|---|---|---|---|---|---|---|---|
-| `/notifications/unread` | GET | `/api/notifications/unread` | `getUnread` (`frontend/src/api/notifications.ts`) | `require_auth` | — | `UnreadOut {counts_by_department}` | both | 6, 8 | `packages/server/tests/test_scheduler/test_routes_notifications.py` |
-| `/notifications/read` | POST | `/api/notifications/read` | `markRead` | `require_auth` | `{department}` | `MarkReadOut` | both | 6, 8 | same |
+| Path | Method | Note |
+|---|---|---|
+| `/admin/invites` | GET, POST | list / create invite |
+| `/admin/invites/{invite_id}/revoke` | POST | → 204 |
+| `/admin/users` | GET | list users |
+| `/admin/users/{user_id}/disable` | POST | → 204 |
+| `/admin/users/{user_id}/enable` | POST | → 204 |
+| `/admin/users/{user_id}/reset-password` | POST | → 204 |
+| `/admin/users/{user_id}/role` | POST | **NEW** — in-app promote/demote (Stage 3 admin lifecycle) |
+| `/admin/password-reset-requests` | GET | pending list |
+| `/admin/password-reset-requests/{request_id}/approve` | POST | approval payload |
+| `/admin/password-reset-requests/{request_id}/reject` | POST | → 204 |
 
-### Settings — data providers — `build_data_providers_router(db_session_factory)`
+## Admin graph — `build_admin_graph_router` · `/admin/graph` · both
 
-| Backend path | Method | Frontend path | Client fn | Auth | Request DTO | Response DTO | Mode | Plan | Test file |
-|---|---|---|---|---|---|---|---|---|---|
-| `/settings/data-providers` | GET | `/api/settings/data-providers` | *(Plan 11)* | `require_admin` | — | `{providers: [...]}` | both | 3, 11 | `test_data_providers_routes.py` |
-| `/settings/data-providers` | POST (201) | same | *(Plan 11)* | `require_admin` | `_CreateDataProviderIn` | `_DataProviderOut` | both | 3, 11 | same |
-| `/settings/data-providers/auto-map` | POST | `/api/settings/data-providers/auto-map` | *(Plan 11)* | `require_admin` | — | `{mappings: [...]}` | both | 3, 11 | same |
-| `/settings/data-providers/mappings` | GET | same | *(Plan 11)* | `require_admin` | — | mapping list | both | 3, 11 | same |
-| `/settings/data-providers/mappings/{requirement_type}` | PUT | same | *(Plan 11)* | `require_admin` | `{provider_id}` | mapping | both | 3, 11 | same |
-| `/settings/data-providers/mappings/{requirement_type}` | DELETE (204) | same | *(Plan 11)* | `require_admin` | — | 204 | both | 3, 11 | same |
-| `/settings/data-providers/{provider_id}` | PATCH | same | *(Plan 11)* | `require_admin` | `_UpdateDataProviderIn` | `_DataProviderOut` | both | 3, 11 | same |
-| `/settings/data-providers/{provider_id}` | DELETE (204) | same | *(Plan 11)* | `require_admin` | — | 204 | both | 3, 11 | same |
-| `/settings/data-providers/{provider_id}/test-connection` | POST | same | *(Plan 11)* | `require_admin` | — | `{ok, detail}` | both | 3, 11 | `test_data_providers_integration.py` |
+| Path | Method | Auth | Note |
+|---|---|---|---|
+| `/admin/graph/extract-now` | POST | admin | Trigger system-wide graph extraction. |
 
-### Settings — LLM admin — `build_llm_providers_admin_router(db_session_factory, mode)`
+## Admin skills — `build_admin_skills_router` · `/admin/skills` · both
 
-Prefix: `/settings/admin/llm` — NOT `/settings/models/*`.
+| Path | Method | Auth | Note |
+|---|---|---|---|
+| `/admin/skills` | GET | active-user + in-handler admin | List all skills across scopes. |
+| `/admin/skills/audit` | GET | active-user + in-handler admin | Skill audit log. |
 
-| Backend path | Method | Frontend path | Client fn | Auth | Request DTO | Response DTO | Mode | Plan | Test file |
-|---|---|---|---|---|---|---|---|---|---|
-| `/settings/admin/llm/providers` | GET | `/api/settings/admin/llm/providers` | *(Plan 11)* | `require_admin` | — | `list[_ProviderOut]` | both | 4, 11 | `test_llm_admin_routes.py` |
-| `/settings/admin/llm/providers/test` | POST | same | *(Plan 11)* | `require_admin` | provider test body | `_TestOut` | both | 4, 11 | same |
-| `/settings/admin/llm/providers` | POST (201) | same | *(Plan 11)* | `require_admin` | `_ProviderIn` | `_ProviderOut` | both | 4, 11 | same |
-| `/settings/admin/llm/providers/{provider_id}` | PUT | same | *(Plan 11)* | `require_admin` | `_ProviderIn` | `_ProviderOut` | both | 4, 11 | same |
-| `/settings/admin/llm/providers/{provider_id}` | DELETE (204) | same | *(Plan 11)* | `require_admin` | — | 204 | both | 4, 11 | same |
-| `/settings/admin/llm/providers/{provider_id}/models` | GET | same | *(Plan 11)* | `require_admin` | — | `list[_ModelOut]` | both | 4, 11 | same |
-| `/settings/admin/llm/providers/{provider_id}/remote-models` | GET | same | *(Plan 11)* | `require_admin` | — | `list[dict]` | both | 4, 11 | same |
-| `/settings/admin/llm/models` | POST (201) | same | *(Plan 11)* | `require_admin` | `_ModelIn` | `_ModelOut` | both | 4, 11 | same |
-| `/settings/admin/llm/models/{model_id}` | PUT | same | *(Plan 11)* | `require_admin` | `_ModelIn` | `_ModelOut` | both | 4, 11 | same |
-| `/settings/admin/llm/models/{model_id}` | DELETE (204) | same | *(Plan 11)* | `require_admin` | — | 204 | both | 4, 11 | same |
-| `/settings/admin/llm/department/{department_id}` | POST | same | *(Plan 11)* | `require_admin` | `{tier, model_id}` | mapping | both | 4, 11 | same |
-| `/settings/admin/llm/capability_override/{provider_kind}/{model:path}` | POST | same | *(Plan 11)* | `require_admin` | capability body | updated caps | both | 4, 11 | same |
+## Guardrail events — `build_guardrail_events_router` · `/admin/guardrail-events` · both
 
-### Infrastructure
+| Path | Method | Auth | Note |
+|---|---|---|---|
+| `/admin/guardrail-events` | GET | admin | Stage 0.3: all users' rows incl. `response_excerpt`. |
+| `/admin/guardrail-events` | DELETE | admin | Purge the global guardrail audit log. |
 
-| Backend path | Method | Frontend path | Client fn | Auth | Request DTO | Response DTO | Mode | Plan | Test file |
-|---|---|---|---|---|---|---|---|---|---|
-| `/health` | GET | `/api/health` | — | public | — | `{status: "ok"}` | both | 0 | `packages/server/tests/test_app.py` |
+## Connectors — `build_connectors_router` · `/connectors` · both · admin
 
-## Planned routes (Plans 10-23)
+| Path | Method | Note |
+|---|---|---|
+| `/connectors` | GET, POST | list / install |
+| `/connectors/builtins` | GET | catalog of builtin connectors |
+| `/connectors/install-builtin` | POST | install a builtin by id |
+| `/connectors/install-python-package` | POST | install from a pip package |
+| `/connectors/introspect-python-lib` | POST | inspect an importable lib for capabilities |
+| `/connectors/{connector_id}` | GET, PUT, DELETE | get / update / uninstall |
+| `/connectors/{connector_id}/validate` | POST | credential/health check |
+| `/connectors/{connector_id}/sync-template-specs` | POST | re-sync capability specs |
 
-Each planned route MUST be added to this matrix before its plan executes. The entries below are placeholders derived from plan content; refine them during REM-P0-004 rewrites.
+## Cache — `build_cache_router` · `/cache` · both · admin
 
-### Plan 10 — Setup wizard (`/setup/*`, 15 routes)
+| Path | Method | Note |
+|---|---|---|
+| `/cache/stats` | GET | document-cache stats |
+| `/cache/documents` | DELETE | purge cached documents |
 
-- `/setup/status` (GET, public) — returns `{mode, current_step, completed, env_overrides}`. Frontend: `getSetupStatus` (`frontend/src/api/setup.ts`, to be created).
-- `/setup/mode` (POST, wizard-session) — choose personal vs company.
-- `/setup/models/tier/{tier}` (POST, wizard-session) — set Thinking/Everyday/Quick model.
-- `/setup/data-providers/{category}` (POST, wizard-session) — set category provider.
-- `/setup/web-search` (POST, wizard-session) — configure Brave/Tavily/Serper/You.com fallback.
-- `/setup/review` (GET/POST, wizard-session) — AI readiness check per department.
-- `/setup/complete` (POST, wizard-session) — flips `config_store["wizard.completed"] = true`.
-- Remaining routes (provider CRUD during wizard, per-category default, invite creation, admin bootstrap): enumerate in the Plan 10 rewrite.
+## Settings — LLM admin — `build_llm_providers_admin_router` · `/settings/admin/llm` · both · admin
 
-All `/setup/*` writes must return `410 Gone` once `wizard.completed = true`, except `/setup/status`.
+| Path | Method | Note |
+|---|---|---|
+| `/settings/admin/llm/providers` | GET, POST | list / create provider |
+| `/settings/admin/llm/providers/test` | POST | test provider creds |
+| `/settings/admin/llm/providers/{provider_id}` | PUT, DELETE | update / delete |
+| `/settings/admin/llm/providers/{provider_id}/models` | GET | provider's models |
+| `/settings/admin/llm/providers/{provider_id}/remote-models` | GET | discovery |
+| `/settings/admin/llm/models` | POST | create model |
+| `/settings/admin/llm/models/{model_id}` | PUT, DELETE | update / delete |
+| `/settings/admin/llm/department/{department_id}` | POST | department→model mapping |
+| `/settings/admin/llm/capability_override/{provider_kind}/{model:path}` | POST | capability override |
 
-### Plan 11 — Settings page frontend clients
+## Settings — LLM slot defaults — `build_llm_slot_defaults_router` · `/settings/admin/llm/slot-defaults` · both · admin
 
-- No new backend endpoints beyond those listed above; Plan 11 wires the existing admin/settings routers into frontend pages. Add a `frontend/src/api/settings.ts` module and reference it in this matrix during the plan rewrite.
+| Path | Method | Note |
+|---|---|---|
+| `/settings/admin/llm/slot-defaults` | GET | list slot defaults |
+| `/settings/admin/llm/slot-defaults/{slot_kind}/{slot_id}` | PUT, DELETE | upsert / clear a slot default |
 
-### Plan 12 — Shared chat + repo
+## Settings — general — `build_settings_general_router` · `/settings` · both · active-user
 
-- `/chat/sessions` (GET/POST, `require_auth`) — list/create chat sessions.
-- `/chat/sessions/{id}` (GET/PATCH/DELETE, `require_auth` + owner scope).
-- `/chat/sessions/{id}/messages` (GET, `require_auth` + owner scope).
-- `/chat/stream` (POST, `require_auth`, SSE) — multi-round ChatRunner driver. Emits `chat.*` events per Plan 5 event taxonomy.
-- `/repo/items` (GET, `require_auth` + owner scope) — list saved reports/files.
-- `/repo/items` (POST, `require_auth`) — save a generated report (persists `repo_items`).
-- `/repo/items/{id}` (GET/DELETE, `require_auth` + owner scope).
+| Path | Method | Note |
+|---|---|---|
+| `/settings/prefs` | GET, PATCH | user prefs (display/response/report language, etc.) |
+| `/settings/timezone` | PUT | user timezone |
+| `/settings/departments` | GET | per-department enable/health view |
+| `/settings/enabled-models` | GET | models available to the user (picker) |
+| `/settings/preferences/market-basket` | GET, PUT | Home ticker-strip basket |
+| `/settings/graph-extraction-time` | PUT | nightly graph-extraction time |
 
-### Plan 13 — Secretary + report pipeline
+## Settings — email — `build_settings_email_router` · `/settings` · both · active-user
 
-- `/departments/secretary/chat` (POST, `require_auth`, SSE) — Secretary ChatRunner.
-- `/reports` (POST, `require_auth`) — kick off a ReportRunner (generic handler for chat-only departments).
-- `/reports/{id}` (GET, `require_auth` + owner scope).
-- `/reports/{id}/stream` (GET, `require_auth`, SSE resume).
+| Path | Method | Note |
+|---|---|---|
+| `/settings/email` | PATCH | email-notification prefs |
 
-### Plan 14 — Equity Research
+## Jobs — `build_jobs_router` · `/jobs` · both · active-user
 
-- `/departments/equity-research/chat` (POST, SSE) — mode: initiation | update | sector.
-- `/departments/equity-research/configs` (GET/POST/PATCH/DELETE, `require_auth` + owner scope) — per-user config rows.
+| Path | Method | Note |
+|---|---|---|
+| `/jobs/history` | GET | `JobRun` history (owner-scoped); query `department?`, `status?`, `limit` |
+| `/jobs/{run_id}/retry` | POST | 503 if scheduler disabled |
 
-### Plan 15 — Earnings Update
+## Notifications — `build_notifications_router` · `/notifications` · both · active-user
 
-- `/departments/earnings-update/chat` (POST, SSE).
-- `/departments/earnings-update/watchlist` (GET/POST/DELETE, `require_auth` + owner scope).
-- `/departments/earnings-update/schedules` (GET/POST/PATCH/DELETE, `require_auth` + owner scope) — CRUD flows call scheduler `add_schedule/modify_schedule/remove_schedule` APIs in the same transaction.
+| Path | Method | Note |
+|---|---|---|
+| `/notifications/unread` | GET | `{counts_by_department}` |
+| `/notifications/read` | POST | mark a department read |
 
-### Plan 16 — Morning Briefing (shipped)
+## Notifications stream — `build_notifications_stream_router` · bare · both · active-user
 
-Router: `build_morning_briefing_router` mounted at `/departments/morning-briefing`.
+| Path | Method | Note |
+|---|---|---|
+| `/notifications/stream` | GET (SSE) | live notification + report events |
+| `/notifications/presence-close` | POST | tab-close beacon → drives auto-cancel |
 
-- `/departments/morning-briefing/config` (GET, `require_auth`) — returns `MbConfig` (report_length, enabled_section_ids, section_topics, custom_sections, reference_portfolio).
-- `/departments/morning-briefing/config` (PUT, `require_auth`) — upserts `MbConfig`.
-- `/departments/morning-briefing/schedule` (GET, `require_auth`) — returns `{schedule: MbSchedule | null}`.
-- `/departments/morning-briefing/schedule` (PUT, `require_auth`) — upserts one MB schedule (time, timezone, days_of_week, label).
-- `/departments/morning-briefing/schedule` (DELETE, `require_auth`) — 204 on delete.
-- `/departments/morning-briefing/report` (POST, `require_auth`, SSE) — on-demand briefing; emits `report.*` events terminating in `report.saved` or `report.error`.
-- `/departments/morning-briefing/chat/session` (POST, `require_auth`) — resolve-or-create the user's single MB `ChatSession`.
-- Recent reports listing reuses `/reports?department=morning_briefing` from Plan 13.
-- Test file: `packages/server/tests/test_routes_morning_briefing.py`.
-- Frontend client: `frontend/src/api/morning-briefing.ts`.
+## Dept health — `build_dept_health_router` · `/dept-health` · both · public
 
-### Plan 18 — Panic Thermometer (shipped)
+| Path | Method | Note |
+|---|---|---|
+| `/dept-health` | GET | serialized health cache (drives sidebar) |
+| `/dept-health/refresh` | POST | recompute + return |
 
-Router: `build_panic_thermometer_router` mounted at `/departments/panic-thermometer`.
-See `packages/server/src/openlia_server/routes/departments/panic_thermometer.py` for the full CRUD surface (dashboard, panels, rules, formulas, run).
+## Capabilities — `capabilities_router` · bare · both · public
 
-### Plan 19 — Macro Research (shipped)
+| Path | Method | Note |
+|---|---|---|
+| `/capabilities` | GET | engine capability manifest |
 
-Router: `build_macro_research_router` mounted at `/departments/macro_research`. Schedule routes mounted by `build_mr_schedule_router` at `/departments/macro_research/schedule`.
+## Markets — `build_markets_router` · `/markets` · both · active-user
 
-- `GET /departments/macro_research/dashboards` (`require_auth`) — enumerates the five Dalio dashboards. Response: `{ "dashboards": [{ "slug": str, "display_name": str }] }`.
-- `GET /departments/macro_research/dashboards/{slug}?smart_mode=<bool>` (`require_auth`) — snapshot for one dashboard (`debt_cycle`, `four_seasons`, `all_weather`, `world_order`, `five_forces`). Optional `smart_mode` query flag is forwarded to `mr_runner.run`. Response: `DashboardResult` (slug, display_name, severity, tiers, headline, generated_at, smart_mode_active).
-- `GET /departments/macro_research/dashboards/{slug}/config` (`require_auth`) — returns `{ "view_config": {...}, "threshold_overrides": {...} }`.
-- `PUT /departments/macro_research/dashboards/{slug}/config` (`require_auth`) — body `{ "view_config"?: {...}, "threshold_overrides"?: {...} }`; returns the merged row.
-- `PUT /departments/macro_research/dashboards/{slug}/threshold-overrides` (`require_auth`, NEW-19-08) — body `{ "threshold_overrides": {...} }`; returns the merged row. Use this when you only need to mutate threshold overrides; the combined `/config` endpoint stays for view_config writes.
-- `POST /departments/macro_research/dashboards/{slug}/assessment/run` (`require_auth`, 202) — body `{ "force"?: bool }`. Inserts a `JobRun` row keyed to `JobType.MR_ASSESSMENT` + `user_id` + `schedule_id=slug`, then dispatches via `app.state.scheduler.run_now`. Returns `{ "job_run_id": str, "status": "queued" | "cancelled" }` (cancelled when scheduler is disabled).
-- `GET /departments/macro_research/schedule` (`require_auth`) — returns `{ "cron_expression": str | null, "last_assessment_at": str | null }`.
-- `PUT /departments/macro_research/schedule` (`require_auth`) — body `{ "cron_expression": str }`; 400 on invalid crontab. Persists on the canonical `world_order` `mr_dashboard_state` row (see NEW-19-12 implementation note in `MacroResearchPageSpec.md`).
-- `DELETE /departments/macro_research/schedule` (`require_auth`, 204).
-- Test files: `packages/server/tests/test_macro_research/test_routes_macro_research.py`, `packages/server/tests/test_macro_research/test_routes_mr_schedules.py`.
-- Frontend client: `frontend/src/api/macro_research.ts`.
+| Path | Method | Note |
+|---|---|---|
+| `/markets/indices` | GET | `{available, indices}`; `available:false` when no EODHD key (Home ticker-strip empty state) |
 
-### Plan 20 — Retail Sentiment (shipped)
+## Portfolio — `build_portfolio_router` · `/portfolio` · both · active-user
 
-Router: `build_retail_sentiment_router` mounted at `/departments/retail-sentiment`.
+| Path | Method | Note |
+|---|---|---|
+| `/portfolio/holdings` | GET, POST | list / add holding |
+| `/portfolio/holdings/{holding_id}` | PATCH, DELETE | edit / remove (PATCH, not PUT) |
+| `/portfolio/analytics` | GET | KPI/analytics over user's holdings |
+| `/portfolio/refresh-prices` | POST | 30s per-user cooldown → 429 `{retry_after}` |
+| `/portfolio/import-csv` | POST | bulk import |
+| `/portfolio/export-csv` | GET | export |
+| `/portfolio/search` | GET | adapter-backed ticker lookup |
+| `/portfolio/groups` | GET, POST | list / create group |
+| `/portfolio/groups/{name}` | PATCH, DELETE | rename / delete group |
+| `/portfolio/groups/reorder` | POST | persist group order |
+| `/portfolio/prefs` | GET, PUT | per-user portfolio view prefs |
+| `/portfolio/value-series` | GET | portfolio value time series |
+| `/portfolio/ticker-series` | GET | per-ticker series (sparklines) |
 
-- `/departments/retail-sentiment/dashboard` (GET, `require_auth`) — current tabbed metric snapshot.
-- `/departments/retail-sentiment/dashboard/history` (GET, `require_auth`).
-- `/departments/retail-sentiment/config` (GET/PUT, `require_auth`).
-- `/departments/retail-sentiment/run` (POST, `require_auth`) — trigger a refresh.
-- `/departments/retail-sentiment/stocks/{ticker}/sentiment` (GET, `require_auth`).
-- `/departments/retail-sentiment/spikes` (GET, `require_auth`).
-- Test file: `packages/server/tests/test_routes_retail_sentiment.py`.
-- NLP classification + `rs_classification_log` table documented in Phase 20 spec are deferred; endpoint shape stable.
+## Reports (v1 engine) — `build_reports_router` · `/reports` · both · active-user
 
-### Plan 21 — Portfolio (shipped)
+Serves the generic v1 report pipeline (Morning Briefing legacy + Earnings
+Update v1). NOT the equity engine.
 
-Router: `build_portfolio_router` mounted at `/portfolio`.
+| Path | Method | Note |
+|---|---|---|
+| `/reports` | GET | list (query `department?`) |
+| `/reports/generate` | POST | kick off a v1 report run |
+| `/reports/{report_id}` | GET | fetch report |
+| `/reports/{report_id}/render` | GET | HTML render |
+| `/reports/{report_id}/retry` | POST | retry a failed run |
+| `/reports/{report_id}/export/docx` | GET | DOCX export |
+| `/reports/{report_id}/docx` | GET | legacy DOCX alias (slated for removal) |
+| `/reports/{report_id}/export/pdf` | GET, POST | PDF export |
+| `/reports/{report_id}` | DELETE | delete |
 
-- `/portfolio/holdings` (GET, POST, `require_auth` + owner scope).
-- `/portfolio/holdings/{id}` (PATCH, DELETE, `require_auth` + owner scope) — note PATCH (not PUT).
-- `/portfolio/analytics` (GET, `require_auth`).
-- `/portfolio/refresh-prices` (POST, `require_auth`) — 30s per-user cooldown via `PriceCache.refresh_cooldown_remaining`; returns 429 with `{detail.retry_after}` when within cooldown. Force-refresh routes through `PriceCache.invalidate(tickers)`; production resolves prices via `AdapterPriceProvider` wrapping `app.state.financial_adapter`.
-- `/portfolio/import-csv` (POST, `require_auth`) — note `/import-csv` (not `/holdings/import`).
-- `/portfolio/export-csv` (GET, `require_auth`) — note `/export-csv` (not `/holdings/export`).
-- `/portfolio/search` (GET, `require_auth`) — adapter-backed ticker lookup over `company_profile`; empty query → `[]`; adapter errors degrade to `[]`. Response shape: `{results: [{ticker, name, exchange, already_added}]}`.
-- `/portfolio/groups` (GET, POST, `require_auth` + owner scope) — list and create user-visible group names.
-- `/portfolio/groups/{name}` (PATCH, DELETE, `require_auth` + owner scope) — rename in a single transaction (updates every holding whose `groups` contains the old name); delete strips membership and preserves tickers in All.
-- `/portfolio/groups/reorder` (POST, `require_auth` + owner scope) — body `{order: [name, ...]}`; persists order across reload.
-- Test file: `packages/server/tests/test_routes/test_portfolio_routes.py`.
+## Reports stream / revise — bare · both · active-user
 
-### Plan 22 — Repository (shipped)
+| Path | Method | Router | Note |
+|---|---|---|---|
+| `/reports/{report_id}/stream` | GET (SSE) | `build_reports_stream_router` | resume a v1 run |
+| `/reports/{source_report_id}/revise` | POST | `build_reports_revise_router` | v1 revision kickoff |
 
-Router: `build_repo_router` mounted at `/repo`.
+## Repo — `build_repo_router` · `/repo` · both · active-user
 
-- `GET /repo/items` (`require_auth` + owner scope) — dual-shape response:
-  - When called with no filter args (legacy unfiltered call), returns flat `{ items: [{id, report_id, created_at}] }`.
-  - When called with any of the filter/sort/page args (or `filtered=true`), returns paginated
-    `{ items: RepoRowOut[], page, page_size, has_more }` where `RepoRowOut = {id, report_id, department, title, filename, generated_at, saved_at}`.
-  - Filter query params (all optional, all owner-scoped):
-    - `q` (string, case-insensitive `LIKE` on `Report.title`; empty string treated as no filter).
-    - `department` (repeatable + CSV; e.g. `?department=equity_research,secretary&department=earnings_update` deduped union).
-    - `generated_from`, `generated_to` (ISO date `YYYY-MM-DD`, inclusive on `Report.created_at`).
-    - `saved_from`, `saved_to` (ISO date, inclusive on `RepoItem.created_at`).
-    - `sort` (one of `saved_desc | saved_asc | generated_desc | generated_asc | department_asc | filename_asc`; default `saved_desc`; invalid → 422).
-    - `page` (>= 1; `page=0` → 422).
-    - `page_size` (1–200; >200 → 422; default 50).
-  - `saved_from > saved_to` returns empty list (not 422).
-- `POST /repo/items` (`require_auth`) — save a generated report (idempotent via `report_id`).
-- `DELETE /repo/items` (`require_auth`) — unsave a single report by `?report_id=…` (owner-scoped).
-- `GET /repo/facets` (`require_auth` + owner scope) — returns `{ departments: [{slug, count}], total }` used by the Repo filter bar; empty list for new users.
-- Test files: `packages/server/tests/test_routes/test_repo_filter_routes.py` (15 cases incl. negative + cross-user isolation), `test_repo_routes.py` (Plan 12 save/unsave coverage). Additional E2E coverage: `test_e2e_smoke_matrix.py::test_journey_repo_save_open_unsave`.
+| Path | Method | Note |
+|---|---|---|
+| `/repo/items` | GET | dual-shape: unfiltered flat list, or filtered/paginated `{items, page, page_size, has_more}` with `q/department/generated_*/saved_*/sort/page/page_size` |
+| `/repo/items` | POST | save a report (idempotent via `report_id`) |
+| `/repo/items` | DELETE | unsave by `?report_id=` |
+| `/repo/facets` | GET | `{departments:[{slug,count}], total}` |
+| `/repo/v2-runs` | GET, POST, DELETE | saved v2 engine runs |
+| `/repo/v3-runs` | GET, POST, DELETE | saved equity v3 runs |
+| `/repo/eu-runs` | GET, POST, DELETE | saved Earnings Update v2 runs |
+| `/repo/mb-runs` | GET, POST, DELETE | saved Morning Briefing v2 runs |
 
-### Plan 23 — Packaging + production static serving
+## Report templates — `build_report_templates_router` · `/report-templates` · both · active-user
 
-- `GET /` and SPA fallback routes — static mount of `frontend/dist`, declared in `app.py` only for production mode. API routes resolve first.
+| Path | Method | Note |
+|---|---|---|
+| `/report-templates` | GET, POST | list / create (owner-scoped) |
+| `/report-templates/{template_id}` | GET, PUT, DELETE | get / update / delete |
+| `/report-templates/ingest` | POST | ingest a template from source |
+| `/report-templates/parse` | POST | parse a template body |
+| `/report-templates/v23/builtins` | GET | builtin template-FORMAT catalog (shared library helper) |
+| `/report-templates/v23/parse` | POST | parse in the v23 template format |
+| `/report-templates/v23/validate` | POST | validate a v23-format template |
+
+## Chat sessions / stream — `/chat/sessions` · both · active-user
+
+| Path | Method | Router | Note |
+|---|---|---|---|
+| `/chat/sessions` | GET, POST | chat_sessions | list / create |
+| `/chat/sessions/by-department/{department}` | GET | chat_sessions | resolve-or-fetch per department |
+| `/chat/sessions/{session_id}` | GET, PATCH, DELETE | chat_sessions | get / rename / delete |
+| `/chat/sessions/{session_id}/messages` | GET, POST | chat_sessions | history / send (POST drives the runner) |
+| `/chat/sessions/{session_id}/model` | PUT | chat_sessions | set the session's model |
+| `/chat/sessions/{session_id}/stream` | GET (SSE) | chat_stream | live token stream |
+
+## Files — `build_files_router` · bare · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/chat/attachments/{attachment_id}/download` | GET | owner-scoped attachment download |
+
+## Graph — `build_graph_router` · `/graph` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/graph/constructs` | GET | user's graph constructs |
+| `/graph/constructs/{construct_id}` | DELETE | delete a construct |
+| `/graph/proposals` | GET | pending extraction proposals |
+| `/graph/proposals/{proposal_id}/accept` | POST | accept → construct |
+| `/graph/proposals/{proposal_id}/dismiss` | POST | dismiss |
+
+## Skills — `build_skills_router` · `/skills` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/skills` | GET | list installed skills (layered) |
+| `/skills/install` | POST | install a skill (Stage 3: `folder_path` install must be admin-gated) |
+| `/skills/{skill_id}` | PATCH, DELETE | toggle/edit (Stage 3: system-skill PATCH must be admin-gated) / uninstall |
+| `/skills/{skill_id}/body` | GET | skill body |
+
+## Disclaimer — `build_disclaimer_router` · `/disclaimer` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/disclaimer` | GET | disclaimer content |
+| `/disclaimer/status` | GET | acceptance status for the user |
+| `/disclaimer/accept` | POST | record acceptance on `UserPrefs` |
+
+## Dev — `build_dev_router` · `/dev` · both · public (env-gated)
+
+| Path | Method | Note |
+|---|---|---|
+| `/dev/info` | GET | `{enabled:true}` or 404 |
+| `/dev/events` | GET | recent dev events |
+| `/dev/events/stream` | GET (SSE) | live dev event stream |
+
+Every handler 404s unless `OPENLIA_DEV_MODE` is set.
+
+## Department model pref — `build_department_model_pref_router` · `/departments` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/{department}/model-pref` | GET, PUT, DELETE | per-user per-department model preference |
+
+## Secretary — `build_secretary_router` · `/departments/secretary` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/secretary/chat` | GET | welcome/context |
+| `/departments/secretary/chat` | POST (SSE) | Secretary ChatRunner |
+
+## Equity Research v3 — `build_equity_research_v3_router` · `/departments/equity-research/v3` · both · active-user
+
+Sole equity engine. Owner-scoped on `ReportV3Run.user_id`.
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/equity-research/v3/runs` | GET, POST | list / create run |
+| `/departments/equity-research/v3/runs/start` | POST | start a run |
+| `/departments/equity-research/v3/runs/{report_id}` | GET, DELETE | fetch / delete |
+| `/departments/equity-research/v3/runs/{report_id}/cancel` | POST | cancel |
+| `/departments/equity-research/v3/runs/{report_id}/events` | GET (SSE) | run events |
+| `/departments/equity-research/v3/runs/{report_id}/revise` | POST | start a revision |
+| `/departments/equity-research/v3/runs/{report_id}/revisions` | GET | list revisions |
+| `/departments/equity-research/v3/runs/{report_id}/{html,pdf,docx}` | GET | exports |
+| `/departments/equity-research/v3/revisions/{revision_id}/events` | GET (SSE) | revision events |
+| `/departments/equity-research/v3/revisions/{revision_id}/cancel` | POST | cancel revision |
+| `/departments/equity-research/v3/instructions` | GET, POST | methodology profiles |
+| `/departments/equity-research/v3/instructions/{instructions_id}` | DELETE | delete profile |
+| `/departments/equity-research/v3/templates` | GET, POST | templates |
+| `/departments/equity-research/v3/templates/{template_id}` | DELETE | delete template |
+
+## Earnings Update v1 (legacy) — `build_earnings_update_router` · `/departments/earnings-update` · both · active-user
+
+Runs on the generic v1 `reports` pipeline. Kept per CLAUDE.md.
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/earnings-update/config` | GET, PUT | per-user config |
+| `/departments/earnings-update/report` | POST | on-demand run |
+| `/departments/earnings-update/reports` | GET | list |
+| `/departments/earnings-update/reports/{report_id}` | DELETE | delete |
+| `/departments/earnings-update/schedules` | GET, POST | schedule CRUD |
+| `/departments/earnings-update/schedules/{schedule_id}` | PATCH, DELETE | edit / delete |
+| `/departments/earnings-update/watchlist` | GET, POST | watchlist |
+| `/departments/earnings-update/watchlist/{entry_id}` | DELETE | remove entry |
+
+## Earnings Update v2 — `build_earnings_update_v2_router` · `/departments/earnings-update/v2` · both · active-user
+
+Owner-scoped on `EuV2Run.user_id`.
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/earnings-update/v2/runs` | GET | list runs |
+| `/departments/earnings-update/v2/runs/start` | POST | start |
+| `/departments/earnings-update/v2/runs/{report_id}` | GET, DELETE | fetch / delete |
+| `/departments/earnings-update/v2/runs/{report_id}/cancel` | POST | cancel |
+| `/departments/earnings-update/v2/runs/{report_id}/events` | GET (SSE) | run events |
+| `/departments/earnings-update/v2/runs/{report_id}/{html,pdf,docx}` | GET | exports |
+| `/departments/earnings-update/v2/settings` | GET, PUT | engine settings |
+| `/departments/earnings-update/v2/instructions` | GET, POST | profiles |
+| `/departments/earnings-update/v2/instructions/{instructions_id}` | DELETE | delete |
+| `/departments/earnings-update/v2/templates` | GET, POST | templates |
+| `/departments/earnings-update/v2/templates/{template_id}` | DELETE | delete |
+| `/departments/earnings-update/v2/watchlist` | GET, POST | watchlist |
+| `/departments/earnings-update/v2/watchlist/sync` | POST | sync from calendar |
+| `/departments/earnings-update/v2/watchlist/{entry_id}` | DELETE | remove |
+| `/departments/earnings-update/v2/schedule` | GET | schedule view |
+| `/departments/earnings-update/v2/data-sources` | GET | resolved connector/data-source state |
+
+## Morning Briefing v2 — `build_morning_briefing_router` · `/departments/morning-briefing` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/morning-briefing/runs` | GET | list |
+| `/departments/morning-briefing/runs/start` | POST | start (SSE via `/events`) |
+| `/departments/morning-briefing/runs/{report_id}` | GET, DELETE | fetch / delete |
+| `/departments/morning-briefing/runs/{report_id}/cancel` | POST | cancel |
+| `/departments/morning-briefing/runs/{report_id}/events` | GET (SSE) | run events |
+| `/departments/morning-briefing/runs/{report_id}/{html,pdf,docx}` | GET | exports |
+| `/departments/morning-briefing/schedules` | GET, POST | schedule CRUD |
+| `/departments/morning-briefing/schedules/{schedule_id}` | PATCH, DELETE | edit / delete |
+| `/departments/morning-briefing/instructions` | GET, POST | profiles |
+| `/departments/morning-briefing/instructions/{instructions_id}` | DELETE | delete |
+| `/departments/morning-briefing/templates` | GET, POST | templates |
+| `/departments/morning-briefing/templates/{template_id}` | DELETE | delete |
+| `/departments/morning-briefing/data-sources` | GET | resolved data-source state |
+
+## Macro Research — `build_macro_research_router` · `/departments/macro_research` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/macro_research/dashboards` | GET | enumerate Dalio dashboards |
+| `/departments/macro_research/dashboards/{slug}` | GET | one dashboard snapshot |
+| `/departments/macro_research/dashboards/{slug}/refresh` | POST | recompute snapshot |
+
+### MR schedule — `build_mr_schedule_router` · `/departments/macro_research/schedule` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/macro_research/schedule` | GET, PUT, DELETE | assessment schedule; validates ownership before scheduler calls |
+
+## Retail Sentiment — `build_retail_sentiment_router` · `/departments/retail_sentiment` · both · active-user
+
+Redesigned as the `report_dash_rs` web-search dashboard engine.
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/retail_sentiment/dashboard/{ticker}` | GET | per-ticker sentiment dashboard |
+| `/departments/retail_sentiment/dashboard/{ticker}/history` | GET | snapshot history |
+| `/departments/retail_sentiment/dashboard/{ticker}/refresh` | POST | recompute |
+| `/departments/retail_sentiment/config` | GET, PUT | per-user config |
+| `/departments/retail_sentiment/schedule` | GET, PUT | refresh schedule |
+
+## Panic Thermometer — `build_panic_thermometer_router` · `/departments/panic_thermometer` · both · active-user
+
+| Path | Method | Note |
+|---|---|---|
+| `/departments/panic_thermometer/dashboard` | GET | computed dashboard |
+| `/departments/panic_thermometer/config` | GET, PUT | per-user config |
+| `/departments/panic_thermometer/config/export` | GET | export config |
+| `/departments/panic_thermometer/config/import` | POST | import config |
+| `/departments/panic_thermometer/presets` | GET, POST | shipped (global) + user presets |
+| `/departments/panic_thermometer/presets/{preset_id}` | PUT, DELETE | edit / delete user preset |
+| `/departments/panic_thermometer/presets/{preset_id}/apply` | POST | apply a preset |
+| `/departments/panic_thermometer/formula/parse` | POST | parse a formula |
+| `/departments/panic_thermometer/formula/test` | POST | evaluate a formula |
+| `/departments/panic_thermometer/ruleset/preview` | POST | preview ruleset output |
+
+## Infrastructure (app-level)
+
+| Path | Method | Auth | Note |
+|---|---|---|---|
+| `/health` | GET | public | `{status:"ok"}` |
+| `/healthz` | GET | public | `{status:"ok", mode}` |
+| `/_debug/client_host` | GET | public | `include_in_schema=false`; peer-IP debug |
+| `/{full_path}` | GET | public | SPA fallback; only when `OPENLIA_FRONTEND_DIST` set; `/api/*` and non-GET 404 as JSON |
 
 ## Merge gate
 
-- Every new or renamed route must land in this matrix in the same PR as the code.
-- Every route row must point at at least one test file; if the test does not exist yet the row's `Test file` column is `TODO-<plan>-<task>` until the test lands.
-- Changes to auth, request, or response DTOs update both the row and the frontend client entry.
-- REM-P0-005 stays `[~]` until every shipped route has a populated row with a real test file, and every Plan 10-23 row exists as a placeholder.
+- Every new or renamed endpoint lands here in the same PR as the code.
+- `test_route_matrix_coverage.py` fails CI if a new router prefix is missing
+  from the authorization matrix; keep both files in sync.
+- Auth/DTO changes update this row and the frontend client together.
+
+## Removed since April 2026 (do not re-add)
+
+- Equity-research v1 / v2 / v2.3 engine endpoints, their per-user config CRUD,
+  and the legacy equity chat route — removed with the old engines (PRs
+  #220/#222). v3 is the sole equity surface.
+- The standalone data-provider admin registry under `/settings/...` — folded
+  into `/connectors`.
+- Retail Sentiment's old per-post pipeline endpoints (`/run`, `/spikes`,
+  `/stocks/{ticker}/sentiment`, global `/dashboard`) — replaced by the
+  per-ticker dashboard routes above.
+- The old MB config/schedule/report/chat-session route shape — replaced by the
+  MB v2 runs/schedules/instructions/templates surface.

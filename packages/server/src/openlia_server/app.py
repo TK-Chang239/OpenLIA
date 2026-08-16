@@ -15,7 +15,9 @@ Environment contract (production-relevant subset):
                                    defaults to true when OPENLIA_MODE=company,
                                    false otherwise.
     OPENLIA_SCHEDULER_ENABLED    "true" to run APScheduler jobs; default true.
-    OPENLIA_SECRET_KEY           32-byte base64 AES-256-GCM key; if unset, the
+    OPENLIA_SECRET_KEY           Fernet key (urlsafe-base64 32-byte value;
+                                   AES-128-CBC + HMAC-SHA256), used to encrypt
+                                   connector secrets at rest. If unset, the
                                    server reads/writes ~/.openlia/secret.key.
 
 The `/api/...` prefix from the dev Vite proxy is also stripped at runtime by

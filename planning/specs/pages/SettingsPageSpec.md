@@ -1,9 +1,15 @@
 # Settings Page Spec
 
-## Page Overview
-The Settings Page allows the user to manage account preferences and application configuration. Changes take effect immediately on save. The page is organized into four top-level sections: General (display and notification preferences), Models (LLM tier preferences for users; full model roster CRUD for admins), Account (identity, security, and language), and Admin (visible to admins only: invite management, user management, password reset requests, model roster CRUD, data provider CRUD).
+> **Reconciled to shipped reality — 2026-08-16.** Two corrections from the shipped frontend (`frontend/src/components/settings/*`):
+> 1. **The Thinking / Everyday / Quick tier model does not exist in the shipped frontend and was dropped.** Model configuration ships as a **slot (system-role) default + per-department user override** model instead — see the rewritten *Models Section* below. Any reference to "tiers" in this document is not-implemented / historical.
+> 2. **The settings navigation has 11 sections**, not four — see *Settings Sidebar* below.
+>
+> **Grounded in:** `SettingsShell.tsx` (nav), `sections/*` (11 section components), `models/{UserOverridesPanel,SystemRolesPanel,ProviderCatalog}.tsx`, `api/{llm_slots,department-model-pref,settings}.ts`.
 
-> **Cross-reference note (2026-04-15):** This spec has been updated to reflect decisions from `database-design.md`: admin-only API key management, user-facing model picker (per-tier preference from admin roster), admin-approved password reset review panel, invite management, no per-user BYO keys, and `must_change_password` change-password flow.
+## Page Overview
+The Settings Page allows the user to manage account preferences and application configuration. Changes take effect immediately on save. It uses a left-nav + content-panel layout with **11 sections** (some admin-only): General, Models, Connectors (admin), Timezone, Account, Disclaimer, Guardrails, Skills, Report Templates, Cache, and Admin (admin-only: invites, users, password-reset requests). Model configuration is role-gated: every user sets per-department model overrides; admins additionally manage the provider/model roster and assign system-role slot defaults.
+
+> **Cross-reference note (2026-04-15, partially historical):** admin-only API key management, admin-approved password reset review panel, invite management, no per-user BYO keys, and `must_change_password` change-password flow are shipped. The "user-facing model picker (per-tier preference)" decision was **superseded** by the shipped slot/override model.
 
 ## Page Functionalities
 1. **Edit Display Name**: Allows the user to set the name that LIA departments use when addressing them in responses.
@@ -74,13 +80,20 @@ A secondary navigation panel, distinct from the main app Sidebar. Sits between t
 | Section label | `text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em] px-2 pb-1 mb-1` |
 | Nav item | `flex items-center px-2 py-2 rounded-[--radius-md] text-sm cursor-pointer`; inactive: `text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]`; active: `bg-[--color-surface-active] text-[--color-text-primary] font-medium`; transition `--duration-fast` |
 
-Navigation items:
+Navigation items (shipped order, `SettingsShell.tsx` `ITEMS`):
 - General
 - Models
+- Connectors — admin-only (managed via admin-only `GET /api/connectors` etc.; also hidden in the demo build)
+- Timezone
 - Account
-- Admin (visible only when `current_user.is_admin = true`)
+- Disclaimer
+- Guardrails
+- Skills
+- Report Templates
+- Cache
+- Admin — admin-only (`current_user.is_admin = true`; hidden in the demo build)
 
-The Models item is visible to all authenticated users. In company mode, non-admin users see a read-only roster of available models per tier plus a per-tier preference picker. Admins see the full model roster CRUD surface. The Admin section is hidden entirely for non-admin users.
+The Models item is visible to all authenticated users. Non-admins see and edit their **per-department model overrides** (from the enabled-models roster). Admins additionally see the provider/model **catalog** (roster CRUD) and the **System roles** panel (slot defaults). The Admin section is hidden entirely for non-admin users. In personal mode the synthetic `local` user is always admin, so admin-only tabs are visible.
 
 ---
 
@@ -236,43 +249,31 @@ Controls display and notification preferences.
 
 ---
 
-### Models Section
+### Models Section (`ModelsSection`)
 
-Displays the three LLM tiers (Thinking, Everyday, Quick) and lets users pick their preferred model per tier from the admin's configured roster. Content is role-gated. Full model roster CRUD lives in the Admin section (see below).
+> **The Thinking / Everyday / Quick tier system was never built and is dropped.** The shipped model is a **slot (system-role) default + per-department user override**. There is no per-tier picker and no `user_llm_preferences (user_id, tier, model_id)` write.
 
-#### User view (non-admin, company mode)
+Content is role-gated (`ModelsSection` takes `userRole`):
 
-Three tier sections -- Thinking, Everyday, Quick -- each showing:
+#### User overrides — all users (`UserOverridesPanel`)
+
+"Your defaults per department." One row per registered department (from `getRegisteredDepartmentIds()`). Each row lets the user pick a model from the enabled-models roster (`getEnabledModels`) to use when they run that department, or leave it unset to fall back to the server default.
 
 | Element | Detail |
 |---|---|
-| Tier label | "Thinking", "Everyday", or "Quick" with a short description of what the tier is used for |
-| Available models list | Read-only list of models the admin has configured for this tier. Each row shows: display name, provider name, connection status pill. |
-| "Not configured yet" state | When a tier has zero models, show: "Your admin hasn't set up a *thinking*-tier model yet." with muted styling. |
-| My preference picker | Dropdown: "Use tier default" (which model is the default is shown), or pick from the available models. Selecting a model writes to `user_llm_preferences (user_id, tier, model_id)`. |
-| Save button | Saves the preference for this tier. |
+| Department row | Department id + a model dropdown; shows the currently selected override and the effective model (`effective_model_id`). |
+| Select a model | `setDepartmentModelPref(department_id, model_id)`. |
+| Clear | Selecting "(server default)" calls `clearDepartmentModelPref(department_id)`; the row falls back to the slot default. |
 
-No per-user BYO keys. Users pick from what the admin has made available; they do not enter API keys or provider credentials.
+No per-user BYO keys — users pick from the admin-enabled roster; they do not enter provider credentials.
 
-#### Admin / personal user view
+#### Provider / model catalog — admin only (`ProviderCatalog`)
 
-Same as the user view above, plus a link per tier: "Manage models in Admin panel" that navigates to Admin -> Models. In personal mode, the admin view is the only view and the full model CRUD is inline (since there's no separate Admin section -- personal mode users see the admin controls directly within each tier card).
+The full provider + model roster CRUD, fetched from the admin-only endpoint (`GET /settings/admin/llm/providers`). Rendered for admins only; a non-admin never fires that request. See *Admin → Models* below for the CRUD detail.
 
-#### Per-department tier defaults
+#### System roles (slot defaults) — admin only (`SystemRolesPanel`)
 
-Below the three tier sections (visible to all users): a read-only reference panel listing each department with its default tier and an info icon showing `DEFAULT_TIER_REASON`.
-
-| Department | Default tier |
-|---|---|
-| Secretary | Everyday |
-| Equity Research | Thinking |
-| Earnings Update | Everyday |
-| Morning Briefing | Everyday |
-| Retail Sentiment | Quick |
-| Macro Research | Thinking |
-| Panic Thermometer | Quick |
-
-Admin can override per-department tier routing from Admin -> Models.
+Admin assigns a model to each **system-role slot** (`slot_kind='system_role'`): `listSlotDefaults` reads `slot_id → model_id`; `setSlotDefault('system_role', roleId, modelId)` writes it. Unassigned slots show "(Unassigned)". These slot defaults are the server-side default a department resolves to when a user has set no per-department override.
 
 ---
 
@@ -384,7 +385,7 @@ Full model roster management. Create, edit, remove LLM provider credentials and 
 | Element | Detail |
 |---|---|
 | Provider list | Card per provider. Shows: label, kind pill (e.g., "openai", "anthropic"), enabled/disabled toggle, model count badge, "Edit" and "Delete" actions. |
-| Add Provider button | Accent primary button. Opens a create form. |
+| Add LLM Provider button | Accent primary button. Opens a create form. |
 | Create/Edit form | Fields: Kind (dropdown of supported providers), Label (text), API Key (password input, "(stored encrypted)" helper text), Env Var Name (alternative to API key, text input), Base URL (text, shown for openai_compat/ollama/self-hosted), Extra Config (JSON editor, optional). |
 | Connection test | "Test Connection" button in create/edit form. Runs a 1-token completion against the provider. Shows green checkmark or red error inline. |
 | Delete provider | Blocked if provider has models. Error: "Remove all models from this provider first." |
@@ -392,14 +393,15 @@ Full model roster management. Create, edit, remove LLM provider credentials and 
 
 **Model management (within each provider card, or as a separate tab):**
 
+> **No tier field.** The shipped roster has no Thinking/Everyday/Quick tier. Default routing is via **system-role slot defaults** (`SystemRolesPanel`), not a per-model `is_tier_default` flag.
+
 | Element | Detail |
 |---|---|
-| Model list per provider | Table: Display Name, Model Ref, Tier, Default (star icon if `is_tier_default`), Enabled, Actions. |
+| Model list per provider | Table: Display Name, Model Ref, Enabled, Actions. |
 | Add Model button | Per provider. Opens an inline form. |
-| Create/Edit form | Fields: Model Ref (text, provider's model identifier), Display Name (text, defaults to model ref), Tier (dropdown: Thinking/Everyday/Quick), Set as tier default (checkbox), Enabled (toggle). Overrides (expandable): temperature, max_tokens, reasoning_effort. |
-| Tier default constraint | At most one default per tier. Setting a new default automatically clears the previous one (with confirmation). |
-| Delete model | Inline confirm: "Remove [name]? Users who selected this model will fall back to the tier default." On delete, `user_llm_preferences` rows cascade-delete. |
-| Soft reminder | Banner at the top of the Models tab if any tier has zero enabled models: "The [tier] tier has no models configured. Departments using this tier will show an error." Amber warning style. |
+| Create/Edit form | Fields: Model Ref (text, provider's model identifier), Display Name (text, defaults to model ref), Enabled (toggle). Overrides (expandable): temperature, max_tokens, reasoning_effort. |
+| Delete model | Inline confirm: "Remove [name]? Users who selected this model fall back to the server (slot) default." Per-department overrides pointing at it clear. |
+| Soft reminder | Banner if no models are enabled: "No models configured. Departments will show an error." Amber warning style. |
 
 ---
 
@@ -410,7 +412,7 @@ Manage data source credentials and requirement mappings.
 | Element | Detail |
 |---|---|
 | Provider list | Card per provider. Shows: label, kind pill, enabled/disabled toggle, "Edit" and "Delete" actions. |
-| Add Provider button | Accent primary button. Opens a create form. |
+| Add Data Provider button | Accent primary button. Opens a create form. |
 | Create/Edit form | Fields: Kind (dropdown of supported data source types), Label (text), API Key (password input, "(stored encrypted)"), Env Var Name (alternative to API key), Base URL (optional), Extra Config (JSON, optional). |
 | Connection test | "Test Connection" button. Runs a lightweight API call (e.g., quote lookup for AAPL). Shows success/error inline. |
 | Requirement mapping | Below the provider list: a table showing each requirement type (stock_quote, company_news, etc.) and which provider is assigned to it, with priority ordering. Admin can reassign via dropdown per requirement row. |

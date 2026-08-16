@@ -1,9 +1,9 @@
 # Equity Research v3 — Single-Model Engine Spec
 
 **Date opened:** 2026-05-27
-**Status:** Draft — design only, no code yet.
-**Supersedes:** the 8-stage pipeline in `packages/core/src/openlia/llm/runtime/report_v2_3/`.
-**Branch (planned):** `feat/equity-research-v3`.
+**Status:** SHIPPED — v3 is the **sole** equity-research engine (per CLAUDE.md § *Equity Research Engine*). Live at `packages/core/src/openlia/llm/runtime/report_v3/`, served at `/equity-research`.
+**Supersedes:** the v1 / v2 / v2.2 / v2.3 equity-research engines, all **removed** (PRs #220/#222). Only `report_v2_3/{schemas.py, research/, templates/}` survives as a shared library reused by v3 and Earnings Update.
+**Shipped in:** `feat/equity-research-v3` (merged).
 
 ---
 
@@ -22,7 +22,7 @@ Everything else from v2.3 — multi-stage validation, fact bundles, derived_from
 ## Non-goals
 
 - **No Ollama support.** Web search and code execution are non-negotiable for v3; local models without them are out of scope. The engine will refuse to start on a local-model provider with a clear error.
-- **No backwards compatibility with v2.3 state.** v3 runs in parallel; v2.3 stays as rollback until v3 is proven. v2.3 will be deleted in a follow-up once v3 is the default and stable.
+- **No backwards compatibility with v2.3 state.** v3 is now the sole engine; the v2.3 pipeline engine has been deleted (PRs #220/#222). Only `report_v2_3/{schemas.py, research/, templates/}` remains, as a shared library.
 - **No multi-stage checkpointing.** A failed run re-runs from scratch. The engine is fast enough end-to-end (one LLM context, no inter-stage waste) that resume is unnecessary complexity.
 - **No per-section model routing.** One model runs the whole report.
 

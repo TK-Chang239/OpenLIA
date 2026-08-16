@@ -29,7 +29,7 @@ The user can apply filters to narrow results. Multiple filters can be active sim
 
 | Filter | Options |
 |---|---|
-| Department | Secretary, Equity Research, Earnings Update, Morning Briefing, Retail Sentiment |
+| Department | Secretary, Equity Research, Earnings Update, Morning Briefing, Retail Sentiment, Macro Research, Panic Thermometer (all 7 departments) |
 | Date Generated | Date range picker (from / to) applied to `generated_at` |
 | Date Saved | Date range picker (from / to) applied to `saved_at` |
 

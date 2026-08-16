@@ -30,7 +30,7 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 20 | 6 | Retail Sentiment dashboard (12 metrics, 3 tabs) | Done (2026-04-24) | `2026-04-23-phase-20-retail-sentiment.md` |
 | 21 | 7 | Portfolio page | Done (2026-04-24) | `2026-04-23-phase-21-portfolio.md` |
 | 22 | 7 | Repository page | Done (2026-04-24) | `2026-04-23-phase-22-repository.md` |
-| 23 | 7 | Docker packaging + production build + final acceptance | Done (2026-04-24) | `2026-04-23-phase-23-docker-packaging-acceptance.md` |
+| 23 | 7 | Docker packaging + production build + final acceptance | Partial (2026-04-24) — see note below | `2026-04-23-phase-23-docker-packaging-acceptance.md` |
 | 24 | 7 | Design system refresh (Wondermakers / Acid Yellow tokens, app shell, primitives) | Done (2026-04-24) | `2026-04-24-phase-24-design-system-refresh.md` |
 
 ---
@@ -362,6 +362,7 @@ Goal: the four departments that render computed metrics + LLM assessments, not n
 - **Specs:** `planning/PLAN.md` §Deployment, `planning/specs/pages/SetupWizardSpec.md` §Company mode
 - **Scope:** Multi-stage Dockerfile (frontend build → Python runtime), `docker-compose` examples (Cloudflare Tunnel, Caddy reverse proxy, LAN-only), `pip install openlia` flow from PyPI, end-to-end smoke test for both deployment modes, production-mode FastAPI static-file serving, `OPENLIA_TRUST_PROXY_HEADERS` / `OPENLIA_COOKIE_SECURE` wiring.
 - **Depends on:** everything.
+- **⚠️ Status note (2026-08-16):** marked Done, but the actual deliverable — a shipped **v1.0.0 release** — never happened. There are zero git tags, zero GitHub releases, `release.yml` has never fired, `pip install openlia` 404s, and no GHCR image is published. The packaging *plan/code* landed; the *release* did not. Open-source release is re-scoped in `docs/audit-2026-08-16.md` Stage 6.
 
 ---
 

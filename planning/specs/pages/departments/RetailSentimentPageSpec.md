@@ -1,5 +1,10 @@
 # Retail Sentiment Department Spec
 
+> **SUPERSEDED (data architecture + shipped surface) — 2026-08-16.** This document describes the original per-post-classification design (12 metrics, batch LLM classifier, Overview / Evidence / Insights tabs). That stack was **deleted and rebuilt** as the LLM-dashboard engine `report_dash_rs`. The authoritative design is now:
+> - **`planning/specs/systems/retail-sentiment-llm-dashboard-redesign.md`** (the shipped engine: a single-model tool-use loop with the model's *native* web search as the backbone; no required connector).
+>
+> **Shipped state (verified in `frontend/src/pages/departments/RetailSentiment.tsx` + `retail_sentiment/RsOverviewView.tsx`):** RS ships **one** of the three tabs described below — the **Overview** view only, per ticker. The tab model was reduced to a single polled overview view (`getDashboard(ticker)`); the **Evidence** and **Insights** tabs are roadmap (post-R5, see `planning/implementation-plans/2026-06-04-rs-llm-dashboard-redesign.md`). The header shows a ticker selector + a live "Active" dot + a Settings panel (coverage hint). The 12-metric Pandas engine, batch classifier, and the multi-tab frontend below are retired. Treat the sections below as historical.
+
 ## Page Overview
 
 The Retail Sentiment Department (RS) provides a 12-metric sentiment monitoring dashboard that aggregates data from financial providers, social media APIs, and cross-platform sentiment sources. Users build a watchlist of tickers and monitor retail investor sentiment through three analytical tabs: Overview (metrics at a glance), Evidence (source traceability), and Insights (actionable signals with LLM synthesis).
