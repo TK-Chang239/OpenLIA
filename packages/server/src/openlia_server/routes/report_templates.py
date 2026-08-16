@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.report_templates import ReportTemplate
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services.template_compile import compile_template_spec
 from openlia_server.services.template_compile_v23 import compile_v23_spec
 from openlia_server.services.template_ingest import (
@@ -97,7 +97,7 @@ def build_report_templates_router(
 ) -> APIRouter:
     """Mount the report-templates CRUD endpoints under /api/report-templates."""
     router = APIRouter(prefix="/report-templates", tags=["report-templates"])
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     def _to_out(row: ReportTemplate) -> ReportTemplateOut:

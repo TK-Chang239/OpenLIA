@@ -26,7 +26,7 @@ from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import Report
 from openlia_server.db.models.scheduler import EuSchedule
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.scheduler.registry import JobType
 from openlia_server.services import eu_config as config_svc
 from openlia_server.services import eu_runner
@@ -178,7 +178,7 @@ def build_earnings_update_router(
     mode: Literal["personal", "company"],
 ) -> APIRouter:
     router = APIRouter(prefix="/departments/earnings-update", tags=["earnings-update"])
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     # ----- Watchlist -----

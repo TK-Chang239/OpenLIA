@@ -65,7 +65,7 @@ from openlia_server.db.models.report_mb import (
     ReportMbCitation,
     ReportMbSection,
 )
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import mb_v2_data_sources
 from openlia_server.services import mb_v2_instructions_service as instructions_svc
 from openlia_server.services import mb_v2_render_service as render_svc
@@ -464,7 +464,7 @@ def build_morning_briefing_router(
     db_session_factory: Callable[[], DBSession],
     mode: Literal["personal", "company"],
 ) -> APIRouter:
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(prefix="/departments/morning-briefing", tags=["morning-briefing"])
 

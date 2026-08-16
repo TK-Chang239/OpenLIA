@@ -58,7 +58,7 @@ from openlia_server.db.models.report_eu import (
     ReportEuCitation,
     ReportEuSection,
 )
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import eu_v2_calendar_sync as calendar_sync
 from openlia_server.services import eu_v2_data_sources
 from openlia_server.services import eu_v2_instructions_service as instructions_svc
@@ -451,7 +451,7 @@ def build_earnings_update_v2_router(
     db_session_factory: Callable[[], DBSession],
     mode: str,
 ) -> APIRouter:
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(
         prefix="/departments/earnings-update/v2",
