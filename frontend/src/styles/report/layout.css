@@ -307,8 +307,15 @@
   border-left: 3px solid var(--report-accent);
   color: var(--report-text-secondary);
 }
+/* react-markdown emits a bare <table> with no wrapper element, so the table
+   itself becomes the horizontal-scroll container: wide LLM tables scroll inside
+   their own box (display:block + width:max-content + overflow-x) while the page
+   body never scrolls (max-width:100% clamps to the column). */
 .report-text table {
-  width: 100%;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   font-size: 13px;
   margin-bottom: 12px;
@@ -1166,8 +1173,15 @@
   color: var(--report-text-tertiary);
   margin: 0 0 10px;
 }
+/* The <figcaption> title and <ul> footnotes are siblings of the <table> inside
+   figure.report-table, so scoping the scroll container to the table alone keeps
+   them static while a wide structured table scrolls on its own. max-width:100%
+   clamps to the column so the page body never scrolls horizontally. */
 .report-table table {
-  width: 100%;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   font-family: var(--report-font-mono);
   font-size: 12px;
@@ -1735,6 +1749,31 @@
 .key-finding p { margin: 0 0 8px; line-height: 1.6; color: var(--report-text-primary); }
 .key-finding p:last-child { margin-bottom: 0; }
 .key-finding strong { font-weight: 600; }
+/* A key finding is react-markdown (remark-gfm), so it can contain a table.
+   Give it borders/padding and a scroll container of its own (same pattern as
+   .report-text table) so it never pushes the page body sideways. */
+.key-finding table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 8px 0;
+}
+.key-finding th,
+.key-finding td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--report-border);
+}
+.key-finding th {
+  font-weight: 600;
+  color: var(--report-text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 
 /* ---- Rating badge (pill) ---- */
 .rating-badge {
