@@ -610,12 +610,40 @@ async def test_runner_threads_reasoning_effort_to_every_turn():
     assert result.status == "completed"
 
     base_max = session.capabilities.max_output_tokens
-    # MEDIUM overhead per session._REASONING_OVERHEAD
-    expected_max = base_max + 8192
+    # MEDIUM overhead per session._REASONING_OVERHEAD, clamped to the ceiling.
+    # sonnet's ceiling (64,000) is below base + 8,192, so the combined budget
+    # clamps back to the ceiling — thinking and visible output share it.
+    expected_max = min(base_max, base_max + 8192)
     assert len(fake.captured_requests) >= 1
     for captured in fake.captured_requests:
         assert captured.reasoning_effort == ReasoningEffort.MEDIUM
         assert captured.max_tokens == expected_max
+        assert captured.max_tokens <= base_max
+
+
+@pytest.mark.asyncio
+async def test_reasoning_overhead_clamped_to_max_output_tokens_ceiling():
+    """A reasoning budget must never push max_tokens past the model's
+    declared ceiling. claude-sonnet's ceiling is 64,000; HIGH effort adds
+    32,768, which would overflow to 96,768 without the clamp. The engine
+    must send at most the ceiling — thinking and visible output share it."""
+    from openlia.llm.types import Message
+
+    session = LLMSession.create(provider_kind="anthropic", model="claude-sonnet-4-6")
+    ceiling = session.capabilities.max_output_tokens
+    assert ceiling == 64_000  # guards against a silent capability change
+    fake = FakeLLMProvider(scripted_responses=[script_text("ok")])
+    session.attach_adapter(fake)
+
+    await session.generate(
+        messages=[Message(role="user", content="hi")],
+        reasoning_effort=ReasoningEffort.HIGH,
+    )
+
+    sent = fake.captured_requests[-1].max_tokens
+    # 64,000 + 32,768 = 96,768 would overflow; the clamp holds it at the ceiling.
+    assert sent == ceiling
+    assert sent <= ceiling
 
 
 @pytest.mark.asyncio
