@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MorningBriefingSnapshotCard } from "../MorningBriefingSnapshotCard";
 import * as mbApi from "../../../api/morning-briefing";
@@ -79,8 +79,11 @@ describe("MorningBriefingSnapshotCard", () => {
       run({ subject: "Daily Wrap", highlights: null }),
     ]);
     renderCard();
-    await waitFor(() => expect(mocked.listMbRuns).toHaveBeenCalled());
+    // Await the rendered content (not just the mock call) so the assertion does
+    // not race the component's async re-render out of the loading state.
     // Subject appears both in the header and as the lede fallback.
-    expect(screen.getAllByText("Daily Wrap").length).toBeGreaterThanOrEqual(1);
+    expect(
+      (await screen.findAllByText("Daily Wrap")).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 });
