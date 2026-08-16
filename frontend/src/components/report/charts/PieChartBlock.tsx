@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { ChartEmpty } from './ChartEmpty';
 import { paletteColor, formatTick } from './svgUtils';
 import { useChartTooltip } from './useChartTooltip';
 
@@ -44,6 +45,18 @@ export function PieChartBlock({
       return { ...s, startA, endA, fraction: s.value / total };
     });
   }, [segments, total]);
+
+  // No positive-valued segment yields nothing but a titled blank frame — every
+  // arc collapses to a zero-length (empty ``d``) path. Show the no-data message.
+  const hasData = Array.isArray(segments) && segments.some((s) => s?.value > 0);
+  if (!hasData) {
+    return (
+      <figure className="report-chart">
+        <figcaption className="report-chart__title">{title}</figcaption>
+        <ChartEmpty />
+      </figure>
+    );
+  }
 
   return (
     <figure className="report-chart" ref={figureRef}>

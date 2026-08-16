@@ -1,4 +1,5 @@
 import { useId, useMemo } from 'react';
+import { ChartEmpty } from './ChartEmpty';
 import { formatTick, paletteColor } from './svgUtils';
 import { useChartTooltip } from './useChartTooltip';
 
@@ -113,6 +114,10 @@ export function LineChartBlock({
   const chart = useMemo(() => {
     const xs = normalizedXs;
     const allY = series.flatMap((s) => s.data.map((d) => d.y));
+    // With no numeric data ``Math.min/Math.max`` over the empty array collapse
+    // to Infinity/-Infinity, which propagate into NaN coordinates and render a
+    // titled blank frame. Bail so the empty-data message renders instead.
+    if (allY.length === 0) return null;
     const minY = Math.min(...allY);
     const maxY = Math.max(...allY);
     const ticks = niceTicks(minY, maxY, 4);
@@ -133,13 +138,23 @@ export function LineChartBlock({
   const { figureRef, tooltipNode, hover, activeKey } = useChartTooltip();
   const activeIndex = typeof activeKey === 'number' ? activeKey : null;
 
+  if (!chart) {
+    return (
+      <figure className="report-chart">
+        <figcaption className="report-chart__title">{title}</figcaption>
+        <ChartEmpty />
+      </figure>
+    );
+  }
+
   return (
     <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
         viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto' }}
         role="img"
         aria-label={title}
       >

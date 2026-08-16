@@ -19,6 +19,31 @@ describe('LineChartBlock', () => {
     expect(container.querySelector('svg.report-line-chart')).toBeTruthy();
     expect(container.querySelectorAll('polyline.series-line')).toHaveLength(1);
   });
+
+  it('renders the empty-data message instead of a blank frame when series is empty', () => {
+    // Without a guard, Math.min/Math.max over the empty y-array collapse to
+    // Infinity/-Infinity and render a titled blank SVG frame. Guard renders
+    // the localized no-data message and no chart SVG.
+    const { container } = render(
+      <LineChartBlock type="line_chart" title="Empty Trend" series={[]} />,
+    );
+    expect(screen.getByText('Empty Trend')).toBeInTheDocument();
+    expect(container.querySelector('.report-chart__empty')).toBeTruthy();
+    expect(container.querySelector('svg.report-line-chart')).toBeNull();
+  });
+
+  it('renders the empty-data message when every series has no data points', () => {
+    const { container } = render(
+      <LineChartBlock
+        type="line_chart"
+        title="No Points"
+        categories={['Q1', 'Q2']}
+        series={[{ name: 's', values: [] }]}
+      />,
+    );
+    expect(container.querySelector('.report-chart__empty')).toBeTruthy();
+    expect(container.querySelector('svg.report-line-chart')).toBeNull();
+  });
 });
 
 describe('BarChartBlock', () => {
@@ -114,5 +139,29 @@ describe('PieChartBlock', () => {
     );
     const path = container.querySelector('svg path');
     expect(path?.getAttribute('d')).toMatch(/M /);
+  });
+
+  it('renders the empty-data message instead of a blank frame when segments is empty', () => {
+    const { container } = render(
+      <PieChartBlock type="pie_chart" title="Empty Mix" segments={[]} />,
+    );
+    expect(screen.getByText('Empty Mix')).toBeInTheDocument();
+    expect(container.querySelector('.report-chart__empty')).toBeTruthy();
+    expect(container.querySelector('svg.report-pie__svg')).toBeNull();
+  });
+
+  it('renders the empty-data message when all segment values are non-positive', () => {
+    const { container } = render(
+      <PieChartBlock
+        type="pie_chart"
+        title="All Zero"
+        segments={[
+          { label: 'a', value: 0 },
+          { label: 'b', value: 0 },
+        ]}
+      />,
+    );
+    expect(container.querySelector('.report-chart__empty')).toBeTruthy();
+    expect(container.querySelector('svg.report-pie__svg')).toBeNull();
   });
 });
