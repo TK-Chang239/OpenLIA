@@ -724,7 +724,7 @@ def create_app(
     app.include_router(build_department_model_pref_router(db_session_factory=factory, mode=mode))
 
     # Skills system — store + registry constructed here, shared via app.state.
-    from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
+    from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry, SkillStore
 
     from openlia_server.routes.admin_skills import build_admin_skills_router
     from openlia_server.routes.skills import build_skills_router
@@ -734,9 +734,20 @@ def create_app(
     )
     _skills_root.mkdir(parents=True, exist_ok=True)
     _fs_skill_store = FilesystemSkillStore(root=_skills_root)
-    # Plan 1: filesystem store for both scopes. DatabaseSkillStore reserved for
-    # company-mode user-scope in Plan 2 once real multi-user wiring is in place.
-    skills_layered = LayeredSkillStore(system=_fs_skill_store, user=_fs_skill_store)
+    # System scope is always filesystem-backed: a single global, admin-managed set.
+    # User scope depends on deployment mode. Personal mode is a single local user, so
+    # the filesystem store is fine. Company mode is multi-user, and FilesystemSkillStore
+    # keys skills only by scope (its _scope_dir has no user_id in the path), so one
+    # user's user-scoped install would be visible to and mutable by every other user.
+    # Back the company-mode user scope with the per-user DatabaseSkillStore to isolate
+    # user-scoped skills by user_id.
+    if mode == "company":
+        from openlia_server.skills.database_store import DatabaseSkillStore
+
+        _user_skill_store: SkillStore = DatabaseSkillStore(session_factory=factory)
+    else:
+        _user_skill_store = _fs_skill_store
+    skills_layered = LayeredSkillStore(system=_fs_skill_store, user=_user_skill_store)
     skills_registry = SkillRegistry(store=skills_layered)
     app.state.skills_layered = skills_layered
     app.state.skills_registry = skills_registry
