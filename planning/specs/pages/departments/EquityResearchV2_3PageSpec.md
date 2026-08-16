@@ -1,6 +1,8 @@
 # Equity Research Department Spec — v2.3
 
-This spec defines the **v2.3** user interface for the Equity Research Department. v2.3 is built around the subagent-pipeline engine (`packages/core/src/openlia/llm/runtime/report_v2_3/`) merged via PR #156 and is the production surface going forward. The v1 spec at `EquityResearchPageSpec.md` is retained for historical reference only.
+> **⚠️ SUPERSEDED (2026-08-16) — HISTORICAL ONLY.** The **v2.3 subagent-pipeline engine was REMOVED** (PRs #220/#222). The live Equity Research surface is the **v3 single-model engine** (`packages/core/src/openlia/llm/runtime/report_v3/`). For the current design read the v3 page spec at `planning/specs/pages/departments/EquityResearchV3PageSpec.md` and the engine spec `planning/2026-05-27-equity-research-v3-single-model-spec.md` (shipped, sole ER engine); CLAUDE.md § *Equity Research Engine* is authoritative. This entire document describes deleted machinery and is kept only for history — do **not** build against it.
+
+This spec defines the **v2.3** user interface for the Equity Research Department. v2.3 was built around the subagent-pipeline engine (`packages/core/src/openlia/llm/runtime/report_v2_3/`) merged via PR #156 and ~~is the production surface going forward~~ **[SUPERSEDED — the v2.3 engine was removed; the live surface is the v3 single-model engine, see banner above]**. The v1 spec at `EquityResearchPageSpec.md` is retained for historical reference only.
 
 ## What Changed From v1
 

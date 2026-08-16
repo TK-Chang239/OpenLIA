@@ -1,5 +1,7 @@
 # Equity Research v2.2 — Phase progress tracker
 
+> **⚠️ SUPERSEDED (2026-08-16) — DO NOT UPDATE.** This tracked the **v2.2 equity-research engine, which was REMOVED** (PRs #220/#222). The sole equity-research engine is now **v3**, a single-model tool-use loop (`packages/core/src/openlia/llm/runtime/report_v3/`); see `2026-05-27-equity-research-v3-single-model-spec.md`, CLAUDE.md § *Equity Research Engine*, and `planning/README.md`. Every path, PR row, and exit gate below refers to deleted code. This file is retained only as history — it is **not** a live checklist.
+
 Living checklist. **Update this file as part of each PR merge.** A PR is not "done" until its row here is checked.
 
 For PR row definitions, design-doc refs, and acceptance criteria, see `2026-05-22-equity-research-implementation-plan.md`.
