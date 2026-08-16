@@ -82,6 +82,7 @@ vi.mock("../../api/reports", () => ({
 
 vi.mock("../../api/equity-research-v3", () => ({
   deleteV3Run: (...a: unknown[]) => deleteV3Run(...a),
+  v3HtmlUrl: (id: string) => `/api/departments/equity-research/v3/runs/${id}/html`,
 }));
 
 import Repository from "../Repository";
