@@ -11,6 +11,10 @@ import {
 } from "./suggestionsBank";
 import { localDaySeed } from "./greetings";
 
+// In the public demo the cards are display-only: they are labelled "Suggested
+// prompts" and clicking them does not navigate anywhere.
+const DEMO = import.meta.env.VITE_DEMO_MODE === "true";
+
 const DEPT_ICON: Record<SuggestionDept, JSX.Element> = {
   earnings_update: <FileText size={11} strokeWidth={1.5} />,
   macro_research: <Globe size={11} strokeWidth={1.5} />,
@@ -33,7 +37,7 @@ export function SuggestedGrid(): JSX.Element {
     <section>
       <div className="flex items-center justify-between">
         <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-text-tertiary">
-          {t("home.suggested_today")}
+          {DEMO ? "Suggested prompts" : t("home.suggested_today")}
         </span>
         <button
           type="button"
@@ -49,8 +53,13 @@ export function SuggestedGrid(): JSX.Element {
           <button
             key={`${s.dept}-${s.question}`}
             type="button"
-            onClick={() => onCardClick(s)}
-            className="group p-[14px] bg-bg-elevated border border-border-subtle rounded-[10px] cursor-pointer transition-all duration-normal ease-out flex flex-col gap-2 text-left hover:border-border-strong hover:bg-surface-hover hover:-translate-y-[1px]"
+            onClick={DEMO ? undefined : () => onCardClick(s)}
+            aria-disabled={DEMO || undefined}
+            className={`group p-[14px] bg-bg-elevated border border-border-subtle rounded-[10px] transition-all duration-normal ease-out flex flex-col gap-2 text-left ${
+              DEMO
+                ? "cursor-default"
+                : "cursor-pointer hover:border-border-strong hover:bg-surface-hover hover:-translate-y-[1px]"
+            }`}
           >
             <span className="flex items-center gap-2 font-mono text-[9px] tracking-[0.1em] uppercase text-text-tertiary">
               <span
