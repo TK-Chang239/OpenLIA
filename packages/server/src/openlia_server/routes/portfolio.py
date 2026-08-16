@@ -480,15 +480,13 @@ def build_portfolio_router(
             for t, price in prices.items():
                 if price is None:
                     continue
+                # Manual refresh only has a live last_price; omit previous_close
+                # / OHLC / volume so upsert_quote preserves the scheduler-populated
+                # values instead of nulling them (audit 1.A.2).
                 quotes_svc.upsert_quote(
                     s,
                     ticker=t,
                     last_price=price,
-                    previous_close=None,
-                    day_open=None,
-                    day_high=None,
-                    day_low=None,
-                    volume=None,
                     currency=(holdings_by_ticker[t].currency if t in holdings_by_ticker else None),
                     quote_at=now,
                     fetched_at=now,
@@ -534,7 +532,7 @@ def build_portfolio_router(
         rows: list[SearchResultOut] = []
         if adapter is not None:
             try:
-                result = asyncio.run(adapter.fetch("company_profile", {"symbol": q_clean}))
+                result = asyncio.run(adapter.fetch("company_profile", {"ticker": q_clean}))
             except Exception as exc:
                 logger.debug("portfolio search fetch failed for %s: %s", q_clean, exc)
                 return {"results": []}

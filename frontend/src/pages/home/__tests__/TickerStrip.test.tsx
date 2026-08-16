@@ -49,11 +49,12 @@ describe("TickerStrip", () => {
     expect(screen.getByText("4.65")).toBeInTheDocument();
   });
 
-  it("renders nothing when no EODHD connector is configured", async () => {
+  it("shows a connect-EODHD hint when no EODHD connector is configured", async () => {
     mocked.fetchMarketIndices.mockResolvedValue({ available: false, indices: [] });
-    const { container } = render(<TickerStrip />);
-    await waitFor(() => expect(mocked.fetchMarketIndices).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    render(<TickerStrip />);
+    expect(
+      await screen.findByText(/connect eodhd to see market indices/i),
+    ).toBeInTheDocument();
   });
 
   it("renders nothing when the fetch fails", async () => {

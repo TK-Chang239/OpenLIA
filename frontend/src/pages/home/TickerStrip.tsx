@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import {
   fetchMarketIndices,
   type IndexQuote,
@@ -28,15 +29,23 @@ function formatDelta(q: IndexQuote): { text: string; positive: boolean } | null 
 }
 
 export function TickerStrip(): JSX.Element | null {
+  const { t } = useTranslation();
   const [quotes, setQuotes] = useState<IndexQuote[] | null>(null);
+  // null = unknown (loading/error); false = server has no EODHD key configured.
+  const [available, setAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const { indices } = await fetchMarketIndices();
-        if (!cancelled) setQuotes(indices);
+        const res = await fetchMarketIndices();
+        if (!cancelled) {
+          setQuotes(res.indices);
+          setAvailable(res.available);
+        }
       } catch {
+        // Transient fetch error: hide the strip, but do not claim EODHD is
+        // unconfigured (leave `available` untouched).
         if (!cancelled) setQuotes([]);
       }
     };
@@ -48,9 +57,24 @@ export function TickerStrip(): JSX.Element | null {
     };
   }, []);
 
-  // Hide the strip until it has real quotes (no EODHD key, empty, or error).
-  if (!quotes || quotes.length === 0) return null;
+  // Distinct states (audit 1.A.6): live quotes -> strip; server reports no EODHD
+  // key -> a connect hint (the route's documented purpose); empty/error -> hidden.
+  if (quotes && quotes.length > 0) {
+    return renderStrip(quotes);
+  }
+  if (available === false) {
+    return (
+      <div className="flex border border-border-subtle rounded-lg bg-bg-elevated overflow-hidden">
+        <div className="flex-1 px-[14px] py-[10px] font-mono text-[10px] tracking-[0.08em] uppercase text-text-tertiary">
+          {t("home_cards.ticker_connect_eodhd")}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
 
+function renderStrip(quotes: IndexQuote[]): JSX.Element {
   return (
     <div className="flex border border-border-subtle rounded-lg bg-bg-elevated overflow-hidden">
       {quotes.map((q, i) => {

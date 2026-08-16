@@ -1727,7 +1727,8 @@
     "portfolio_loading": "載入投資組合...",
     "mb_empty": "尚無簡報",
     "mb_empty_hint": "排定晨間簡報後，即可在此看到今日重點。",
-    "mb_loading": "載入簡報..."
+    "mb_loading": "載入簡報...",
+    "ticker_connect_eodhd": "連接 EODHD 以查看市場指數"
   },
   "report": {
     "no_data": "尚無資料",

@@ -119,6 +119,10 @@ def test_search_uses_adapter(client, user_factory, login_as) -> None:
     class _FakeAdapter:
         async def fetch(self, capability: str, params: dict) -> _ToolResult:
             assert capability == "company_profile"
+            # Assert the caller kwarg name matches the eodhd company_profile
+            # binding (ParamBinding to_arg="ticker"). Passing "symbol" here is
+            # dropped silently by the dispatcher -> dead search (audit 1.A.1).
+            assert params == {"ticker": "AAPL"}
             return _ToolResult(
                 {"General": {"Code": "AAPL", "Name": "Apple Inc.", "Exchange": "NASDAQ"}}
             )
