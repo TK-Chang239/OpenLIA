@@ -1727,7 +1727,8 @@
     "portfolio_loading": "Loading portfolio...",
     "mb_empty": "No briefing yet",
     "mb_empty_hint": "Schedule a Morning Briefing to see today’s read here.",
-    "mb_loading": "Loading briefing..."
+    "mb_loading": "Loading briefing...",
+    "ticker_connect_eodhd": "Connect EODHD to see market indices"
   },
   "report": {
     "no_data": "No data",

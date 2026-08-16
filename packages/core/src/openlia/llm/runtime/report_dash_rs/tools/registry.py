@@ -53,7 +53,7 @@ def build_catalog(
     *,
     ledger: CitationLedger,
     workspace: RunWorkspace,
-    transports: MbDataTransports,
+    transports: MbDataTransports,  # accepted for parity, unused — see docstring
     enabled_connectors: EnabledConnectors,
     dashboard_slug: str,
     dispatcher: object | None = None,
@@ -64,6 +64,11 @@ def build_catalog(
     Dispatcher tools are added for every enabled non-EODHD connector.
     Native web search is gated by enabled_connectors.web_search.
     The curated EODHD data_tools branch is intentionally omitted for RS.
+
+    ``transports`` is accepted for call-signature parity with the sibling MR
+    engine (whose runner shares the catalog-build call shape) but is unused
+    here precisely because RS omits that curated EODHD branch. It stays in the
+    signature so the shared runner keeps passing it by keyword.
     """
     payload_model = PAYLOAD_MODEL_BY_SLUG.get(dashboard_slug)
     if payload_model is None:

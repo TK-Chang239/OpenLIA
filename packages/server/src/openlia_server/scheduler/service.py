@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
@@ -389,12 +390,21 @@ class SchedulerService:
             misfire_grace_time=self.settings.misfire_grace_seconds,
         )
         # Phase 3 post-close fires: capture the canonical close price into
-        # portfolio_quote_daily once each market has settled. US closes at
-        # 16:00 ET (~20:30 UTC during DST, with a 30-min buffer); TWSE
-        # closes at 13:30 Taipei (~05:30 UTC, +30-min buffer).
-        for fire_id, hour, minute in (
-            (f"{PORTFOLIO_PRICE_REFRESH_KEY}:us_close", 20, 30),
-            (f"{PORTFOLIO_PRICE_REFRESH_KEY}:twse_close", 6, 0),
+        # portfolio_quote_daily once each market has settled, 30 min after
+        # the close.
+        #
+        # The US fire is pinned to 16:30 in America/New_York local time so it
+        # lands 30 min after the 16:00 ET close year-round, regardless of DST.
+        # A fixed UTC hour would drift: 16:00 ET is 20:00 UTC under EDT but
+        # 21:00 UTC under EST, so a UTC-pinned 20:30 fire runs at 15:30 ET
+        # (mid-session, BEFORE the close) every winter — _upsert_today_daily
+        # would then write that mid-session print as the canonical daily close.
+        #
+        # TWSE has no DST (Taipei is UTC+8 year-round): 13:30 Taipei close ==
+        # 05:30 UTC, so 06:00 UTC is a correct fixed +30-min buffer.
+        for fire_id, hour, minute, timezone in (
+            (f"{PORTFOLIO_PRICE_REFRESH_KEY}:us_close", 16, 30, ZoneInfo("America/New_York")),
+            (f"{PORTFOLIO_PRICE_REFRESH_KEY}:twse_close", 6, 0, UTC),
         ):
             await self.scheduler.add_schedule(
                 self._run_job,
@@ -402,7 +412,7 @@ class SchedulerService:
                     hour=hour,
                     minute=minute,
                     day_of_week="mon,tue,wed,thu,fri",
-                    timezone=UTC,
+                    timezone=timezone,
                 ),
                 id=fire_id,
                 args=(JobType.PORTFOLIO_PRICE_REFRESH, None, None),

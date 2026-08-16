@@ -190,7 +190,8 @@ class LLMSession:
 
         ``reasoning_effort`` enables extended thinking on the
         underlying call. When set, the effective ``max_tokens`` grows
-        by ``_REASONING_OVERHEAD[effort]`` so the truncation guard
+        by ``_REASONING_OVERHEAD[effort]``, clamped to the model's
+        declared ceiling, so the truncation guard
         absorbs both visible output and thinking tokens — they share
         the same ceiling on every provider. Adapters whose model
         doesn't support thinking silently drop the field.
@@ -199,6 +200,12 @@ class LLMSession:
         effective_max = max_tokens or self.capabilities.max_output_tokens
         if reasoning_effort is not None:
             effective_max += _REASONING_OVERHEAD.get(reasoning_effort, 0)
+        # Thinking and visible output draw from one ceiling on every provider,
+        # and ``max_tokens`` is sent verbatim as the total budget. Clamp so the
+        # combined budget never exceeds the model's declared ceiling — without
+        # this, claude-sonnet at HIGH effort asks for 96,768 against a 64,000
+        # ceiling (gpt-5.4: 160,768 vs 128,000) and the provider rejects it.
+        effective_max = min(effective_max, self.capabilities.max_output_tokens)
         request = LLMRequest(
             messages=messages,
             system=system,

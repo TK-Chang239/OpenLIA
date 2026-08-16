@@ -562,3 +562,40 @@ async def test_start_run_async_completes_and_persists(db_session_with_seed, db_s
             select(RepoItem).where(RepoItem.mb_v2_report_id == report_id)
         ).scalar_one_or_none()
         assert pointer is None
+
+
+def test_build_run_request_honors_capability_override(db_session_with_seed):
+    """Web-search gate must honor the same capability override the session applies.
+
+    Regression for the audit's 1.B.3 finding: _build_enabled_connectors gated web
+    search with override-free capabilities_for while start_run_async's session
+    honored the override. With the schedule requesting web_search and a model
+    that defaults web_search_native=False, a user override enabling it must flip
+    the gate on.
+    """
+    from openlia_server.services.llm_providers import set_capability_override
+
+    def _req():
+        return svc.build_run_request(
+            db_session_with_seed,
+            user_id="u-1",
+            trigger_kind="on_demand",
+            template_id="mb_default",
+            instructions_id=None,
+            enabled_connectors={"web_search": True},
+            provider_kind="anthropic",
+            model="claude-haiku-4-6",
+            language="en",
+            length="normal",
+            reasoning_effort=None,
+        )
+
+    assert _req().enabled_connectors.web_search is False
+
+    set_capability_override(
+        db_session_with_seed,
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+        override={"web_search_native": True},
+    )
+    assert _req().enabled_connectors.web_search is True

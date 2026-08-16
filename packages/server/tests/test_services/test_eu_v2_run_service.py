@@ -796,3 +796,50 @@ def test_cleanup_orphaned_running_rows(db_session):
 
     untouched = db_session.get(ReportEu, "r-completed")
     assert untouched.status == "completed"
+
+
+def test_build_run_request_honors_capability_override(db_session_with_seed):
+    """Web-search gate must honor the same capability override the session applies.
+
+    Regression for the audit's 1.B.3 finding: build_run_request gated web search
+    with override-free capabilities_for while start_run_async's session honored
+    the override. With web_search_enabled=True and a model that defaults
+    web_search_native=False, a user override enabling it must flip the gate on.
+    """
+    from openlia_server.services.llm_providers import set_capability_override
+
+    update_settings(
+        db_session_with_seed,
+        user_id="u-1",
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+        template_id="eu_default",
+        language="en",
+        length="normal",
+        reasoning_effort=None,
+        enabled_provider_ids=[],
+        web_search_enabled=True,
+    )
+
+    def _req():
+        return svc.build_run_request(
+            db_session_with_seed,
+            user_id="u-1",
+            ticker="MSFT.US",
+            trigger_kind="on_demand",
+            fiscal_period=None,
+            report_date=None,
+            release_timing=None,
+            eps_estimate=None,
+            revenue_estimate=None,
+        )
+
+    assert _req().enabled_connectors.web_search is False
+
+    set_capability_override(
+        db_session_with_seed,
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+        override={"web_search_native": True},
+    )
+    assert _req().enabled_connectors.web_search is True

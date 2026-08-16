@@ -416,11 +416,11 @@ function PayloadView({
       ) : null}
 
       {/* Optional tiles */}
-      {(payload.aggregated_sentiment !== null || payload.analyst_gap !== null) ? (
+      {(payload.aggregated_sentiment != null || payload.analyst_gap != null) ? (
         <>
           <SectionLabel>Data crosscheck</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
-            {payload.aggregated_sentiment !== null ? (
+            {payload.aggregated_sentiment != null ? (
               <MetricCard
                 label="Aggregated sentiment"
                 value={payload.aggregated_sentiment}
@@ -429,7 +429,7 @@ function PayloadView({
                 data-testid="rs-aggregated-sentiment"
               />
             ) : null}
-            {payload.analyst_gap !== null ? (
+            {payload.analyst_gap != null ? (
               <MetricCard
                 label="Analyst gap"
                 value={payload.analyst_gap}

@@ -53,6 +53,9 @@ class RetailSentimentData(BaseModel):
     signals: list[Signal]
     evidence: list[EvidenceItem]
     narrative: str
+    # Optional cross-checks: the model fills these only when web search
+    # surfaces a citable aggregated-sentiment or analyst-consensus figure.
+    # A run that cannot obtain them omits both, and the payload still validates.
     aggregated_sentiment: float | None = None
     analyst_gap: float | None = None
     captured_at: str | None = None

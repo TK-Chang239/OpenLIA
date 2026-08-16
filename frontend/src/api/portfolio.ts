@@ -53,16 +53,29 @@ export interface PositionAnalytic {
   day_change_pct: string | null;
 }
 
-export interface AnalyticsResponse {
+export interface CurrencySubtotal {
+  currency: string;
   total_market_value: string;
   total_cost_basis: string;
   total_unrealized_pl: string;
+  total_unrealized_pl_pct: string | null;
+}
+
+export interface AnalyticsResponse {
+  // Combined totals are null for a mixed-currency portfolio (no FX conversion);
+  // use currency_subtotals / mixed_currency in that case.
+  total_market_value: string | null;
+  total_cost_basis: string | null;
+  total_unrealized_pl: string | null;
   total_unrealized_pl_pct: string | null;
   positions: PositionAnalytic[];
   allocations: Record<string, string>;
   last_quote_at?: string | null;
   display_currency?: string;
   currencies_present?: string[];
+  mixed_currency?: boolean;
+  base_currency?: string | null;
+  currency_subtotals?: CurrencySubtotal[];
   needs_fx?: boolean;
   fx_unavailable?: boolean;
 }

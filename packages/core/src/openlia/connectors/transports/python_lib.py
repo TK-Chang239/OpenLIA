@@ -134,7 +134,17 @@ def _resolve_placeholder(value: Any, secrets: dict[str, str]) -> Any:
     name = value[1:]
     if name.startswith("{") and name.endswith("}"):
         name = name[1:-1]
-    return secrets[name]
+    # Resolve from the connector's own secrets first, then fall back to the
+    # process environment so a placeholder like ``$EODHD_API_KEY`` works with the
+    # env var alone (matching the env-or-connector pattern used by EU/MB/v3 via
+    # resolve_eodhd_api_key). Portfolio previously required a validated connector
+    # row and failed when only the env var was set (audit 1.A.3).
+    resolved = secrets.get(name)
+    if resolved is None:
+        resolved = os.getenv(name)
+    if resolved is None:
+        raise KeyError(name)
+    return resolved
 
 
 class PythonLibTransport:

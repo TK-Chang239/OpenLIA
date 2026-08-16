@@ -24,7 +24,10 @@ from openlia_server.services.eu_v2_dispatch import (
     select_due_rows,
 )
 from openlia_server.services.eu_v2_run_service import build_run_request, start_run_async
-from openlia_server.services.eu_v2_wiring import build_eu_v2_transports
+from openlia_server.services.eu_v2_wiring import (
+    build_eu_v2_transports,
+    resolve_eodhd_api_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -32,17 +35,27 @@ _MAX_ATTEMPTS = 3
 
 
 class EuV2CalendarSyncerImpl:
-    """Weekly sync across all watchlists using the env-wired EODHD calendar."""
+    """Weekly sync across all watchlists, honoring an installed EODHD connector.
+
+    ``build_eu_v2_transports`` reads ``EODHD_API_KEY`` from env only, so
+    scheduled syncs used to ignore a validated EODHD key installed through
+    the Connectors UI. ``key_resolver`` closes that gap: it resolves the key
+    (env first, then a validated connector) from the sync's DB session and
+    threads it into the transports factory — matching the live route's
+    ``build_eu_v2_transports(api_key=resolve_eodhd_api_key(db))``.
+    """
 
     def __init__(
         self,
         *,
-        transports_factory: Callable[[], object | None] = build_eu_v2_transports,
+        transports_factory: Callable[[str | None], object | None] = build_eu_v2_transports,
+        key_resolver: Callable[[DBSession], str | None] = resolve_eodhd_api_key,
     ) -> None:
         self._transports_factory = transports_factory
+        self._key_resolver = key_resolver
 
     def sync_all(self, *, session: DBSession) -> int:
-        transports = self._transports_factory()
+        transports = self._transports_factory(self._key_resolver(session))
         if transports is None:
             log.info("EU v2 sync skipped: EODHD transports not configured.")
             return 0

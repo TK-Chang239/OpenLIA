@@ -410,14 +410,38 @@ def build_portfolio_router(
             "currencies_present": sorted(currencies_present),
             "needs_fx": needs_fx,
             "fx_unavailable": fx_unavailable,
-            "total_market_value": str(result.total_market_value),
-            "total_cost_basis": str(result.total_cost_basis),
-            "total_unrealized_pl": str(result.total_unrealized_pl),
+            # Combined totals are null for a mixed-currency portfolio (no FX
+            # conversion is done); serialize null-safely rather than str(None).
+            "total_market_value": (
+                str(result.total_market_value) if result.total_market_value is not None else None
+            ),
+            "total_cost_basis": (
+                str(result.total_cost_basis) if result.total_cost_basis is not None else None
+            ),
+            "total_unrealized_pl": (
+                str(result.total_unrealized_pl) if result.total_unrealized_pl is not None else None
+            ),
             "total_unrealized_pl_pct": (
                 str(result.total_unrealized_pl_pct)
                 if result.total_unrealized_pl_pct is not None
                 else None
             ),
+            "mixed_currency": result.mixed_currency,
+            "base_currency": result.base_currency,
+            "currency_subtotals": [
+                {
+                    "currency": cs.currency,
+                    "total_market_value": str(cs.total_market_value),
+                    "total_cost_basis": str(cs.total_cost_basis),
+                    "total_unrealized_pl": str(cs.total_unrealized_pl),
+                    "total_unrealized_pl_pct": (
+                        str(cs.total_unrealized_pl_pct)
+                        if cs.total_unrealized_pl_pct is not None
+                        else None
+                    ),
+                }
+                for cs in result.currency_subtotals
+            ],
             "positions": [
                 {
                     "holding_id": p.holding_id,
@@ -480,15 +504,13 @@ def build_portfolio_router(
             for t, price in prices.items():
                 if price is None:
                     continue
+                # Manual refresh only has a live last_price; omit previous_close
+                # / OHLC / volume so upsert_quote preserves the scheduler-populated
+                # values instead of nulling them (audit 1.A.2).
                 quotes_svc.upsert_quote(
                     s,
                     ticker=t,
                     last_price=price,
-                    previous_close=None,
-                    day_open=None,
-                    day_high=None,
-                    day_low=None,
-                    volume=None,
                     currency=(holdings_by_ticker[t].currency if t in holdings_by_ticker else None),
                     quote_at=now,
                     fetched_at=now,
@@ -534,7 +556,7 @@ def build_portfolio_router(
         rows: list[SearchResultOut] = []
         if adapter is not None:
             try:
-                result = asyncio.run(adapter.fetch("company_profile", {"symbol": q_clean}))
+                result = asyncio.run(adapter.fetch("company_profile", {"ticker": q_clean}))
             except Exception as exc:
                 logger.debug("portfolio search fetch failed for %s: %s", q_clean, exc)
                 return {"results": []}

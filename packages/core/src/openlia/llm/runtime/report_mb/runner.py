@@ -21,19 +21,15 @@ in-memory flow that produces a populated ``RunResult``.
 from __future__ import annotations
 
 import contextlib
-import inspect
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ...types import Message, ToolCall
-from ..report_v2_3.research import (
-    ResearchTool,
-    ToolExecutionError,
-    ToolResult,
-)
+from ..report_v2_3.research import ResearchTool
+from ..tool_dispatch import dispatch_tool_call, resolve_tool_timeout_seconds
 from .events import CancelToken, EventEmitter, NullEmitter
 from .ledger import CitationLedger
 from .prompts import ConnectorPromptInfo, build_system_prompt
@@ -68,6 +64,12 @@ class Runner:
     # its whole tool loop inside that context so connector tools resolve
     # the right per-department credentials. None ⇒ no context wrapping.
     dispatcher: Any = None
+    # Per-tool-call cap (seconds). Curated EODHD tools run a synchronous SDK
+    # (un-timed HTTP); a single hung call would otherwise block the event
+    # loop and stall the run past the wall-time guard, which only checks
+    # between turns. Dispatch runs each tool off-thread bounded by this cap.
+    # Env-tunable via REPORT_V3_TOOL_TIMEOUT_SECONDS (shared across the family).
+    tool_timeout_seconds: float = field(default_factory=resolve_tool_timeout_seconds)
 
     async def run(
         self,
@@ -236,7 +238,13 @@ class Runner:
                         "args_summary": _summarize_args(call.arguments),
                     },
                 )
-                result_message = await _dispatch_one(call, tools_by_name)
+                result_message = await dispatch_tool_call(
+                    call,
+                    tools_by_name,
+                    timeout_seconds=self.tool_timeout_seconds,
+                    engine_label="Morning Briefing",
+                    logger=log,
+                )
                 messages.append(result_message)
                 _emit_tool_completion(
                     emitter,
@@ -299,53 +307,6 @@ def _initial_user_turn(request: RunRequest) -> Message:
             f"after every required section is written."
         ),
     )
-
-
-async def _dispatch_one(call: ToolCall, tools_by_name: dict[str, ResearchTool]) -> Message:
-    """Execute one tool call and produce the matching tool message.
-
-    Errors from the tool are returned as tool messages too — the model
-    sees the structured error and can correct itself or try a different
-    tool. The loop never crashes on a single bad tool call.
-
-    A tool's ``execute`` may be sync (curated EODHD + output tools) or a
-    coroutine (connector tools). When it returns an awaitable the result
-    is awaited here, inside the same try/except so a raise from either
-    the sync call or the awaited coroutine surfaces as a structured error.
-    """
-    tool = tools_by_name.get(call.name)
-    if tool is None:
-        body = json.dumps(
-            {
-                "error": (
-                    f"Unknown tool {call.name!r}. "
-                    f"Valid tools: {sorted(tools_by_name)}. "
-                    f"Only the enabled tools are available this run."
-                )
-            }
-        )
-        return Message(role="tool", content=body, tool_call_id=call.id)
-
-    try:
-        result = tool.execute(call.arguments)
-        if inspect.isawaitable(result):
-            result = await result
-    except ToolExecutionError as exc:
-        body = json.dumps({"error": str(exc)})
-        return Message(role="tool", content=body, tool_call_id=call.id)
-    except Exception as exc:
-        log.exception("Morning Briefing tool %s raised unexpectedly", call.name)
-        body = json.dumps({"error": f"unexpected: {exc}"})
-        return Message(role="tool", content=body, tool_call_id=call.id)
-
-    return Message(role="tool", content=_serialize_result(result), tool_call_id=call.id)
-
-
-def _serialize_result(result: ToolResult) -> str:
-    try:
-        return json.dumps(result.payload, default=str)
-    except TypeError:
-        return json.dumps({"summary": result.summary, "payload": str(result.payload)})
 
 
 def _finish(

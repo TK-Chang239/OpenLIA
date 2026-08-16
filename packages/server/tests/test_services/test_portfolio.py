@@ -170,6 +170,120 @@ def test_analytics_totals_and_weights(db_session, user) -> None:
     assert summary.allocations["MSFT"] == Decimal("0.500000")
 
 
+def test_analytics_total_pl_excludes_unpriced_cost(db_session, user) -> None:
+    """Phantom-loss regression: an unpriced holding's cost must not inflate total_cost.
+
+    total_pl must equal the sum of the per-row pl (only priced rows have a pl).
+    """
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="AAPL",
+        shares=Decimal("10"),
+        cost_basis=Decimal("100"),
+        currency="USD",
+        notes=None,
+        groups=None,
+    )
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="MSFT",
+        shares=Decimal("5"),
+        cost_basis=Decimal("200"),
+        currency="USD",
+        notes=None,
+        groups=None,
+    )
+    # MSFT has a cost basis but no price -> it must contribute neither mv nor cost.
+    prices = {"AAPL": Decimal("150"), "MSFT": None}
+    summary = svc.compute_analytics(db_session, user_id=user.id, prices=prices)
+
+    assert summary.total_market_value == Decimal("1500.0000")
+    assert summary.total_cost_basis == Decimal("1000.0000")  # only AAPL, not 2000
+    assert summary.total_unrealized_pl == Decimal("500.0000")  # not the phantom -500
+    row_pl_sum = sum(
+        (p.unrealized_pl for p in summary.positions if p.unrealized_pl is not None),
+        Decimal("0"),
+    )
+    assert summary.total_unrealized_pl == row_pl_sum
+    assert summary.mixed_currency is False
+    assert summary.base_currency == "USD"
+
+
+def test_analytics_mixed_currency_nulls_combined_and_segregates(db_session, user) -> None:
+    """Cross-currency portfolio: combined totals null, per-currency subtotals emitted,
+    weights computed within currency, mixed_currency flag set."""
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="AAPL",
+        shares=Decimal("10"),
+        cost_basis=Decimal("100"),
+        currency="USD",
+        notes=None,
+        groups=None,
+    )
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="2330.TW",
+        shares=Decimal("5"),
+        cost_basis=Decimal("500"),
+        currency="TWD",
+        notes=None,
+        groups=None,
+    )
+    prices = {"AAPL": Decimal("150"), "2330.TW": Decimal("600")}
+    summary = svc.compute_analytics(db_session, user_id=user.id, prices=prices)
+
+    assert summary.mixed_currency is True
+    assert summary.base_currency is None
+    assert summary.total_market_value is None
+    assert summary.total_cost_basis is None
+    assert summary.total_unrealized_pl is None
+    assert summary.total_unrealized_pl_pct is None
+
+    by_ccy = {s.currency: s for s in summary.currency_subtotals}
+    assert set(by_ccy) == {"USD", "TWD"}
+    assert by_ccy["USD"].total_market_value == Decimal("1500.0000")
+    assert by_ccy["USD"].total_cost_basis == Decimal("1000.0000")
+    assert by_ccy["USD"].total_unrealized_pl == Decimal("500.0000")
+    assert by_ccy["TWD"].total_market_value == Decimal("3000.0000")
+    assert by_ccy["TWD"].total_cost_basis == Decimal("2500.0000")
+    assert by_ccy["TWD"].total_unrealized_pl == Decimal("500.0000")
+
+    # Weights are within-currency: each single-holding currency bucket sums to 1.
+    assert summary.allocations["AAPL"] == Decimal("1.000000")
+    assert summary.allocations["2330.TW"] == Decimal("1.000000")
+
+
+def test_analytics_single_currency_reports_base_currency(db_session, user) -> None:
+    """Single-currency totals unchanged; base_currency reports the real currency and
+    a per-currency subtotal mirrors the combined total."""
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="2330.TW",
+        shares=Decimal("10"),
+        cost_basis=Decimal("500"),
+        currency="TWD",
+        notes=None,
+        groups=None,
+    )
+    prices = {"2330.TW": Decimal("600")}
+    summary = svc.compute_analytics(db_session, user_id=user.id, prices=prices)
+
+    assert summary.mixed_currency is False
+    assert summary.base_currency == "TWD"
+    assert summary.total_market_value == Decimal("6000.0000")
+    assert summary.total_cost_basis == Decimal("5000.0000")
+    assert summary.total_unrealized_pl == Decimal("1000.0000")
+    assert [s.currency for s in summary.currency_subtotals] == ["TWD"]
+    assert summary.currency_subtotals[0].total_market_value == Decimal("6000.0000")
+    assert summary.allocations["2330.TW"] == Decimal("1.000000")
+
+
 def test_analytics_handles_missing_prices(db_session, user) -> None:
     svc.create_holding(
         db_session,

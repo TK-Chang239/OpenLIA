@@ -62,8 +62,15 @@ def _resolve_enabled_connectors(
     Defaults to "use everything available": ``web_search`` ON (gated by
     the model's native web-search capability), every VALIDATED connector
     provider id, plus ``eodhd`` when a key is resolvable.
+
+    The web-search gate resolves the SAME capability override the session
+    later applies via ``LLMSession.create`` — a user who enables
+    ``web_search_native`` in Settings -> Models must have the gate and the
+    session agree, or the run gets a session with web search but a gate that
+    computed no native tools.
     """
-    caps = capabilities_for(provider_kind=provider_kind, model=model)
+    override = get_capability_override(db, provider_kind=provider_kind, model=model)
+    caps = capabilities_for(provider_kind=provider_kind, model=model, override=override)
     providers = {
         row.provider_id
         for row in connectors_service.list_connectors(db)

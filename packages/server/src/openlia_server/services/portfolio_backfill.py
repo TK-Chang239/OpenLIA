@@ -120,7 +120,7 @@ class AdapterDailyHistoryProvider:
             result = asyncio.run(
                 self._adapter.fetch(
                     "eod_history",
-                    {"symbol": ticker.upper(), "from": from_date.isoformat()},
+                    {"ticker": ticker.upper(), "from_date": from_date.isoformat()},
                 )
             )
         except Exception as exc:

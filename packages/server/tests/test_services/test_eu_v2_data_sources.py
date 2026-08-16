@@ -198,3 +198,35 @@ def test_web_search_enabled_from_persisted_settings(monkeypatch, db_session):
     ws = _by_key(ds)["model_web_search"]
     assert ws.available is True
     assert ws.enabled is False
+
+
+def test_compute_data_sources_honors_capability_override(db_session):
+    """Preview must honor the same capability override the run/session applies.
+
+    Regression for the audit's 1.B.3 finding: the model-native web-search slot's
+    availability used override-free capabilities_for. A user override enabling
+    web_search_native on an otherwise-incapable model must show the slot
+    available so the preview matches the actual run.
+    """
+    from openlia_server.services.llm_providers import set_capability_override
+
+    _add_user(db_session)
+    _set_settings(
+        db_session,
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+        enabled_provider_ids=[],
+        web_search_enabled=True,
+    )
+
+    base = eu_v2_data_sources.compute_data_sources(db_session, user_id="local")
+    assert _by_key(base)["model_web_search"].available is False
+
+    set_capability_override(
+        db_session,
+        provider_kind="anthropic",
+        model="claude-haiku-4-6",
+        override={"web_search_native": True},
+    )
+    gated = eu_v2_data_sources.compute_data_sources(db_session, user_id="local")
+    assert _by_key(gated)["model_web_search"].available is True

@@ -118,7 +118,11 @@ export function PortfolioGlanceCard(): JSX.Element {
   }, [tab]);
 
   const currency = analytics?.display_currency || "USD";
-  const totalValue = analytics ? parseFloat(analytics.total_market_value) : null;
+  // total_market_value is null for a mixed-currency portfolio; guard the parse.
+  const totalValue =
+    analytics && analytics.total_market_value != null
+      ? parseFloat(analytics.total_market_value)
+      : null;
   const positionCount = analytics?.positions.length ?? 0;
   const isEmpty = analytics != null && positionCount === 0;
 

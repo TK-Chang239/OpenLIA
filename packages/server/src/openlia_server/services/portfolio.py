@@ -12,7 +12,7 @@ import csv
 import io
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TypedDict
@@ -389,13 +389,30 @@ class PositionAnalytic:
 
 
 @dataclass(frozen=True)
-class AnalyticsSummary:
+class CurrencySubtotal:
+    """Totals for a single currency. Values are never converted across currencies."""
+
+    currency: str
     total_market_value: Decimal
     total_cost_basis: Decimal
     total_unrealized_pl: Decimal
     total_unrealized_pl_pct: Decimal | None
+
+
+@dataclass(frozen=True)
+class AnalyticsSummary:
+    # Combined totals are null when holdings span more than one currency: summing
+    # raw shares*price across currencies is meaningless without FX conversion, which
+    # is intentionally not performed. Consult `currency_subtotals` in that case.
+    total_market_value: Decimal | None
+    total_cost_basis: Decimal | None
+    total_unrealized_pl: Decimal | None
+    total_unrealized_pl_pct: Decimal | None
     positions: list[PositionAnalytic]
-    allocations: dict[str, Decimal]  # ticker -> weight (0..1)
+    allocations: dict[str, Decimal]  # ticker -> weight (0..1), computed within currency
+    mixed_currency: bool = False
+    currency_subtotals: list[CurrencySubtotal] = field(default_factory=list)
+    base_currency: str | None = None
 
 
 def compute_analytics(
@@ -416,30 +433,39 @@ def compute_analytics(
     """
     rows = list_holdings(session, user_id=user_id, market=market)
     positions_raw: list[tuple[HoldingDTO, Decimal | None, Decimal | None, Decimal | None]] = []
-    total_mv = Decimal("0")
-    total_cost = Decimal("0")
+    # Subtotals are kept per currency so cross-currency values are never summed as
+    # one unit. A holding contributes to a currency's market value only when it has
+    # a live price; cost is gated on the same condition so total_pl == sum(row pl).
+    subtotal_mv: dict[str, Decimal] = {}
+    subtotal_cost: dict[str, Decimal] = {}
+    currencies: set[str] = set()
 
     for dto in rows:
+        ccy = dto.currency
+        if ccy:
+            currencies.add(ccy)
         last = prices.get(dto.ticker)
         mv: Decimal | None = None
         cost_total: Decimal | None = None
         pl: Decimal | None = None
         if dto.shares is not None and last is not None:
             mv = (dto.shares * last).quantize(Decimal("0.0001"))
-            total_mv += mv
-        if dto.shares is not None and dto.cost_basis is not None:
-            cost_total = (dto.shares * dto.cost_basis).quantize(Decimal("0.0001"))
-            total_cost += cost_total
-        if mv is not None and cost_total is not None:
-            pl = (mv - cost_total).quantize(Decimal("0.0001"))
+            subtotal_mv[ccy] = subtotal_mv.get(ccy, Decimal("0")) + mv
+            if dto.cost_basis is not None:
+                cost_total = (dto.shares * dto.cost_basis).quantize(Decimal("0.0001"))
+                subtotal_cost[ccy] = subtotal_cost.get(ccy, Decimal("0")) + cost_total
+                pl = (mv - cost_total).quantize(Decimal("0.0001"))
         positions_raw.append((dto, mv, cost_total, pl))
+
+    mixed = len(currencies) > 1
 
     allocations: dict[str, Decimal] = {}
     positions: list[PositionAnalytic] = []
     for dto, mv, cost_total, pl in positions_raw:
         weight: Decimal | None = None
-        if mv is not None and total_mv > 0:
-            weight = (mv / total_mv).quantize(Decimal("0.000001"))
+        ccy_mv = subtotal_mv.get(dto.currency, Decimal("0"))
+        if mv is not None and ccy_mv > 0:
+            weight = (mv / ccy_mv).quantize(Decimal("0.000001"))
             allocations[dto.ticker] = weight
         pl_pct: Decimal | None = None
         if pl is not None and cost_total is not None and cost_total != 0:
@@ -471,11 +497,45 @@ def compute_analytics(
             )
         )
 
+    currency_subtotals: list[CurrencySubtotal] = []
+    for ccy in sorted(subtotal_mv):
+        c_mv = subtotal_mv[ccy]
+        c_cost = subtotal_cost.get(ccy, Decimal("0"))
+        c_pl = c_mv - c_cost
+        c_pl_pct = (c_pl / c_cost).quantize(Decimal("0.000001")) if c_cost > 0 else None
+        currency_subtotals.append(
+            CurrencySubtotal(
+                currency=ccy,
+                total_market_value=c_mv.quantize(Decimal("0.0001")),
+                total_cost_basis=c_cost.quantize(Decimal("0.0001")),
+                total_unrealized_pl=c_pl.quantize(Decimal("0.0001")),
+                total_unrealized_pl_pct=c_pl_pct,
+            )
+        )
+
+    if mixed:
+        # Do not aggregate across currencies without FX conversion; null the combined
+        # totals and let callers read `currency_subtotals` instead.
+        return AnalyticsSummary(
+            total_market_value=None,
+            total_cost_basis=None,
+            total_unrealized_pl=None,
+            total_unrealized_pl_pct=None,
+            positions=positions,
+            allocations=allocations,
+            mixed_currency=True,
+            currency_subtotals=currency_subtotals,
+            base_currency=None,
+        )
+
+    total_mv = sum(subtotal_mv.values(), Decimal("0"))
+    total_cost = sum(subtotal_cost.values(), Decimal("0"))
     total_pl = total_mv - total_cost
     total_pl_pct: Decimal | None = None
     if total_cost > 0:
         total_pl_pct = (total_pl / total_cost).quantize(Decimal("0.000001"))
 
+    base_currency = next(iter(currencies)) if len(currencies) == 1 else None
     return AnalyticsSummary(
         total_market_value=total_mv.quantize(Decimal("0.0001")),
         total_cost_basis=total_cost.quantize(Decimal("0.0001")),
@@ -483,6 +543,9 @@ def compute_analytics(
         total_unrealized_pl_pct=total_pl_pct,
         positions=positions,
         allocations=allocations,
+        mixed_currency=False,
+        currency_subtotals=currency_subtotals,
+        base_currency=base_currency,
     )
 
 
