@@ -654,3 +654,102 @@ async def test_start_registers_intraday_subhour_cron_for_portfolio_refresh(
     )
     interval = int(minute_field.removeprefix("*/"))
     assert 1 <= interval <= 15, f"intraday cron interval must be in [1, 15] minutes, got {interval}"
+
+
+@pytest.mark.asyncio
+async def test_us_post_close_fire_lands_30min_after_close_year_round(
+    session_factory,
+) -> None:
+    """The US post-close capture must fire 30 min after the 16:00 ET close in
+    BOTH EST and EDT. A fixed 20:30 UTC fire is only correct under EDT; under
+    EST (16:00 ET == 21:00 UTC) it would run at 15:30 ET — mid-session, before
+    the close — and _upsert_today_daily would persist that print as the
+    canonical daily close. Pinning the cron to 16:30 America/New_York keeps it
+    30 min after the close year-round regardless of DST.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from apscheduler.triggers.cron import CronTrigger
+
+    portfolio_exec = _RecordingExecutor(
+        session_factory=session_factory,
+        job_type=JobType.PORTFOLIO_PRICE_REFRESH,
+    )
+    scheduler = FakeAPScheduler()
+    svc = SchedulerService(
+        session_factory=session_factory,
+        scheduler=scheduler,
+        settings=SchedulerSettings(enabled=True),
+        executors={JobType.PORTFOLIO_PRICE_REFRESH: portfolio_exec},
+    )
+    await svc.start()
+
+    us_key = f"{PORTFOLIO_PRICE_REFRESH_KEY}:us_close"
+    assert us_key in scheduler.jobs, "expected a US post-close fire to be registered"
+    trigger = scheduler.jobs[us_key].trigger
+    assert isinstance(trigger, CronTrigger)
+
+    # The fire must be declared in US Eastern local time, not a fixed UTC hour.
+    ny = ZoneInfo("America/New_York")
+    assert trigger.timezone == ny, (
+        f"US post-close fire must be timezone-aware (America/New_York), got {trigger.timezone!r}"
+    )
+    assert (trigger.hour, trigger.minute) == (16, 30)
+
+    # Prove year-round correctness by resolving the next fire from the
+    # registered trigger's own fields on both sides of the DST boundary.
+    for label, start in (
+        ("EST winter", datetime(2026, 1, 15, tzinfo=ZoneInfo("UTC"))),
+        ("EDT summer", datetime(2026, 7, 15, tzinfo=ZoneInfo("UTC"))),
+    ):
+        seasonal = CronTrigger(
+            hour=trigger.hour,
+            minute=trigger.minute,
+            day_of_week="mon,tue,wed,thu,fri",
+            timezone=trigger.timezone,
+            start_time=start,
+        )
+        fire = seasonal.next()
+        assert fire is not None
+        fire_et = fire.astimezone(ny)
+        assert (fire_et.hour, fire_et.minute) == (16, 30), (
+            f"{label}: US post-close fire must land at 16:30 ET, got {fire_et:%H:%M %Z}"
+        )
+        # 30 min strictly after the 16:00 ET close on the same trading day.
+        close_et = fire_et.replace(hour=16, minute=0)
+        assert fire_et > close_et, (
+            f"{label}: fire {fire_et:%H:%M %Z} must be after the 16:00 ET close"
+        )
+
+
+@pytest.mark.asyncio
+async def test_twse_post_close_fire_stays_fixed_utc(session_factory) -> None:
+    """TWSE has no DST (Taipei is UTC+8 year-round): 13:30 Taipei close ==
+    05:30 UTC, so the +30-min buffer fire stays pinned at 06:00 UTC. Guard
+    against the DST fix accidentally moving it.
+    """
+    from zoneinfo import ZoneInfo
+
+    from apscheduler.triggers.cron import CronTrigger
+
+    portfolio_exec = _RecordingExecutor(
+        session_factory=session_factory,
+        job_type=JobType.PORTFOLIO_PRICE_REFRESH,
+    )
+    scheduler = FakeAPScheduler()
+    svc = SchedulerService(
+        session_factory=session_factory,
+        scheduler=scheduler,
+        settings=SchedulerSettings(enabled=True),
+        executors={JobType.PORTFOLIO_PRICE_REFRESH: portfolio_exec},
+    )
+    await svc.start()
+
+    twse_key = f"{PORTFOLIO_PRICE_REFRESH_KEY}:twse_close"
+    assert twse_key in scheduler.jobs
+    trigger = scheduler.jobs[twse_key].trigger
+    assert isinstance(trigger, CronTrigger)
+    # CronTrigger normalizes datetime.UTC to ZoneInfo("UTC").
+    assert trigger.timezone == ZoneInfo("UTC")
+    assert (trigger.hour, trigger.minute) == (6, 0)
