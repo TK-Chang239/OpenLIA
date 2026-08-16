@@ -1,5 +1,17 @@
 # Gaps, Remaining Tasks, and Open Questions
 
+> **⚠️ STALE as of 2026-08-16 — see `docs/audit-2026-08-16.md`.**
+> This file is roughly four months out of date. Many items marked "not yet
+> implemented", "pending user review", or "implementation plan pending" have
+> since shipped: the shared formula engine, Panic Thermometer, the Macro
+> Research and Retail Sentiment dashboards, the framework/style-guide package
+> migration, the full DB/auth/scheduler stack, and every department engine
+> (report_v3 / report_eu / report_mb / report_dash_mr / report_dash_rs). The
+> current authoritative gap list is the staged plan in
+> `docs/audit-2026-08-16.md`. The clearest closures are struck through /
+> annotated below; the rest of this document is retained for history and has
+> NOT been line-by-line reconciled.
+
 Tracks all known gaps, incomplete work, and open questions across the project. Updated as items are identified or resolved.
 
 ---
@@ -79,13 +91,13 @@ Department redesigned from chat-based report generator to five framework-driven 
 - **EODHD macro indicator availability unverified**: Debt-to-GDP and interest/revenue may not be available as direct EODHD endpoints. May need to compute from multiple economic event data points or hardcode with manual update on release.
 - **DXY proxy unverified**: EODHD may not carry DXY directly. UUP (ETF) is a proxy. Need to verify ticker availability during implementation.
 - **IMF COFER data for T4**: Quarterly with a lag. Reserve composition chart will use hardcoded snapshots updated on COFER release. Could fetch from IMF API if user provides access.
-- **Formula engine not yet implemented**: Design is now documented in `planning/specs/systems/formula-engine-design.md` (shared module for PT and MR T1/T2). Implementation pending.
+- ~~**Formula engine not yet implemented**~~ **RESOLVED (2026-08-16):** the shared formula engine shipped (`packages/core/src/openlia/formula/`), and MR shipped as the `report_dash_mr` web-search dashboard engine.
 
 ### Remaining Tasks
 
-- Implementation plan for the dashboard design (pending user review of spec).
-- Build the shared formula engine module per `planning/specs/systems/formula-engine-design.md` (usable by both PT and MR T1/T2).
-- Build YAML prompt templates for T4/T5 LLM assessments with Dalio's framework as system context.
+- ~~Implementation plan for the dashboard design (pending user review of spec).~~ **Done** — MR dashboards shipped (`report_dash_mr`).
+- ~~Build the shared formula engine module.~~ **Done** — see `packages/core/src/openlia/formula/`.
+- ~~Build YAML prompt templates for T4/T5 LLM assessments.~~ Superseded by the `report_dash_mr` engine's own prompts.
 
 ### Open Questions
 
@@ -99,6 +111,8 @@ Department redesigned from chat-based report generator to five framework-driven 
 Department redesigned from a 3-metric dashboard into a 12-metric sentiment monitoring platform with 3 analytical tabs, batch LLM classification, and cross-source validation. Design spec: `planning/specs/systems/retail-sentiment-dashboard-design.md`.
 
 **Status (2026-04-24):** spec amended. v1 ships a subset of the design; full design is now the v2 target. The "Shipped v1 Scope" matrix at the top of the spec is the source of truth -- read it before planning any follow-up work here.
+
+**Update (2026-08-16):** RS was later rebuilt as the web-search dashboard engine `report_dash_rs` (sibling of `report_dash_mr`); the old per-post pipeline and the `rs_classification_log` / `rs_snapshots` plumbing below are obsolete. Remaining RS UI work is tracked in `docs/audit-2026-08-16.md` Stage 5.D.
 
 ### Gaps
 
@@ -126,12 +140,12 @@ Full spec exists: `planning/specs/pages/departments/PanicThermometerPageSpec.md`
 
 ### Gaps
 
-- **Formula engine not yet implemented**: The formula engine DSL is fully designed in `planning/specs/systems/formula-engine-design.md` (shared with MR T1/T2). Implementation pending.
+- ~~**Formula engine not yet implemented**~~ **RESOLVED (2026-08-16):** the shared formula engine shipped (`packages/core/src/openlia/formula/`) and the Panic Thermometer page is built (remaining PT gaps are UI-completion items tracked in `docs/audit-2026-08-16.md` Stage 5.B).
 
 ### Remaining Tasks
 
-- Implementation plan for the Panic Thermometer page.
-- Build the shared formula engine module per `planning/specs/systems/formula-engine-design.md`.
+- ~~Implementation plan for the Panic Thermometer page.~~ **Done** — page shipped.
+- ~~Build the shared formula engine module.~~ **Done** — see `packages/core/src/openlia/formula/`.
 
 ### Open Questions
 
@@ -228,7 +242,7 @@ Full spec exists: `planning/specs/systems/llm-runtime-design.md`. Part 2 of 2 in
 ### Gaps
 
 - All six cross-reference edits from the runtime spec are **applied** (2026-04-14): `Capabilities.web_search_native` and the `Capability.web_search` enum value are in `llm-provider-design.md`; `search` is a fourth category in `data-provider-design.md`; `SetupWizardSpec.md` Step 4 has a Web Search tab; `report-rendering-pipeline-design.md` carries the `report.*` dot-namespaced taxonomy including `report.tool_call` and a full `ReportSchema` payload on `report.complete`; `ChatInterfaceSpec.md` has an Event Handling section; `planning/projectStructure.md` lists the `runtime/` subdirectory, the per-department YAML prompt files, and the `reports/frameworks/` sibling directory.
-- **Framework / style-guide file migration**: `planning/frameworks/*.json` and `*_style_guide.md` still need to physically move into the package at `packages/core/src/openlia/reports/frameworks/`. `planning/` is dev-only and excluded from Python package builds.
+- ~~**Framework / style-guide file migration**: `planning/frameworks/*.json` and `*_style_guide.md` still need to physically move into the package.~~ **RESOLVED:** frameworks + style guides now ship inside the package at `packages/core/src/openlia/reports/frameworks/`.
 
 ### Remaining Tasks
 

@@ -1,6 +1,6 @@
 # OpenLia - Project Directory Structure
 
-Authoritative directory layout for the OpenLIA repository. Regenerated from current spec state (April 2026). When a spec adds a module, also update this file so the tree stays canonical.
+Authoritative directory layout for the OpenLIA repository. Originally regenerated from spec state (April 2026); the DB, routes, runtime, and crypto sections were reconciled to the shipped code on 2026-08-16 (see `docs/audit-2026-08-16.md`). Parts of the tree below still describe the original planned layout rather than every shipped file — when a spec or the code adds a module, update this file so the tree stays canonical.
 
 ```
 openlia/
@@ -87,18 +87,28 @@ openlia/
 │   │   │       │   ├── exceptions.py           # LLMProviderError, AuthError, ModelNotFoundError, TierNotConfiguredError
 │   │   │       │   │
 │   │   │       │   └── runtime/                # Execution layer (llm-runtime-design.md)
-│   │   │       │       ├── __init__.py         # ChatRunner, ReportRunner, BatchRunner exports
+│   │   │       │       │   # ~30 shared flat modules, including:
+│   │   │       │       ├── __init__.py         # runner + event exports
 │   │   │       │       ├── chat.py
-│   │   │       │       ├── report.py
-│   │   │       │       ├── batch.py
+│   │   │       │       ├── report.py           # legacy generic engine (MB legacy + EU v1 route)
+│   │   │       │       ├── batch.py            # + batch_orchestrator.py
 │   │   │       │       ├── prompts.py          # YAML loader + Jinja2 renderer
 │   │   │       │       ├── router.py           # Runtime router — picks per-conversation tool subset (spec §8)
 │   │   │       │       ├── escalation.py       # `request_additional_tools` mid-conversation re-route (spec §8.5)
-│   │   │       │       ├── tools.py            # ToolDispatcher (requirement tools, web_search)
+│   │   │       │       ├── tools.py            # + tool_dispatch.py — ToolDispatcher (requirement tools, web_search)
 │   │   │       │       ├── web_search.py       # Native-or-configured web search adapter
 │   │   │       │       ├── events.py           # SSE event dataclasses (chat.*, report.*)
 │   │   │       │       ├── messages.py         # ChatMessage, ReportRequest, BatchItem
-│   │   │       │       └── cancellation.py     # CancellationToken + grace-period helpers
+│   │   │       │       ├── cancellation.py     # CancellationToken + grace-period helpers
+│   │   │       │       ├── capability_manifest.py, revision_runner.py, subagent_runner.py, ... (more)
+│   │   │       │       │
+│   │   │       │       │   # Per-engine subpackages (each a self-contained tool-use loop):
+│   │   │       │       ├── report_v3/          # Sole equity-research engine (single-model tool loop)
+│   │   │       │       ├── report_eu/          # Earnings Update v2 engine (fork of report_v3)
+│   │   │       │       ├── report_mb/          # Morning Briefing engine (fork of report_eu)
+│   │   │       │       ├── report_dash_mr/     # Macro Research dashboard engine
+│   │   │       │       ├── report_dash_rs/     # Retail Sentiment dashboard engine
+│   │   │       │       └── report_v2_3/        # Retained shared library (schemas, research/, templates/) for v3 + EU
 │   │   │       │
 │   │   │       ├── formula/                    # Shared formula engine (see formula-engine-design.md)
 │   │   │       │   ├── __init__.py             # Public API re-exports
@@ -165,7 +175,7 @@ openlia/
 │   │   │       │       ├── pipeline.py         # Resumable 4-phase runner
 │   │   │       │       └── prompts.py          # All 4 phase prompts as Python constants
 │   │   │       │
-│   │   │       ├── config.py                   # Config loader (.env / env vars)
+│   │   │       ├── config.py                   # Reserved placeholder stub (no importers; .env is loaded by server cli.py)
 │   │   │       └── exceptions.py
 │   │   │
 │   │   └── tests/
@@ -190,24 +200,28 @@ openlia/
 │       │       ├── cli.py                  # Typer app: serve, admin, wizard, secrets, maintenance
 │       │       │
 │       │       ├── routes/             # API endpoints — thin handlers, delegate to core/services
+│       │       │   │   # ~33 top-level route modules (shipped) + a departments/ subpackage.
+│       │       │   │   # Representative set below; grep the dir for the full list.
 │       │       │   ├── __init__.py
-│       │       │   ├── setup.py            # /setup/* wizard endpoints (Plan 10)
+│       │       │   ├── setup.py            # /setup/* wizard endpoints
 │       │       │   ├── auth.py             # login, logout, password change, password reset request/redeem
 │       │       │   ├── admin.py            # invites, user CRUD, lockout settings, audit log views
-│       │       │   ├── settings.py         # user/admin settings + setup wizard API
+│       │       │   ├── admin_graph.py, admin_skills.py  # admin-only graph + skills management
+│       │       │   ├── settings.py, settings_general.py, settings_email.py, settings_llm_slots.py
 │       │       │   ├── connectors.py       # /api/connectors CRUD + revalidate (connector v2)
-│       │       │   ├── runner_specs.py     # /api/connectors/{id}/proposed-specs/{resolve,approve}
-│       │       │   ├── dept_health.py      # GET /api/dept-health + 409 gate helper
-│       │       │   ├── departments.py      # Department chat endpoints (SSE)
-│       │       │   ├── reports.py          # GET /reports/{id}, POST /reports/{id}/export/pdf
-│       │       │   ├── repository.py       # Save/list/delete saved reports
-│       │       │   ├── portfolio.py        # Portfolio CRUD
-│       │       │   ├── morning_briefing.py # MB schedule CRUD + briefing endpoints
-│       │       │   ├── earnings_update.py  # EU schedule CRUD + scan endpoints
-│       │       │   ├── macro_research.py   # MR dashboard state, settings, trigger assessment
-│       │       │   ├── retail_sentiment.py # RS metrics, evidence, signals, settings
-│       │       │   ├── panic_thermometer.py# PT panel data + formula validation/preview
-│       │       │   └── jobs.py             # GET /jobs/history, POST /jobs/{run_id}/retry
+│       │       │   ├── capabilities.py, department_model_pref.py, dept_health.py
+│       │       │   ├── reports.py, reports_stream.py, reports_revise.py  # v1/generic report read + SSE + revise
+│       │       │   ├── report_templates.py, repo.py       # templates + saved-report repository
+│       │       │   ├── chat_sessions.py, chat_stream.py   # report-chat sessions + SSE
+│       │       │   ├── portfolio.py, markets.py           # Portfolio CRUD + market index/ticker strip
+│       │       │   ├── graph.py, skills.py, files.py, cache.py, disclaimer.py
+│       │       │   ├── guardrail_events.py, notifications.py, notifications_stream.py
+│       │       │   ├── mr_schedules.py, jobs.py, dev.py
+│       │       │   └── departments/        # Per-department SSE routes (subpackage):
+│       │       │       ├── secretary.py, equity_research_v3.py
+│       │       │       ├── earnings_update.py (v1 legacy), earnings_update_v2.py
+│       │       │       ├── morning_briefing.py, macro_research.py
+│       │       │       ├── retail_sentiment.py, panic_thermometer.py
 │       │       │
 │       │       ├── middleware/         # Request processing
 │       │       │   ├── __init__.py
@@ -217,9 +231,16 @@ openlia/
 │       │       │
 │       │       ├── db/                 # Persistence layer (see database-design.md)
 │       │       │   ├── __init__.py
-│       │       │   ├── models.py           # SQLAlchemy models for all 29+ tables
+│       │       │   ├── base.py             # Declarative Base
+│       │       │   ├── models/             # SQLAlchemy models PACKAGE — ~17 modules, ~83 tables
+│       │       │   │   ├── auth.py, connectors.py, content.py, dashboard.py, departments.py,
+│       │       │   │   ├── graph.py, infrastructure.py, pipeline_runs.py, scheduler.py, skills.py,
+│       │       │   │   ├── report_v3.py, report_eu.py, report_mb.py, report_templates.py,
+│       │       │   │   └── cache.py, config.py, safety.py, register_all.py
 │       │       │   ├── session.py          # Engine + sessionmaker
-│       │       │   ├── crypto.py           # AES-256-GCM helpers for llm_providers.api_key_encrypted
+│       │       │   ├── bootstrap.py        # openlia_home() + first-run data-dir setup
+│       │       │   ├── deps.py             # FastAPI session dependency
+│       │       │   ├── secrets_crypto.py   # Fernet (AES-128-CBC + HMAC-SHA256) for connectors.secrets
 │       │       │   └── migrations/         # Alembic migrations
 │       │       │
 │       │       ├── scheduler/          # Background task scheduling (see background-task-scheduling-design.md)
@@ -399,7 +420,7 @@ Created on first run by the server / wizard (not committed; lives outside the re
 ```
 ~/.openlia/
 ├── openlia.db                  # SQLite database (see database-design.md)
-└── secret.key                  # Auto-generated AES-256 key for API-key encryption (only when OPENLIA_SECRET_KEY is unset)
+└── secret.key                  # Auto-generated Fernet key (urlsafe base64, 32 bytes) for connector-secret encryption (only when OPENLIA_SECRET_KEY is unset)
 ```
 
 Connector-related artifacts (provider catalogs, dept needs, routing-context prompts, runtime callable specs) ship inside `packages/core/` or live in DB tables (`connectors`, `runner_callable_specs`); they no longer require an on-disk overlay under `~/.openlia/`.
@@ -407,20 +428,28 @@ Connector-related artifacts (provider catalogs, dept needs, routing-context prom
 
 ## Database tables (catalog)
 
-Defined in `database-design.md`. Grouped by concern:
+The schema has grown well past the original 29-table design: the shipped DB
+defines **~83 tables** across `db/models/`. The database-design.md spec (29
+tables) is stale for the catalog; the models package is authoritative. Groups
+below list representative tables per concern, not every table.
 
-| Group | Tables |
+| Group | Representative tables |
 |---|---|
-| Identity & auth | `users`, `sessions`, `signup_invites`, `signup_policy`, `password_reset_requests`, `auth_events` |
-| LLM config | `llm_providers`, `llm_models`, `user_llm_preferences` |
+| Identity & auth | `users`, `sessions`, `signup_invites`, `signup_policy`, `password_reset_requests`, `auth_events`, `user_prefs`, `user_notifications`, `user_disclaimer_acceptance` |
+| LLM config | `llm_providers`, `llm_models`, `llm_slot_defaults`, `user_department_model_prefs`, `web_search_providers` |
 | Connectors v2 | `connectors`, `runner_callable_specs` |
-| Chat & reports | `chat_sessions`, `chat_messages`, `chat_attachments`, `reports`, `report_versions` |
-| Portfolio | `portfolio_holdings`, `watchlists`, `watchlist_items` |
+| Chat & generic reports | `chat_sessions`, `chat_messages`, `chat_attachments`, `reports`, `report_versions`, `repo_items`, `report_templates` |
+| Per-engine report tables | `report_v3*` (+ `_charts`/`_citations`/`_sections`/`_instructions`/`_revisions`/`_templates`/`_tool_call_log`); same fan-out for `report_eu*` and `report_mb*` |
+| Portfolio | `portfolio_holdings`, `portfolio_quotes`, `portfolio_quote_daily`, `portfolio_quote_intraday`, `watchlists`, `watchlist_items` |
 | Setup & config | `wizard_state`, `config_store` |
-| Department state | `pt_user_configs`, `pt_presets`, `mr_dashboard_state`, `mr_assessment_cache`, `rs_user_config`, `rs_snapshots`, `fe_saved_formulas` |
-| Scheduler | `mb_schedules`, `eu_schedules`, `job_runs`, `user_notifications` |
+| Department state / dashboards | `pt_user_configs`, `pt_presets`, `pt_trigger_events`, `mr_dashboard_state`, `mr_dashboard_cache`, `rs_user_config`, `rs_dashboard_cache`, `fe_saved_formulas` |
+| Earnings/MB scheduling & configs | `mb_schedules`, `eu_schedules`, `eu_user_configs`, `eu_watchlist`, `eu_v2_*` (settings/watchlist/batch/schedule), `rs_schedules` |
+| Scheduler & infra | `job_runs`, `pipeline_runs`, `cached_documents` |
+| Graph substrate | `graph_entities`, `graph_edges`, `graph_user_constructs`, `graph_artifact_summaries`, `graph_extraction_proposals`, `graph_extraction_runs` |
+| Skills | `skills`, `skill_user_overrides` |
+| Safety / audit | `lia_guardrail_events` |
 
-The legacy `data_providers` and `data_provider_requirement_mapping` tables were dropped in connector-redesign-v2; the new `connectors` row carries the multi-mode `LaunchSpec` JSON and `runner_callable_specs` records the resolved `(department_id, need_id) -> CallableSpec` mapping.
+The legacy `data_providers` and `data_provider_requirement_mapping` tables were dropped in connector-redesign-v2; the new `connectors` row carries the multi-mode `LaunchSpec` JSON and `runner_callable_specs` records the resolved `(department_id, need_id) -> CallableSpec` mapping. (`SetupWizardSpec.md` §Data Model previously still named the dropped tables; corrected 2026-08-16.)
 
 Lockout columns (`failed_login_attempts`, `locked_until`) live on `users`. The lockout feature is toggleable via `config_store` key `auth.lockout.enabled`.
 
@@ -513,7 +542,7 @@ openlia-core = { workspace = true }
 
 4. **Frontend is decoupled.** Communicates only through the server's REST + SSE API. Could be replaced with a different UI without touching any Python code.
 
-5. **Config flows one direction.** Env vars (`OPENLIA_*`) and `.env` are read by `core/config.py`. The server passes config to core at startup. Admin-managed runtime config (LLM providers, data providers, schedules) lives in the database. The frontend never touches config directly.
+5. **Config flows one direction.** Env vars (`OPENLIA_*`) and `.env` are loaded at startup by the server CLI (`cli.py`, via python-dotenv) and read from `os.environ` where needed; `core/config.py` is a reserved placeholder stub, not an active loader. The server passes config to core at startup. Admin-managed runtime config (LLM providers, connectors, schedules) lives in the database. The frontend never touches config directly.
 
 6. **Frameworks ship with the package.** Report frameworks (`packages/core/src/openlia/reports/frameworks/*.json`) and their style guides (`*_style_guide.md`) are shipped artifacts. They were originally drafted under `planning/frameworks/` and have been migrated into the package so they are present in installed wheels and Docker images. Custom user style guides (from the style-extraction pipeline) live alongside user/org settings, not under `planning/`.
 

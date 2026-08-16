@@ -1,5 +1,14 @@
 # Company Mode Onboarding Implementation Plan
 
+> **✅ COMPLETED (shipped in PR #256, verified in the 2026-08-16 audit Stage 3).**
+> The frontend auth was re-enabled and company mode is usable end-to-end
+> (admin setup → login → invite → second user registers and logs in).
+> `AuthContext` mode detection, the four auth route elements, the real
+> `ChangePasswordForm` and `SessionsPanel`, and the sidebar logout all shipped.
+> The task checkboxes below are ticked to reflect that. Residual multi-user
+> hardening (skills isolation, admin lifecycle, must-change-password gate on
+> all routers, etc.) is tracked separately in `docs/audit-2026-08-16.md` Stage 3.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Re-enable the deliberately-disabled frontend auth so company mode is usable end-to-end (admin setup → login → invite → second user registers and logs in).
@@ -42,7 +51,7 @@ Restore the pre-remake logic so 404 (auth routes unmounted = personal) maps to `
 - Modify: `frontend/src/auth/AuthContext.tsx`
 - Test: `frontend/src/auth/AuthContext.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/auth/AuthContext.test.tsx`:
 
@@ -111,12 +120,12 @@ describe("AuthContext mode detection", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/auth/AuthContext.test.tsx`
 Expected: FAIL — the 401 case resolves to "personal" (current code collapses every failure to personal).
 
-- [ ] **Step 3: Restore the refresh/logout logic**
+- [x] **Step 3: Restore the refresh/logout logic**
 
 In `frontend/src/auth/AuthContext.tsx`, add the `ApiError` import near the other `../api/auth` import:
 
@@ -165,12 +174,12 @@ Replace the `logout` callback (currently lines ~77-88) with:
   }, []);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/auth/AuthContext.test.tsx`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/auth/AuthContext.tsx frontend/src/auth/AuthContext.test.tsx
@@ -187,7 +196,7 @@ Replace the `<Navigate to="/" replace />` redirect stubs with the real page comp
 - Modify: `frontend/src/router/routes.tsx`
 - Test: `frontend/src/router/routes.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/router/routes.test.tsx`:
 
@@ -227,12 +236,12 @@ describe("auth routes are enabled", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/router/routes.test.tsx`
 Expected: FAIL — `element.type` is `Navigate`, not the page components.
 
-- [ ] **Step 3: Restore the route imports and elements**
+- [x] **Step 3: Restore the route imports and elements**
 
 In `frontend/src/router/routes.tsx`, add the page imports alongside the other page imports (near line 7-12):
 
@@ -264,12 +273,12 @@ with:
 
 Leave the `Navigate` import in place (still used by `/home` and the catch-all `*` route).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/router/routes.test.tsx`
 Expected: PASS (4 cases).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/router/routes.tsx frontend/src/router/routes.test.tsx
@@ -286,7 +295,7 @@ The new components reference keys that must resolve to English in tests and exis
 - Modify: `frontend/src/i18n/locales/en.json`
 - Modify: `frontend/src/i18n/locales/zh-TW.json`
 
-- [ ] **Step 1: Add English keys**
+- [x] **Step 1: Add English keys**
 
 In `frontend/src/i18n/locales/en.json`, inside the existing `settings.account` object (which already has `change_password_section_title` and `active_sessions_section_title`), add:
 
@@ -312,7 +321,7 @@ In the existing `auth.errors` object, add:
 
 (The keys `password_too_short`, `passwords_do_not_match`, `new_password_must_differ`, `invalid_value`, and `password_change_failed` already exist under `auth.errors` — do not duplicate them.)
 
-- [ ] **Step 2: Add Traditional Chinese keys**
+- [x] **Step 2: Add Traditional Chinese keys**
 
 In `frontend/src/i18n/locales/zh-TW.json`, inside `settings.account`, add:
 
@@ -336,12 +345,12 @@ In `auth.errors`, add:
 "enter_current_password": "請輸入目前的密碼。"
 ```
 
-- [ ] **Step 3: Verify JSON parses and locales stay in sync**
+- [x] **Step 3: Verify JSON parses and locales stay in sync**
 
 Run: `cd frontend && node -e "JSON.parse(require('fs').readFileSync('src/i18n/locales/en.json','utf8')); JSON.parse(require('fs').readFileSync('src/i18n/locales/zh-TW.json','utf8')); console.log('ok')"`
 Expected: prints `ok` (both files are valid JSON).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/i18n/locales/en.json frontend/src/i18n/locales/zh-TW.json
@@ -358,7 +367,7 @@ Replace the 3-line stub with a working form modeled on `MustChangePasswordForm`,
 - Modify: `frontend/src/components/auth/ChangePasswordForm.tsx`
 - Test: `frontend/src/components/auth/ChangePasswordForm.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/auth/ChangePasswordForm.test.tsx`:
 
@@ -420,12 +429,12 @@ describe("ChangePasswordForm", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/auth/ChangePasswordForm.test.tsx`
 Expected: FAIL — stub renders only "Change Password (stub)"; no labeled inputs.
 
-- [ ] **Step 3: Implement the component**
+- [x] **Step 3: Implement the component**
 
 Replace the entire contents of `frontend/src/components/auth/ChangePasswordForm.tsx` with:
 
@@ -588,12 +597,12 @@ export function ChangePasswordForm() {
 
 Note: `BannerVariant` already includes `"success"` and `"error"` (used elsewhere in the app). If `tsc` reports `"success"` is not assignable, use `"info"` for the success banner instead.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/auth/ChangePasswordForm.test.tsx`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/auth/ChangePasswordForm.tsx frontend/src/components/auth/ChangePasswordForm.test.tsx
@@ -610,7 +619,7 @@ No "list my sessions" endpoint exists; scope to the existing `logout-all`. Becau
 - Modify: `frontend/src/components/auth/SessionsPanel.tsx`
 - Test: `frontend/src/components/auth/SessionsPanel.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/auth/SessionsPanel.test.tsx`:
 
@@ -656,12 +665,12 @@ describe("SessionsPanel", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/auth/SessionsPanel.test.tsx`
 Expected: FAIL — stub renders only "Sessions (stub)"; no button.
 
-- [ ] **Step 3: Implement the component**
+- [x] **Step 3: Implement the component**
 
 Replace the entire contents of `frontend/src/components/auth/SessionsPanel.tsx` with:
 
@@ -725,12 +734,12 @@ export function SessionsPanel() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/auth/SessionsPanel.test.tsx`
 Expected: PASS (1 test).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/auth/SessionsPanel.tsx frontend/src/components/auth/SessionsPanel.test.tsx
@@ -747,7 +756,7 @@ The desktop `Sidebar` has no logout (only the mobile overlay does). Add one gate
 - Modify: `frontend/src/components/sidebar/Sidebar.tsx`
 - Test: `frontend/src/components/sidebar/Sidebar.signout.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/sidebar/Sidebar.signout.test.tsx`:
 
@@ -798,12 +807,12 @@ describe("Sidebar desktop sign-out", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/sidebar/Sidebar.signout.test.tsx`
 Expected: FAIL — no sign-out button exists in the desktop sidebar.
 
-- [ ] **Step 3: Add the logout control**
+- [x] **Step 3: Add the logout control**
 
 In `frontend/src/components/sidebar/Sidebar.tsx`:
 
@@ -862,12 +871,12 @@ import { useLocation, useNavigate } from "react-router-dom";
         )}
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/sidebar/Sidebar.signout.test.tsx`
 Expected: PASS (2 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/components/sidebar/Sidebar.tsx frontend/src/components/sidebar/Sidebar.signout.test.tsx
@@ -883,7 +892,7 @@ Confirm the existing backend auth/admin/onboarding tests pass; add one end-to-en
 **Files:**
 - Verify: existing `packages/server/tests/test_routes/test_auth_routes.py`, `test_services/test_auth/test_registration.py`, `test_services/test_admin_invites.py`, `test_routes/test_must_change_password_gate.py`, `test_e2e_smoke_matrix.py`.
 
-- [ ] **Step 1: Run the existing auth/admin/onboarding suites**
+- [x] **Step 1: Run the existing auth/admin/onboarding suites**
 
 Run:
 ```bash
@@ -897,12 +906,12 @@ uv run pytest \
 ```
 Expected: PASS. (Note from project memory: the full `packages/server/` suite can hang on SSE/stream tests — run these targeted paths, not the whole package.)
 
-- [ ] **Step 2: Check for an end-to-end onboarding test**
+- [x] **Step 2: Check for an end-to-end onboarding test**
 
 Run: `grep -rln "register" packages/server/tests/test_e2e_smoke_matrix.py packages/server/tests/test_routes/test_auth_routes.py`
 Inspect whether a single test exercises: create-first-admin → admin login → create invite → register second user with that invite → second user login. If such a test exists, skip Step 3.
 
-- [ ] **Step 3: Add the gap test only if missing**
+- [x] **Step 3: Add the gap test only if missing**
 
 If Step 2 shows no end-to-end coverage, open `packages/server/tests/test_routes/test_auth_routes.py`, copy its company-mode app/client fixture pattern, and add a test that walks the full loop:
 
@@ -918,7 +927,7 @@ uv run pytest packages/server/tests/test_routes/test_auth_routes.py -v
 ```
 Expected: PASS including the new test.
 
-- [ ] **Step 4: Commit (only if a test was added)**
+- [x] **Step 4: Commit (only if a test was added)**
 
 ```bash
 git add packages/server/tests/test_routes/test_auth_routes.py
@@ -934,7 +943,7 @@ Catch any other place that assumed "login disabled / personal-only", then run th
 **Files:**
 - Verify only (fix inline if the audit finds a real issue, with its own commit).
 
-- [ ] **Step 1: Audit for stale "login disabled" assumptions**
+- [x] **Step 1: Audit for stale "login disabled" assumptions**
 
 Run:
 ```bash
@@ -943,7 +952,7 @@ grep -rn "unauthenticated" frontend/src --include=*.tsx
 ```
 Review each hit. Confirm `ProtectedRoute` still redirects `unauthenticated → /login` and that no other component hardcodes personal-only behavior that breaks company login. If a real blocker is found, fix it and commit separately with a clear message.
 
-- [ ] **Step 2: Frontend typecheck + lint + full test run**
+- [x] **Step 2: Frontend typecheck + lint + full test run**
 
 Run:
 ```bash
@@ -951,12 +960,12 @@ cd frontend && npx tsc --noEmit && npm run lint && npx vitest run
 ```
 Expected: tsc clean; lint clean; all vitest suites pass. (Project memory notes a pre-existing `SettingsShellBlocker` AbortSignal failure can make vitest exit non-zero — confirm any failure is that known issue and not introduced by this work by checking the failing test name.)
 
-- [ ] **Step 3: Backend lint**
+- [x] **Step 3: Backend lint**
 
 Run: `uv run ruff check . && uv run ruff format --check .`
 Expected: clean.
 
-- [ ] **Step 4: Manual browser checklist (operator-run)**
+- [x] **Step 4: Manual browser checklist (operator-run)**
 
 Start the server in company mode and walk the loop:
 ```bash
@@ -977,7 +986,7 @@ OPENLIA_MODE=personal uv run openlia serve
 ```
 8. Fresh personal instance boots straight into the app with no login UI and no Sign out control.
 
-- [ ] **Step 5: Final commit / branch wrap-up**
+- [x] **Step 5: Final commit / branch wrap-up**
 
 Ensure all work is committed on the feature branch. The branch is ready for PR once Steps 1-4 pass.
 
