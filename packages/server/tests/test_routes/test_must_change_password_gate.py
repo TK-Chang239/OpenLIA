@@ -97,6 +97,42 @@ class TestForcedPasswordBlocksProductRoutes:
         )
 
 
+class TestForcedPasswordBlocksProductRoutersStage04:
+    """Stage 0.4: routers switched from bare require_auth to require_active_user."""
+
+    @pytest.mark.parametrize(
+        ("method", "path"),
+        [
+            ("GET", "/reports"),
+            ("GET", "/reports/some-report-id/stream"),
+            ("POST", "/reports/some-report-id/revise"),
+            ("GET", "/repo/items"),
+            ("GET", "/chat/sessions"),
+            ("GET", "/chat/sessions/some-session-id/stream"),
+            ("GET", "/departments/morning-briefing/schedules"),
+            ("GET", "/departments/macro_research/dashboards"),
+            ("GET", "/departments/macro_research/schedule"),
+            ("GET", "/departments/retail_sentiment/config"),
+            ("GET", "/departments/panic_thermometer/config"),
+            ("GET", "/departments/equity-research/v3/runs"),
+            ("GET", "/departments/earnings-update/config"),
+            ("GET", "/departments/earnings-update/v2/settings"),
+            ("GET", "/graph/proposals"),
+            ("GET", "/chat/attachments/some-attachment-id/download"),
+            ("GET", "/skills"),
+            ("GET", "/report-templates"),
+            ("GET", "/disclaimer/status"),
+        ],
+    )
+    def test_route_blocked(self, forced_user_client, method: str, path: str):
+        client, _ = forced_user_client
+        _assert_must_change(client.request(method, path))
+
+    def test_admin_skills_blocked(self, forced_admin_client):
+        client, _ = forced_admin_client
+        _assert_must_change(client.get("/admin/skills"))
+
+
 class TestForcedPasswordBlocksAdminRoutes:
     def test_settings_llm_providers_list_blocked(self, forced_admin_client):
         client, _ = forced_admin_client

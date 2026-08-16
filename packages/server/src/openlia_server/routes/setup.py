@@ -181,7 +181,10 @@ def build_setup_router(
         _set_wizard_cookie(response, token)
         return {"mode": payload.mode}
 
-    @router.post("/takeover", dependencies=[Depends(require_loopback_during_wizard)])
+    @router.post(
+        "/takeover",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
     def post_takeover(response: Response, db: Session = Depends(session_dep)) -> dict[str, bool]:
         token = wizard_svc.rotate_session_token(db)
         _set_wizard_cookie(response, token)

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_admin
 from openlia_server.services.guardrail_log import list_events, wipe_all
 
 
@@ -18,7 +18,7 @@ def build_guardrail_events_router(
     db_session_factory: Callable[[], DBSession],
     mode: str,
 ) -> APIRouter:
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(prefix="/admin/guardrail-events", tags=["guardrail"])
 
@@ -30,7 +30,7 @@ def build_guardrail_events_router(
         limit: int = Query(200, ge=1, le=1000),
         offset: int = Query(0, ge=0),
         db: DBSession = Depends(session_dep),
-        user: User = require_auth,
+        user: User = require_admin,
     ) -> dict[str, object]:
         rows = list_events(
             db,
@@ -62,7 +62,7 @@ def build_guardrail_events_router(
     @router.delete("")
     def wipe(
         db: DBSession = Depends(session_dep),
-        user: User = require_auth,
+        user: User = require_admin,
     ) -> dict[str, int]:
         n = wipe_all(db)
         db.commit()

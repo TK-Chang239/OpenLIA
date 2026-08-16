@@ -202,4 +202,10 @@ export const routes: RouteObject[] = [
   },
 ];
 
-export const router = createBrowserRouter(routes);
+// Serve correctly when the app is hosted under a sub-path (e.g. GitHub Pages
+// project site at /openlia-demo/). BASE_URL is "/" for normal builds — no-op —
+// and the Vite --base value for the demo build. React Router wants a leading
+// but no trailing slash.
+const routerBasename = import.meta.env.BASE_URL.replace(/\/+$/, "") || "/";
+
+export const router = createBrowserRouter(routes, { basename: routerBasename });

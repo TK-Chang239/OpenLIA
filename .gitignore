@@ -59,3 +59,9 @@ scripts/extraction/output/
 個股報告/
 產業報告/
 *.pdf
+
+# Demo/design build artifacts (audit 2026-08-16, Stage 0.6)
+demo-package/
+demo-package.zip
+ds-bundle/
+ds-build.py

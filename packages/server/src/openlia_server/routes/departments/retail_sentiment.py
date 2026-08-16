@@ -26,7 +26,7 @@ from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.dashboard import RsDashboardCache
 from openlia_server.db.models.scheduler import JobRun
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.routes.dept_health import gate_dept_or_409
 from openlia_server.scheduler.registry import JobStatus, JobType
 from openlia_server.scheduler.services import jobs as jobs_svc
@@ -96,7 +96,7 @@ def build_retail_sentiment_router(
     if require_auth_override is not None:
         require_auth = Depends(require_auth_override)
     else:
-        require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+        require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
 
     session_dep = make_session_dependency(db_session_factory)
 

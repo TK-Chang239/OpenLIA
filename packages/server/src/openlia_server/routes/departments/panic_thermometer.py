@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.dashboard import PtPreset
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services.pt_config import PtConfigService
 from openlia_server.services.pt_runner import PtRunner
 
@@ -74,7 +74,7 @@ def build_panic_thermometer_router(
     db_session_factory: Callable[[], Any],
     mode: str,
 ) -> APIRouter:
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     router = APIRouter(prefix="/departments/panic_thermometer", tags=["panic_thermometer"])
 
     def _config_service() -> PtConfigService:

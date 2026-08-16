@@ -65,7 +65,7 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Citation,
     ReportV3Section,
 )
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import v3_instructions_service as instructions_svc
 from openlia_server.services import v3_render_service as render_svc
 from openlia_server.services import v3_revision_service as revision_svc
@@ -529,7 +529,7 @@ def build_equity_research_v3_router(
     db_session_factory: Callable[[], DBSession],
     mode: str,
 ) -> APIRouter:
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(
         prefix="/departments/equity-research/v3",

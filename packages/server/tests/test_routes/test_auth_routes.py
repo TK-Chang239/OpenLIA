@@ -211,9 +211,7 @@ class TestSessionsEndpoints:
             "current",
         }
 
-    def test_revoke_other_session(
-        self, company_client: TestClient, db_session, seeded_invite
-    ):
+    def test_revoke_other_session(self, company_client: TestClient, db_session, seeded_invite):
         from openlia_server.db.models.auth import User
         from openlia_server.services.auth import sessions
 

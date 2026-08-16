@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import files as svc
 
 _ERROR_MAP: dict[type[Exception], tuple[int, str]] = {
@@ -26,7 +26,7 @@ def _raise_http(exc: Exception) -> None:
 
 def build_files_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="", tags=["files"])
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/chat/attachments/{attachment_id}/download")

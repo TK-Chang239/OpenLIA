@@ -293,7 +293,36 @@ class _StripApiPrefixMiddleware:
         await self._app(scope, receive, send)
 
 
+class _CaptureRealClientMiddleware:
+    """Record the true transport peer before ProxyHeadersMiddleware can rewrite it.
+
+    When ``OPENLIA_TRUST_PROXY_HEADERS`` is enabled, ProxyHeadersMiddleware
+    overwrites ``scope["client"]`` with the ``X-Forwarded-For`` value so
+    downstream code sees the forwarded IP for cookie/scheme/rate-limit
+    decisions. The loopback gate that guards ``/setup/*`` writes must NOT trust
+    that forwarded value: a spoofed ``X-Forwarded-For: 127.0.0.1`` would
+    otherwise impersonate a local connection and defeat the gate. This
+    middleware runs outermost (before ProxyHeaders) and stashes the real peer
+    under a private scope key so ``_is_loopback_request`` can consult it.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") == "http":
+            scope["openlia_real_client"] = scope.get("client")
+        await self._app(scope, receive, send)
+
+
 def _is_loopback_request(request: Request) -> bool:
+    # Prefer the true transport peer captured before ProxyHeadersMiddleware ran
+    # (see _CaptureRealClientMiddleware). The /setup loopback gate must never
+    # trust a proxy-forwarded client: a spoofed X-Forwarded-For: 127.0.0.1 must
+    # not be able to pose as a local connection.
+    real_client = request.scope.get("openlia_real_client")
+    if real_client is not None:
+        return real_client[0] in ("127.0.0.1", "::1", "localhost")
     client = request.client
     if client is None:
         return True
@@ -621,7 +650,19 @@ def create_app(
         "true",
         "yes",
     ):
+        # The operator has explicitly accepted proxy trust: X-Forwarded-For /
+        # X-Forwarded-Proto become authoritative for client IP and scheme
+        # (cookie Secure, rate-limit keys). trusted_hosts="*" trusts any
+        # upstream, which is acceptable here only because the /setup loopback
+        # gate reads the true transport peer via _CaptureRealClientMiddleware
+        # (registered outermost below) — so a forwarded 127.0.0.1 cannot pass
+        # that gate even when this middleware is active.
         app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
+    # Outermost middleware: capture the real transport peer before
+    # ProxyHeadersMiddleware (if enabled) overwrites scope["client"]. Registered
+    # last so it wraps ProxyHeaders and runs first on every request.
+    app.add_middleware(_CaptureRealClientMiddleware)
 
     setup_router = build_setup_router(
         db_session_factory=factory,
