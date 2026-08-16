@@ -6,7 +6,7 @@ import { InlineFeedback } from '../InlineFeedback';
 
 function inviteRegistrationUrl(created: InviteCreated & { register_url?: string }): string {
   // Prefer the URL the server derives from OPENLIA_PUBLIC_URL — the browser
-  // origin is wrong whenever the public URL differs (issue #258). The server
+  // origin is wrong whenever the public URL differs (issue 258). The server
   // may return a fully-qualified URL or a relative /register?invite=... path;
   // resolve either against the current origin. Fall back to origin-built when
   // the field is absent (older server).
