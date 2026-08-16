@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiError, createInvite, InviteSummary, listInvites, revokeInvite } from '../../../api/admin';
+import { ApiError, createInvite, InviteCreated, InviteSummary, listInvites, revokeInvite } from '../../../api/admin';
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';
 
-function inviteRegistrationUrl(token: string): string {
-  // Recipients register at /register?invite=<token>; hand the admin the full
-  // shareable link rather than a bare token they'd have to assemble by hand.
-  return `${window.location.origin}/register?invite=${encodeURIComponent(token)}`;
+function inviteRegistrationUrl(created: InviteCreated & { register_url?: string }): string {
+  // Prefer the URL the server derives from OPENLIA_PUBLIC_URL — the browser
+  // origin is wrong whenever the public URL differs (issue 258). The server
+  // may return a fully-qualified URL or a relative /register?invite=... path;
+  // resolve either against the current origin. Fall back to origin-built when
+  // the field is absent (older server).
+  if (created.register_url) {
+    return new URL(created.register_url, window.location.origin).toString();
+  }
+  return `${window.location.origin}/register?invite=${encodeURIComponent(created.token)}`;
 }
 
 export function InvitesPanel(): JSX.Element {
@@ -44,7 +50,7 @@ export function InvitesPanel(): JSX.Element {
         max_uses: maxUses,
         expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
       });
-      setTokenModal(inviteRegistrationUrl(r.token));
+      setTokenModal(inviteRegistrationUrl(r));
       setShowForm(false);
       setLabel('');
       setMaxUses(1);

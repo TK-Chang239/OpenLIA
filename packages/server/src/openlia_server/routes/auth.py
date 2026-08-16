@@ -50,19 +50,32 @@ class ChangePasswordIn(BaseModel):
     new_password: str
 
 
+def resolve_cookie_secure() -> bool:
+    """Whether auth session cookies get the ``Secure`` flag.
+
+    Env behavior (OPENLIA_COOKIE_SECURE / OPENLIA_MODE):
+      - OPENLIA_COOKIE_SECURE explicitly set wins: ``1``/``true``/``yes`` -> True,
+        anything else -> False.
+      - Unset -> defaults True in company mode (production-safe behind TLS),
+        False otherwise so TestClient and personal mode work over ``http://``.
+
+    Caveat: a ``Secure`` cookie is never returned by the browser over plain
+    ``http://``. An operator running company mode without TLS must set
+    OPENLIA_COOKIE_SECURE=false, or login silently fails. `openlia serve` warns
+    at startup when this combination is likely (see cli.serve).
+
+    Shared by routes/auth.py and routes/setup.py so both cookie paths agree.
+    """
+    override = os.environ.get("OPENLIA_COOKIE_SECURE")
+    if override is not None:
+        return override.lower() in ("1", "true", "yes")
+    return os.environ.get("OPENLIA_MODE", "personal").lower() == "company"
+
+
 def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
     router = APIRouter(prefix="/auth")
     require_auth = build_require_auth(db_session_factory=db_session_factory, mode="company")
     session_dep = make_session_dependency(db_session_factory)
-
-    def _cookie_secure() -> bool:
-        # Default to true in company mode (production-safe), false otherwise so
-        # TestClient and local personal mode work over http://testserver.
-        # Explicit OPENLIA_COOKIE_SECURE overrides either default.
-        override = os.environ.get("OPENLIA_COOKIE_SECURE")
-        if override is not None:
-            return override.lower() in ("1", "true", "yes")
-        return os.environ.get("OPENLIA_MODE", "personal").lower() == "company"
 
     def _ip(request: Request) -> str | None:
         if os.environ.get("OPENLIA_TRUST_PROXY_HEADERS", "false").lower() in (
@@ -113,7 +126,7 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
             user_agent=request.headers.get("user-agent"),
             ip_address=ip,
         )
-        _set_cookie(response, created.raw_token, persistent=False, secure=_cookie_secure())
+        _set_cookie(response, created.raw_token, persistent=False, secure=resolve_cookie_secure())
         return {
             "user_id": user.id,
             "email": user.email,
@@ -184,7 +197,7 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
             response,
             created.raw_token,
             persistent=body.persistent,
-            secure=_cookie_secure(),
+            secure=resolve_cookie_secure(),
         )
         return {
             "user_id": auth.user.id,

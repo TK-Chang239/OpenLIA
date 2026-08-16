@@ -70,6 +70,8 @@ def build_skills_router(
     ):
         if scope == "system" and not getattr(user, "is_admin", False):
             raise HTTPException(403, "system-scope install requires admin")
+        if source_type == "folder" and not getattr(user, "is_admin", False):
+            raise HTTPException(403, "folder install requires admin")
         target = store.for_scope(scope)  # type: ignore[arg-type]
         try:
             if source_type == "zip":
@@ -124,6 +126,8 @@ def build_skills_router(
             await store.user.set_enabled(skill_id, body.enabled, scope="user", user_id=user.id)
             scope = "user"
         except FileNotFoundError:
+            if not getattr(user, "is_admin", False):
+                raise HTTPException(403, "system-scope toggle requires admin") from None
             await store.system.set_enabled(skill_id, body.enabled, scope="system", user_id=user.id)
             scope = "system"
         record_skill_toggled(

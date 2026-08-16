@@ -32,6 +32,24 @@ class TestInvites:
         assert len(invites) == 1
         assert invites[0]["label"] == "Q2"
 
+    def test_create_returns_public_url_when_configured(self, admin_cookie: TestClient, monkeypatch):
+        monkeypatch.setenv("OPENLIA_PUBLIC_URL", "https://openlia.example.com")
+        resp = admin_cookie.post("/admin/invites", json={"label": "Q2"})
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["register_url"] == (
+            f"https://openlia.example.com/register?invite={body['token']}"
+        )
+
+    def test_create_returns_relative_url_when_public_url_unset(
+        self, admin_cookie: TestClient, monkeypatch
+    ):
+        monkeypatch.delenv("OPENLIA_PUBLIC_URL", raising=False)
+        resp = admin_cookie.post("/admin/invites", json={})
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["register_url"] == f"/register?invite={body['token']}"
+
     def test_revoke(self, admin_cookie: TestClient, db_session):
         invite = SignupInvite(id="inv-x", token_hash="tok-x", created_at=datetime.now(UTC))
         db_session.add(invite)
@@ -213,3 +231,71 @@ class TestUserManagement:
         # Approving the same request again must fail (status moved off pending).
         resp_again = admin_cookie.post(f"/admin/password-reset-requests/{req.id}/approve")
         assert resp_again.status_code == 404
+
+
+def _admin_session(company_client: TestClient, db_session, admin) -> TestClient:
+    created = sessions.create_session(db_session, user_id=admin.id, persistent=True)
+    company_client.cookies.set(COOKIE_NAME, created.raw_token)
+    return company_client
+
+
+class TestAdminLifecycle:
+    def test_self_disable_blocked(self, company_client: TestClient, make_user, db_session):
+        admin = make_user(email="root@example.com", is_admin=True)
+        # A second active admin keeps this from being the last-admin path.
+        make_user(email="backup-admin@example.com", is_admin=True)
+        client = _admin_session(company_client, db_session, admin)
+        resp = client.post(f"/admin/users/{admin.id}/disable")
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "cannot_disable_self"
+        db_session.refresh(admin)
+        assert admin.is_disabled is False
+
+    def test_last_admin_disable_blocked(self, company_client: TestClient, make_user, db_session):
+        admin = make_user(email="solo@example.com", is_admin=True)
+        client = _admin_session(company_client, db_session, admin)
+        resp = client.post(f"/admin/users/{admin.id}/disable")
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "last_admin"
+        db_session.refresh(admin)
+        assert admin.is_disabled is False
+
+    def test_promote_then_demote(self, admin_cookie: TestClient, make_user, db_session):
+        alice = make_user(email="alice@example.com")
+        resp = admin_cookie.post(f"/admin/users/{alice.id}/role", json={"is_admin": True})
+        assert resp.status_code == 200
+        assert resp.json()["is_admin"] is True
+        db_session.refresh(alice)
+        assert alice.is_admin is True
+
+        # admin@example.com (fixture) is still an admin, so alice is not the last.
+        resp = admin_cookie.post(f"/admin/users/{alice.id}/role", json={"is_admin": False})
+        assert resp.status_code == 200
+        assert resp.json()["is_admin"] is False
+        db_session.refresh(alice)
+        assert alice.is_admin is False
+
+    def test_last_admin_demote_blocked(self, company_client: TestClient, make_user, db_session):
+        admin = make_user(email="onlyadmin@example.com", is_admin=True)
+        client = _admin_session(company_client, db_session, admin)
+        resp = client.post(f"/admin/users/{admin.id}/role", json={"is_admin": False})
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "last_admin"
+        db_session.refresh(admin)
+        assert admin.is_admin is True
+
+    def test_role_unknown_user_404(self, admin_cookie: TestClient):
+        resp = admin_cookie.post("/admin/users/nope/role", json={"is_admin": True})
+        assert resp.status_code == 404
+        assert resp.json()["detail"]["code"] == "user_not_found"
+
+
+class TestAdminRateLimit:
+    def test_write_endpoint_throttled(self, admin_cookie: TestClient):
+        from openlia_server.routes.admin import ADMIN_WRITE_LIMIT
+
+        for _ in range(ADMIN_WRITE_LIMIT):
+            assert admin_cookie.post("/admin/invites", json={}).status_code == 201
+        resp = admin_cookie.post("/admin/invites", json={})
+        assert resp.status_code == 429
+        assert resp.json()["detail"]["code"] == "rate_limited"

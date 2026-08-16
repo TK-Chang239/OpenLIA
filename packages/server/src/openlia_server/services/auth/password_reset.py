@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.db.bootstrap import LOCAL_USER_ID
 from openlia_server.db.models.auth import PasswordResetRequest, User
 from openlia_server.services.auth import events, passwords, registration, sessions, tokens
 from openlia_server.services.auth.errors import AuthError
@@ -23,11 +24,33 @@ class TokenExpiredError(AuthError):
     code = "token_expired"
 
 
+class LocalUserProtectedError(AuthError):
+    code = "local_user_protected"
+
+
+# Migration stance (personal -> company): a DB first bootstrapped in personal
+# mode keeps the synthetic `local` user row (is_admin=True, password_hash=None),
+# which owns all pre-migration data. login.authenticate already refuses it
+# (password_hash is None). Every password-setting path here must ALSO refuse it,
+# or a company admin could give `local` a password and sign in as an admin that
+# owns all pre-existing data. The company first admin must instead be created
+# via `openlia admin create-first-admin`, which makes a fresh, distinct account.
+def _reject_local_user(user_id: str) -> None:
+    if user_id == LOCAL_USER_ID:
+        raise LocalUserProtectedError(
+            "The synthetic 'local' user cannot be given a password or promoted. "
+            "In company mode, create the first admin with "
+            "`openlia admin create-first-admin`."
+        )
+
+
 def request_reset(db: DBSession, *, email: str, ip_address: str | None = None) -> None:
     """Create a pending reset request. Silent no-op if the email is unknown."""
     email_norm = registration.normalize_email(email)
     user = db.execute(select(User).where(User.email == email_norm)).scalar_one_or_none()
-    if user is None or user.is_disabled:
+    # Silent no-op for the synthetic local user: never create a pending request
+    # that an admin could approve into a password (see _reject_local_user).
+    if user is None or user.is_disabled or user.id == LOCAL_USER_ID:
         return
 
     db.execute(
@@ -108,6 +131,7 @@ def consume_token(db: DBSession, *, token: str, new_password: str) -> None:
 
     user = db.get(User, req.user_id)
     assert user is not None
+    _reject_local_user(user.id)
 
     user.password_hash = passwords.hash_password(new_password)
     user.must_change_password = False
@@ -145,6 +169,7 @@ def admin_direct_reset(
     that was just set so admin tooling can display it. Sets
     ``must_change_password=True`` and revokes all active sessions.
     """
+    _reject_local_user(user_id)
     if new_password is None:
         new_password = tokens.generate_opaque_token()
     passwords.validate_password_policy(new_password)

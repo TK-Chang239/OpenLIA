@@ -258,6 +258,29 @@ def serve(
             wizard_pending=wizard_pending,
         )
     )
+    # Warn when company-mode Secure cookies will likely break login over plain
+    # HTTP. A Secure cookie is never returned by the browser over http://, so if
+    # TLS is not terminated in front of this server, login silently fails. We
+    # cannot detect upstream TLS, so we warn whenever the operator did not
+    # explicitly opt in (OPENLIA_COOKIE_SECURE unset) or is binding to a loopback
+    # address (definitively plain HTTP).
+    from openlia_server.routes.auth import resolve_cookie_secure
+
+    cookie_secure_explicit = os.environ.get("OPENLIA_COOKIE_SECURE") is not None
+    binding_loopback = bind_host in {"127.0.0.1", "localhost", "::1"}
+    if (
+        mode == "company"
+        and resolve_cookie_secure()
+        and (binding_loopback or not cookie_secure_explicit)
+    ):
+        typer.echo(
+            "WARNING: company mode is issuing Secure session cookies, but this "
+            "server may be reachable over plain HTTP. Browsers never return a "
+            "Secure cookie over http://, so login will silently fail. Terminate "
+            "TLS in front of OpenLIA, or set OPENLIA_COOKIE_SECURE=false for "
+            "plain-HTTP/LAN deployments.",
+            err=True,
+        )
     uvicorn.run(
         "openlia_server.app:create_app",
         host=bind_host,
