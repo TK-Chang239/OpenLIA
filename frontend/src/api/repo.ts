@@ -134,28 +134,6 @@ export const unsaveV2RunFromRepo = (runId: string) =>
 export const listSavedV2Runs = () =>
   fetchJson<{ saved_run_ids: string[] }>("/api/repo/v2-runs");
 
-export const deleteV2Run = (runId: string) =>
-  fetchJson<void>(
-    `/api/departments/equity-research/v2/runs/${encodeURIComponent(runId)}`,
-    { method: "DELETE" },
-  );
-
-export interface V2RunMeta {
-  id: string;
-  state: string;
-  deleted_at: string | null;
-  expired_at: string | null;
-  created_at: string | null;
-  has_report: boolean;
-  title: string | null;
-  ticker: string | null;
-}
-
-export const fetchV2RunMeta = (runId: string) =>
-  fetchJson<V2RunMeta>(
-    `/api/departments/equity-research/v2/runs/${encodeURIComponent(runId)}/meta`,
-  );
-
 // v3 equity-research repo mirrors of the v1/v2 helpers. Polymorphic
 // pointer column ``v3_report_id`` lives in ``repo_items`` alongside
 // ``report_id`` (v1) and ``pipeline_run_id`` (v2.2); the routes keep

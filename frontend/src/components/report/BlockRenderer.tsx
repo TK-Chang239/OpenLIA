@@ -20,10 +20,6 @@ import { ScatterBlock } from './charts/ScatterBlock';
 import { HeatmapBlock } from './charts/HeatmapBlock';
 import { TreemapBlock } from './charts/TreemapBlock';
 import { ComboChartBlock } from './charts/ComboChartBlock';
-import { SkipBannerBlock } from './blocks/SkipBannerBlock';
-import { DegradedBannerBlock } from './blocks/DegradedBannerBlock';
-import { ChartImageBlock } from './blocks/ChartImageBlock';
-import { ExcelAttachmentBlock } from './blocks/ExcelAttachmentBlock';
 
 export interface BlockRendererProps {
   block: any;
@@ -101,16 +97,6 @@ function renderInner(block: any, renderChild?: (child: any, forced: ForcedHeight
       return <TreemapBlock {...block} />;
     case 'combo_chart':
       return <ComboChartBlock {...block} />;
-    // v2.2 block types — emitted by RunnerV2 helpers and rendered straight
-    // through for repo-saved legacy reports.
-    case 'skip_banner':
-      return <SkipBannerBlock {...block} />;
-    case 'degraded_banner':
-      return <DegradedBannerBlock {...block} />;
-    case 'chart_image':
-      return <ChartImageBlock {...block} />;
-    case 'excel_attachment':
-      return <ExcelAttachmentBlock {...block} />;
     default:
       return (
         <div className="report-block--unsupported" role="alert">

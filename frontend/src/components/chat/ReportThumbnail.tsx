@@ -1,5 +1,4 @@
 import { AttachmentChip } from "./AttachmentChip";
-import { kindFromFilename } from "../viewer/FileViewerContext";
 
 interface Props {
   reportId: string;
@@ -9,12 +8,15 @@ interface Props {
 }
 
 export function ReportThumbnail({ reportId, filename, metadata, initialSaved }: Props): JSX.Element {
-  const kind = kindFromFilename(filename);
+  // Reports render through StructuredReportRenderer, which FileViewer mounts
+  // only when the viewer kind is "report". Pass it explicitly — matching how
+  // Repository and V3ReportCard open reports — so the report renderer mounts
+  // instead of falling through to UnsupportedRenderer.
   return (
     <AttachmentChip
       filename={filename}
-      fileType={kind}
-      metadata={metadata ?? kind.toUpperCase()}
+      fileType="report"
+      metadata={metadata ?? "REPORT"}
       source={{ kind: "report", reportId }}
       reportId={reportId}
       initialSaved={initialSaved}

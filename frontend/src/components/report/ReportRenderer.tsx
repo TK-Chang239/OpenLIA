@@ -13,11 +13,6 @@ import { MetaStatsCard } from './MetaStatsCard';
 import { RailPanel } from './RailPanel';
 import { CitationsRail } from './CitationsRail';
 import { CitationsSection, SOURCES_SECTION_ID } from './CitationsSection';
-import { RunSummary } from '../equity-research/RunSummary/RunSummary';
-import { VerificationHistory } from '../equity-research/VerificationHistory/VerificationHistory';
-
-const RUN_SUMMARY_SECTION_ID = 'run_summary';
-const VERIFICATION_HISTORY_SECTION_ID = 'verification_history';
 
 export type ReportTheme = 'light' | 'dark';
 
@@ -53,11 +48,8 @@ export interface ReportRendererProps {
   theme?: ReportTheme;
   related?: RelatedLink[];
   reportId?: string | null;
-  // v2.2 engine: when true and schema.verification_history is set, the
-  // dev-only diagnostics table renders. Default false. The backend
-  // already gates verification_history payload emission on dev_mode,
-  // so this prop is mostly a defense-in-depth flag for explicit hiding
-  // in user-facing surfaces.
+  // Retained for API compatibility with StructuredReportRenderer, which
+  // passes it through. Not consumed here.
   devMode?: boolean;
 }
 
@@ -68,7 +60,6 @@ export function ReportRenderer({
   theme,
   related,
   reportId,
-  devMode = false,
 }: ReportRendererProps) {
   const { t } = useTranslation();
   const appTheme = useAppTheme();
@@ -86,21 +77,9 @@ export function ReportRenderer({
 
   const furniture = schema.page_furniture;
   const citations = schema.citations ?? [];
-  const runSummary = schema.run_summary ?? null;
-  const verificationHistory =
-    devMode && schema.verification_history ? schema.verification_history : null;
   const tocSections = schema.sections.map((s) => ({ id: s.id, title: s.title }));
   if (citations.length) {
     tocSections.push({ id: SOURCES_SECTION_ID, title: t('report.sources_and_disclosures') });
-  }
-  if (runSummary) {
-    tocSections.push({ id: RUN_SUMMARY_SECTION_ID, title: t('report.run_summary') });
-  }
-  if (verificationHistory) {
-    tocSections.push({
-      id: VERIFICATION_HISTORY_SECTION_ID,
-      title: t('report.verification_history'),
-    });
   }
   const hasRailPanel =
     !!schema.rail &&
@@ -143,10 +122,6 @@ export function ReportRenderer({
             />
           ))}
           {citations.length ? <CitationsSection citations={citations} /> : null}
-          {runSummary ? <RunSummary summary={runSummary} /> : null}
-          {verificationHistory ? (
-            <VerificationHistory history={verificationHistory} devMode={devMode} />
-          ) : null}
         </main>
         {hasRail ? (
           <aside className="report__rail">
