@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session as DBSession
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import ChatMessage
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import chat_sessions as svc
 from openlia_server.services.guardrail_log import (
     record_persona_refusal,
@@ -58,7 +58,7 @@ def build_chat_stream_router(
     The chat-runner factory is resolved from `request.app.state.chat_runner_factory`
     at each request so tests can swap it without rebuilding the app.
     """
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(prefix="/chat/sessions", tags=["chat"])
 

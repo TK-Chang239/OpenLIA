@@ -23,7 +23,7 @@ from openlia_server.db.models.graph import (
     GraphExtractionProposal,
     GraphUserConstruct,
 )
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import graph_extraction
 
 
@@ -59,7 +59,7 @@ _VALID_PROPOSAL_STATUSES: frozenset[str] = frozenset({"pending", "accepted", "di
 
 def build_graph_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/graph", tags=["graph"])
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/proposals", response_model=ProposalListOut)

@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session as DBSession
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import ChatSession, Report
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.routes.chat_sessions import _attach_report_as_context
 from openlia_server.services.report_docx import assemble_docx
 from openlia_server.services.report_export import capture_chart_pngs, export_report_pdf
@@ -608,7 +608,7 @@ def build_reports_router(
     mode: Literal["personal", "company"],
 ) -> APIRouter:
     router = APIRouter(prefix="/reports", tags=["reports"])
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("", response_model=ReportListOut)

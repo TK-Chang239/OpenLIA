@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from openlia_server.db.models.auth import User
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 
 
 class ScheduleUpsert(BaseModel):
@@ -37,7 +37,7 @@ def build_mr_schedule_router(
     if require_auth_override is not None:
         require_auth = Depends(require_auth_override)
     else:
-        require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+        require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
 
     @router.get("")
     def get_schedule(request: Request, user: User = require_auth) -> dict[str, Any]:
