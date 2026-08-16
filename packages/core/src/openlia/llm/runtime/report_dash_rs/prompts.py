@@ -49,12 +49,11 @@ class ConnectorPromptInfo:
 
 @dataclass(frozen=True)
 class DashboardPromptSpec:
-    """Per-dashboard prompt content: the numbered workflow, the payload-shape
-    description block, and the indicator-sourcing hint for the connectors block."""
+    """Per-dashboard prompt content: the numbered workflow and the
+    payload-shape description block."""
 
     workflow: str
     payload_shape: str
-    indicator_hint: str
 
 
 def build_system_prompt(
@@ -87,7 +86,6 @@ def build_system_prompt(
         connectors_block=_render_connectors_block(
             request.enabled_connectors,
             connector_tools,
-            indicator_hint=spec.indicator_hint,
         ),
     )
 
@@ -126,23 +124,23 @@ def _render_data_context_block(data_context: str | None) -> str:
 def _render_connectors_block(
     connectors: EnabledConnectors,
     connector_tools: Sequence[ConnectorPromptInfo] = (),
-    *,
-    indicator_hint: str,
 ) -> str:
-    """List the tool groups available this run.
+    """List the tools available this run.
 
-    When all data connectors are off, state explicitly that the model
-    should gather retail sentiment discussion from its training knowledge
-    rather than wait on a disabled tool. ``indicator_hint`` names the
-    specific context this dashboard reads from financial data connectors.
+    ``classify_retail_sentiment`` and ``emit_dashboard`` are always
+    present, so they anchor the list. Dispatcher connector tools and
+    native web search are added when the run enables them. When no live
+    data-gathering tool is enabled, direct the model to draw retail
+    discussion from its training knowledge rather than wait on a disabled
+    tool.
     """
-    available: list[str] = []
-    if connectors.eodhd:
-        available.append(
-            "  - Market data (EODHD): `get_quotes`, `get_historical_prices`, "
-            "`get_news`, `get_economic_calendar`, `get_macro_indicators`. Use "
-            f"for {indicator_hint}"
-        )
+    available: list[str] = [
+        "  - `classify_retail_sentiment`: deterministic scorer. Pass it your "
+        "bullish / bearish / neutral counts and buzz_level; use its returned "
+        "sentiment_score, direction, bull_pct, bear_pct, and signals verbatim.",
+        "  - `emit_dashboard`: call once, last, with the complete typed payload "
+        "to finalize the run.",
+    ]
     for info in connector_tools:
         tool_lines = "\n".join(f"    - {name}: {description}" for name, description in info.tools)
         available.append(
@@ -155,13 +153,13 @@ def _render_connectors_block(
             "r/stocks), StockTwits, X/Twitter, and investing forums, plus recent news "
             "articles and analyst commentary for the subject ticker."
         )
-    if not available:
-        return (
-            "No data tools are enabled this run. Draw on your knowledge of recent "
-            "retail sentiment discussion for the subject ticker, state the approximate "
-            "recency of your knowledge, then classify and emit."
+    if not connectors.web_search and not connector_tools:
+        available.append(
+            "  - No live data-gathering tool is enabled this run. Draw on your "
+            "knowledge of recent retail sentiment discussion for the subject ticker "
+            "and state the approximate recency of that knowledge before you classify."
         )
-    return "These tool groups are enabled this run:\n\n" + "\n".join(available)
+    return "These tools are available this run:\n\n" + "\n".join(available)
 
 
 _PROMPT_TEMPLATE = """\
@@ -215,10 +213,10 @@ Work in this order:
   4. Extract the key narratives and themes driving the discussion (e.g.
      earnings catalyst, short squeeze talk, macro headwinds, product news).
      Capture up to five distinct narratives as short strings.
-  5. If a financial connector (EODHD) is available, optionally fetch an
-     aggregated sentiment score and analyst consensus rating for a cross-check.
-     Leave aggregated_sentiment and analyst_gap null if the connector is not
-     available or the data is not returned — never invent these values.
+  5. When web search surfaces a credible aggregated sentiment reading or an
+     analyst consensus rating, record it as an optional cross-check in
+     aggregated_sentiment and analyst_gap and cite the source. Leave both null
+     when the read does not surface a figure you can trace to a source.
   6. Cite concrete threads, posts, or articles as evidence items. Each
      evidence item must include the title, url, source, and classification
      (bullish/bearish/neutral). Add published_at when available.
@@ -254,10 +252,10 @@ _RETAIL_SENTIMENT_PAYLOAD_SHAPE = """\
     — concrete threads/articles cited in step 6; classification is one of
     "bullish"/"bearish"/"neutral"; published_at is ISO-8601 or null.
   - `narrative`: string — the synthesis paragraph from step 7.
-  - `aggregated_sentiment`: float or null — connector-sourced aggregated
-    sentiment score; null if no financial connector or data unavailable.
-  - `analyst_gap`: float or null — difference between analyst consensus and
-    retail sentiment score; null if no financial connector or data unavailable.
+  - `aggregated_sentiment`: float or null — an aggregated sentiment score you
+    read from a cited source as a cross-check; null when no such figure surfaces.
+  - `analyst_gap`: float or null — difference between an analyst consensus
+    rating and the retail sentiment score; null when either figure is unavailable.
   - `captured_at`: ISO-8601 timestamp string or null — set to the current
     timestamp when emitting."""
 
@@ -269,9 +267,5 @@ DASHBOARD_PROMPT_SPECS: dict[str, DashboardPromptSpec] = {
     "retail_sentiment": DashboardPromptSpec(
         workflow=_RETAIL_SENTIMENT_WORKFLOW,
         payload_shape=_RETAIL_SENTIMENT_PAYLOAD_SHAPE,
-        indicator_hint=(
-            "an aggregated sentiment score and analyst consensus rating "
-            "for the subject ticker as a cross-check against retail discussion."
-        ),
     ),
 }
