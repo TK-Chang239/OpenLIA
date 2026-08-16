@@ -43,6 +43,24 @@ describe('InvitesPanel', () => {
     );
   });
 
+  it('shows the server-provided public register URL when present', async () => {
+    vi.spyOn(adminApi, 'createInvite').mockResolvedValue({
+      id: '00000000-0000-4000-8000-000000000003',
+      label: 'test',
+      token: 'abc123',
+      register_url: 'https://openlia.example.com/register?invite=abc123',
+    } as adminApi.InviteCreated);
+    render(<InvitesPanel />);
+    await waitFor(() => screen.getByText(/beta users/i));
+    fireEvent.click(screen.getByRole('button', { name: /new invite/i }));
+    fireEvent.click(screen.getByRole('button', { name: /create invite/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByText('https://openlia.example.com/register?invite=abc123'),
+      ).toBeInTheDocument(),
+    );
+  });
+
   it('revokes an invite after confirmation', async () => {
     const revoke = vi.spyOn(adminApi, 'revokeInvite').mockResolvedValue(undefined);
     vi.spyOn(window, 'confirm').mockReturnValue(true);

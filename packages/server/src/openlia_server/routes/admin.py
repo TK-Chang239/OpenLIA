@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -14,15 +15,38 @@ from sqlalchemy.orm import Session as DBSession
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import PasswordResetRequest, SignupInvite, User
 from openlia_server.middleware.auth import build_require_active_admin
+from openlia_server.middleware.rate_limit import limiter
+from openlia_server.services.auth import admin_roles, sessions, tokens
 from openlia_server.services.auth import password_reset as reset_service
-from openlia_server.services.auth import sessions, tokens
 from openlia_server.services.auth.errors import AuthError
+
+# State-changing admin endpoints share one per-admin sliding window, mirroring
+# the per-IP/per-email windows the auth router applies (rate_limit.LIMITS). The
+# limiter is imported read-only; rate_limit.py owns the window primitive.
+ADMIN_WRITE_LIMIT = 30
+ADMIN_WRITE_WINDOW_SECONDS = 60
 
 
 class CreateInviteIn(BaseModel):
     label: str | None = None
     max_uses: int | None = Field(default=None, ge=1)
     expires_at: datetime | None = None
+
+
+class SetRoleIn(BaseModel):
+    is_admin: bool
+
+
+def _build_register_url(raw_token: str) -> str:
+    """Fully-qualified register URL from OPENLIA_PUBLIC_URL, else a relative path.
+
+    Mirrors cli.py's read of OPENLIA_PUBLIC_URL. When unset the caller (browser)
+    resolves the relative path against its own origin.
+    """
+    base = os.environ.get("OPENLIA_PUBLIC_URL")
+    if base:
+        return f"{base.rstrip('/')}/register?invite={raw_token}"
+    return f"/register?invite={raw_token}"
 
 
 class DirectResetIn(BaseModel):
@@ -39,6 +63,17 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         db_session_factory=db_session_factory, mode="company"
     )
     session_dep = make_session_dependency(db_session_factory)
+
+    def _throttle_write(admin_id: str) -> None:
+        if not limiter().check_and_tick(
+            f"admin_write:{admin_id}",
+            limit=ADMIN_WRITE_LIMIT,
+            window_seconds=ADMIN_WRITE_WINDOW_SECONDS,
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail={"code": "rate_limited", "message": "Too many requests."},
+            )
 
     @router.get("/invites")
     def list_invites(admin=require_admin, db: DBSession = Depends(session_dep)):
@@ -64,6 +99,7 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         admin=require_admin,
         db: DBSession = Depends(session_dep),
     ):
+        _throttle_write(admin.id)
         raw_token = tokens.generate_opaque_token()
         invite = SignupInvite(
             id=str(uuid.uuid4()),
@@ -78,7 +114,12 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         db.add(invite)
         db.flush()
         db.refresh(invite)
-        return {"id": invite.id, "token": raw_token, "label": invite.label}
+        return {
+            "id": invite.id,
+            "token": raw_token,
+            "label": invite.label,
+            "register_url": _build_register_url(raw_token),
+        }
 
     @router.post("/invites/{invite_id}/revoke", status_code=204)
     def revoke_invite(
@@ -86,6 +127,7 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         admin=require_admin,
         db: DBSession = Depends(session_dep),
     ):
+        _throttle_write(admin.id)
         invite = db.get(SignupInvite, invite_id)
         if invite is None:
             raise HTTPException(status_code=404)
@@ -115,9 +157,29 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         admin=require_admin,
         db: DBSession = Depends(session_dep),
     ):
+        _throttle_write(admin.id)
         user = db.get(User, user_id)
         if user is None:
             raise HTTPException(status_code=404)
+        # Never lock the instance out. Disabling the last active admin, or an
+        # admin disabling their own account (revoke_all_sessions kills their
+        # live session), would leave only CLI recovery.
+        if user.is_admin and not user.is_disabled and admin_roles.count_active_admins(db) <= 1:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "last_admin",
+                    "message": "Cannot disable the last remaining admin.",
+                },
+            )
+        if user.id == admin.id:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "cannot_disable_self",
+                    "message": "You cannot disable your own account.",
+                },
+            )
         user.is_disabled = True
         user.updated_at = datetime.now(UTC)
         sessions.revoke_all_sessions(db, user_id=user.id)
@@ -129,12 +191,33 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         admin=require_admin,
         db: DBSession = Depends(session_dep),
     ):
+        _throttle_write(admin.id)
         user = db.get(User, user_id)
         if user is None:
             raise HTTPException(status_code=404)
         user.is_disabled = False
         user.updated_at = datetime.now(UTC)
         return Response(status_code=204)
+
+    @router.post("/users/{user_id}/role")
+    def set_user_role(
+        user_id: str,
+        body: SetRoleIn,
+        admin=require_admin,
+        db: DBSession = Depends(session_dep),
+    ):
+        _throttle_write(admin.id)
+        try:
+            user = admin_roles.set_admin_flag(db, user_id=user_id, is_admin=body.is_admin)
+        except admin_roles.UserNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+        except admin_roles.LastAdminError as exc:
+            raise HTTPException(
+                status_code=409, detail={"code": exc.code, "message": str(exc)}
+            ) from exc
+        return {"id": user.id, "is_admin": user.is_admin}
 
     @router.post("/users/{user_id}/reset-password", response_model=DirectResetOut)
     def direct_reset(
@@ -143,6 +226,7 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         admin=require_admin,
         db: DBSession = Depends(session_dep),
     ) -> DirectResetOut:
+        _throttle_write(admin.id)
         try:
             password = reset_service.admin_direct_reset(
                 db,
@@ -180,6 +264,7 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         admin=require_admin,
         db: DBSession = Depends(session_dep),
     ):
+        _throttle_write(admin.id)
         try:
             raw = reset_service.approve_request(db, request_id=request_id, admin_user_id=admin.id)
         except AuthError as exc:
@@ -192,6 +277,7 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         admin=require_admin,
         db: DBSession = Depends(session_dep),
     ):
+        _throttle_write(admin.id)
         try:
             reset_service.reject_request(db, request_id=request_id, admin_user_id=admin.id)
         except AuthError as exc:
