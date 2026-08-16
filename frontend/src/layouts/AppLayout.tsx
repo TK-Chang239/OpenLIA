@@ -1,4 +1,4 @@
-import { useEffect, type JSX, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type JSX, type ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "../components/sidebar/Sidebar";
@@ -15,6 +15,11 @@ import { ToastProvider, useToast } from "../components/primitives/Toast";
 import { SavedReportsProvider } from "../components/repo/SavedReportsContext";
 import { useDeptHealth } from "../store/dept-health";
 import { useNotificationsStream } from "../app/useNotificationsStream";
+
+// Demo mode shows a one-time intro modal on load. Gated + lazy so it stays out
+// of the normal build.
+const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+const DemoIntroModal = DEMO_MODE ? lazy(() => import("../demo/DemoIntroModal")) : null;
 
 interface AppLayoutProps {
   children?: ReactNode;
@@ -71,6 +76,11 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
         {t("shell.skip_to_content")}
       </a>
       <NotificationsWatcher />
+      {DEMO_MODE && DemoIntroModal && (
+        <Suspense fallback={null}>
+          <DemoIntroModal />
+        </Suspense>
+      )}
       <Sidebar />
       <MobileSidebarOverlay open={open} onOpenChange={setOpen} />
       <section

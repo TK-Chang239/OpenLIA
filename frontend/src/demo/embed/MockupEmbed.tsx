@@ -16,6 +16,14 @@ interface MockupEmbedProps {
   onReady?: (root: ShadowRoot) => void | (() => void);
 }
 
+// Resolve a root-absolute public path (e.g. "/demo-mockups/x.html") against the
+// app's base URL so the mockups load when the demo is hosted under a sub-path
+// (GitHub Pages project site). BASE_URL is "/" for normal builds — a no-op.
+function publicUrl(path: string): string {
+  if (!path.startsWith("/")) return path;
+  return import.meta.env.BASE_URL.replace(/\/+$/, "") + path;
+}
+
 // Fetch a shared CSS file once and rehome its tokens/entrance selectors into the
 // shadow scope (:root -> :host; the mockups' `html.om-anim body[data-om-auto]`
 // entrance choreography -> `.om-anim-scope`, the class we add to each page root).
@@ -24,7 +32,7 @@ const cssCache = new Map<string, Promise<string>>();
 function loadScopedCss(url: string): Promise<string> {
   let p = cssCache.get(url);
   if (!p) {
-    p = fetch(url)
+    p = fetch(publicUrl(url))
       .then((r) => (r.ok ? r.text() : ""))
       .then((css) =>
         css
@@ -74,7 +82,7 @@ export function MockupEmbed({ url, className, strip, onReady }: MockupEmbedProps
       const [tokenCss, animCss, html] = await Promise.all([
         loadScopedCss("/demo-mockups/colors_and_type.css"),
         loadScopedCss("/demo-mockups/page-anim.css"),
-        fetch(url).then((r) => (r.ok ? r.text() : "")),
+        fetch(publicUrl(url)).then((r) => (r.ok ? r.text() : "")),
       ]);
       if (cancelled) return;
 
