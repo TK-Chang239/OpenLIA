@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -28,12 +29,15 @@ def test_plain_text_passes_through_unchanged() -> None:
 
 
 def test_docx_converts_to_markdown_via_mammoth() -> None:
-    # Use the Chinese 28-section sample that already exists on disk.
-    docx_path = Path(
-        "/Users/tkchang/Downloads/公司研究框架_v2_3_1_ProjectInstructions_Markdown版本.docx"
-    )
+    # Point OPENLIA_TEST_DOCX at any .docx to exercise the mammoth conversion
+    # path; skipped when unset so the suite stays hermetic and free of any
+    # machine-specific path.
+    docx_env = os.environ.get("OPENLIA_TEST_DOCX")
+    if not docx_env:
+        pytest.skip("set OPENLIA_TEST_DOCX to a .docx path to run this test")
+    docx_path = Path(docx_env)
     if not docx_path.exists():
-        pytest.skip("sample docx not available in this environment")
+        pytest.skip("OPENLIA_TEST_DOCX points at a missing file")
     blob = docx_path.read_bytes()
 
     out = ingest_document(
@@ -42,9 +46,7 @@ def test_docx_converts_to_markdown_via_mammoth() -> None:
     )
 
     assert isinstance(out, str)
-    assert len(out) > 100
-    # The framework's distinctive five-principles heading should survive
-    assert "五大原則" in out or "公司深度研究框架" in out
+    assert len(out) > 0
 
 
 def test_unsupported_mime_raises() -> None:

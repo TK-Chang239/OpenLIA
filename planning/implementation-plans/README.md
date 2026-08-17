@@ -30,7 +30,7 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 20 | 6 | Retail Sentiment dashboard (12 metrics, 3 tabs) | Done (2026-04-24) | `2026-04-23-phase-20-retail-sentiment.md` |
 | 21 | 7 | Portfolio page | Done (2026-04-24) | `2026-04-23-phase-21-portfolio.md` |
 | 22 | 7 | Repository page | Done (2026-04-24) | `2026-04-23-phase-22-repository.md` |
-| 23 | 7 | Docker packaging + production build + final acceptance | Partial (2026-04-24) — see note below | `2026-04-23-phase-23-docker-packaging-acceptance.md` |
+| 23 | 7 | Docker packaging + production build + final acceptance | In progress — packaging landed 2026-04-24; v1.0.0 release pending (see note below) | `2026-04-23-phase-23-docker-packaging-acceptance.md` |
 | 24 | 7 | Design system refresh (Wondermakers / Acid Yellow tokens, app shell, primitives) | Done (2026-04-24) | `2026-04-24-phase-24-design-system-refresh.md` |
 
 ---
