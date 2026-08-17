@@ -1167,6 +1167,7 @@
     "crisis_indicators": "Crisis indicators",
     "open_settings": "Open settings",
     "settings": "Settings",
+    "auto_refresh_label": "Auto-refresh",
     "red_of_total": "{{red}} of {{total}} red",
     "loading": "Loading live dashboard…",
     "error_title": "Could not load the dashboard",
@@ -1227,7 +1228,12 @@
       "status_amber": "Amber",
       "status_red": "Red",
       "status_dark_red": "Dark red",
-      "status_disabled": "Off"
+      "status_disabled": "Off",
+      "keywords": "Keywords",
+      "milestone_date": "Milestone date",
+      "status_override": "Status override",
+      "override_none": "None (auto)",
+      "override_note": "Override note (optional)"
     },
     "hero": {
       "headline_id_aria": "pt-hero-headline",

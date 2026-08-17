@@ -12,7 +12,7 @@ import { ScorecardGrid } from "../../components/panic_thermometer/sections/Score
 import { VerdictBlock } from "../../components/panic_thermometer/sections/VerdictBlock";
 import { WageSection } from "../../components/panic_thermometer/sections/WageSection";
 import { SEVERITY_LABEL } from "../../components/panic_thermometer/_shared/visuals";
-import type { DashboardPayload } from "../../api/panic-thermometer";
+import type { DashboardPayload, PanelId } from "../../api/panic-thermometer";
 import type { Severity } from "../../lib/panic_thermometer/copy/types";
 import {
   adaptDiplomacy,
@@ -36,6 +36,20 @@ const SEVERITY_PILL: Record<Severity, string> = {
   crisis: "is-crisis",
 };
 
+/** Header/drawer auto-refresh choices (shared value set: null/60/300/900). */
+const REFRESH_CHOICES: Array<{ key: string; value: number | null }> = [
+  { key: "panic_thermometer.settings_drawer.refresh_off", value: null },
+  { key: "panic_thermometer.settings_drawer.refresh_1", value: 60 },
+  { key: "panic_thermometer.settings_drawer.refresh_5", value: 300 },
+  { key: "panic_thermometer.settings_drawer.refresh_15", value: 900 },
+];
+
+/** Which panel + sub-editor a section's edit button wants the drawer to open on. */
+type DrawerFocus = {
+  panelId: PanelId;
+  section?: "rules" | "keywords" | "milestone" | "override";
+};
+
 /** True when every panel is warning about missing data (e.g. no EODHD key). */
 function allPanelsUnavailable(p: DashboardPayload): boolean {
   const panels = Object.values(p.panels);
@@ -46,6 +60,7 @@ function allPanelsUnavailable(p: DashboardPayload): boolean {
 export default function PanicThermometer(): JSX.Element {
   const { t } = useTranslation();
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+  const [drawerFocus, setDrawerFocus] = useState<DrawerFocus | null>(null);
   const [refreshSeconds, setRefreshSeconds] = useState<number | null>(300);
   const [mode, setMode] = useState<"count" | "weighted">("count");
 
@@ -89,7 +104,14 @@ export default function PanicThermometer(): JSX.Element {
     return () => window.clearInterval(id);
   }, [refreshSeconds]);
 
-  const openDrawer = () => setDrawerOpen(true);
+  const openDrawer = () => {
+    setDrawerFocus(null);
+    setDrawerOpen(true);
+  };
+  const openDrawerFocus = (focus: DrawerFocus) => {
+    setDrawerFocus(focus);
+    setDrawerOpen(true);
+  };
   const closeDrawer = () => setDrawerOpen(false);
 
   const composite = dashboard?.composite;
@@ -109,10 +131,25 @@ export default function PanicThermometer(): JSX.Element {
             {SEVERITY_LABEL[level]} ·{" "}
             {t("panic_thermometer.red_of_total", {
               red: composite.red_count,
-              total: 5,
+              total: dashboard ? Object.keys(dashboard.panels).length : 0,
             })}
           </span>
         ) : null}
+        <select
+          className="pt-top-btn"
+          aria-label={t("panic_thermometer.auto_refresh_label")}
+          value={refreshSeconds ?? ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            setRefreshSeconds(v === "" ? null : Number(v));
+          }}
+        >
+          {REFRESH_CHOICES.map((opt) => (
+            <option key={opt.key} value={opt.value ?? ""}>
+              {t(opt.key)}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           className="pt-top-btn"
@@ -136,6 +173,7 @@ export default function PanicThermometer(): JSX.Element {
       <SettingsDrawer
         open={drawerOpen}
         onClose={closeDrawer}
+        focus={drawerFocus}
         refreshIntervalSeconds={refreshSeconds}
         onRefreshIntervalChange={setRefreshSeconds}
       />
@@ -192,27 +230,36 @@ export default function PanicThermometer(): JSX.Element {
           <ScorecardGrid entries={adaptScorecards(d)} />
         </div>
         <div className="pt-anim-up pt-anim-d2">
-          <OilSection panel={adaptOil(d.panels.oil)} onEditRules={openDrawer} />
+          <OilSection
+            panel={adaptOil(d.panels.oil)}
+            onEditRules={() => openDrawerFocus({ panelId: "oil", section: "rules" })}
+          />
         </div>
         <div className="pt-anim-up pt-anim-d3">
-          <InflationSection panel={adaptInflation(d.panels.inflation)} onEditRules={openDrawer} />
+          <InflationSection
+            panel={adaptInflation(d.panels.inflation)}
+            onEditRules={() => openDrawerFocus({ panelId: "inflation", section: "rules" })}
+          />
         </div>
         <div className="pt-anim-up pt-anim-d4">
           <FedSection
             panel={adaptFed(d.panels.fed_language)}
-            onEditRules={openDrawer}
-            onEditKeywords={openDrawer}
+            onEditRules={() => openDrawerFocus({ panelId: "fed_language", section: "rules" })}
+            onEditKeywords={() => openDrawerFocus({ panelId: "fed_language", section: "keywords" })}
           />
         </div>
         <div className="pt-anim-up pt-anim-d5">
-          <WageSection panel={adaptWage(d.panels.wage_growth)} onEditRules={openDrawer} />
+          <WageSection
+            panel={adaptWage(d.panels.wage_growth)}
+            onEditRules={() => openDrawerFocus({ panelId: "wage_growth", section: "rules" })}
+          />
         </div>
         <div className="pt-anim-up pt-anim-d6">
           <DiplomacySection
             panel={adaptDiplomacy(d.panels.diplomacy)}
-            onEditRules={openDrawer}
-            onMarkMilestone={openDrawer}
-            onOverrideStatus={openDrawer}
+            onEditRules={() => openDrawerFocus({ panelId: "diplomacy", section: "rules" })}
+            onMarkMilestone={() => openDrawerFocus({ panelId: "diplomacy", section: "milestone" })}
+            onOverrideStatus={() => openDrawerFocus({ panelId: "diplomacy", section: "override" })}
           />
         </div>
         <div className="pt-anim-up pt-anim-d8">
