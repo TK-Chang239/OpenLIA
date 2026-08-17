@@ -1,7 +1,6 @@
 """Data contracts for the v2.3 equity-research subagent pipeline.
 
-Source: `planning/2026-05-22-report-subagent-design.md` (companion artifact
-`/Users/tkchang/Downloads/report_schemas.py`), with OpenLIA adaptations:
+Source: `planning/2026-05-22-report-subagent-design.md`, with OpenLIA adaptations:
 
 1. `Language` carried on `ReportThesis` so writers render in the report's language.
 2. `BundleFact.value` accepts `float | str | BundleSeries` (time-series).
