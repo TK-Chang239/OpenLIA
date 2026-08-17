@@ -70,6 +70,32 @@ describe("MacroResearch shell", () => {
     expect(screen.getByText("Five Forces")).toBeInTheDocument();
   });
 
+  it("derives the header 'as of' badge from the payload, with no hardcoded date or fabricated series count", async () => {
+    const generatedAt = "2026-06-01T00:00:00Z";
+    apiMocks.getDashboard.mockResolvedValue({
+      payload: null,
+      generated_at: generatedAt,
+      is_stale: false,
+      provenance: null,
+    });
+    renderShell();
+
+    const expected = new Date(generatedAt)
+      .toLocaleDateString(undefined, {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      .toUpperCase();
+
+    const pill = await screen.findByTestId("mr-live-pill");
+    await waitFor(() => expect(pill).toHaveTextContent(expected));
+
+    // The old fabricated header values must be gone.
+    expect(screen.queryByText(/TUE 02 MAY 2026/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/42 series/)).not.toBeInTheDocument();
+  });
+
   it("renders T1–T5 tcode chips on tabs", () => {
     renderShell();
     expect(screen.getByText("T1")).toBeInTheDocument();

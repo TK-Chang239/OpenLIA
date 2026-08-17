@@ -2,19 +2,10 @@ import { useEffect, useState } from "react";
 import { runAssessment, type DashboardSummary } from "../../../api/macro_research";
 import { fetchDeptHealth, type DepartmentHealth } from "../../../api/dept-health";
 
-// Dashboards the backend engine (report_dash_mr) can actually generate.
-// There is no runtime endpoint exposing this set, so this is a hardcoded
-// mirror of the engine's PAYLOAD_MODEL_BY_SLUG / implemented_dashboard_slugs().
-// TODO: grow this list as backend dashboards are added (keep in sync with
-// packages/core/.../report_dash_mr/tools/dashboard_tools.py).
-const IMPLEMENTED_DASHBOARDS = [
-  "debt_cycle",
-  "world_order",
-  "four_seasons",
-  "all_weather",
-  "five_forces",
-  "summary",
-];
+// The runnable dashboards come straight from the `dashboards` prop, which the
+// page hydrates from `listDashboards()` (the `/dashboards` registry endpoint).
+// That endpoint is the single source of truth for what the engine can
+// generate, so there is no hand-maintained mirror to drift out of sync.
 
 const MR_COVERAGE: Record<string, { label: string; satisfied: string; missing: string }> = {
   web_search: {
@@ -96,20 +87,18 @@ export default function MRSettingsPanel({
           from the header control.
         </p>
         <div className="flex flex-wrap gap-2">
-          {dashboards
-            .filter((d) => IMPLEMENTED_DASHBOARDS.includes(d.slug))
-            .map((d) => (
-              <button
-                key={d.slug}
-                type="button"
-                data-testid={`mr-runnow-${d.slug}`}
-                disabled={running === d.slug}
-                onClick={() => onRunNow(d.slug)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-xs text-[--color-text-primary] hover:border-[--color-feedback-success] disabled:opacity-60"
-              >
-                {running === d.slug ? "Running…" : d.display_name}
-              </button>
-            ))}
+          {dashboards.map((d) => (
+            <button
+              key={d.slug}
+              type="button"
+              data-testid={`mr-runnow-${d.slug}`}
+              disabled={running === d.slug}
+              onClick={() => onRunNow(d.slug)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-xs text-[--color-text-primary] hover:border-[--color-feedback-success] disabled:opacity-60"
+            >
+              {running === d.slug ? "Running…" : d.display_name}
+            </button>
+          ))}
         </div>
         {error ? (
           <div role="alert" className="text-xs text-[--color-feedback-error]">
