@@ -159,6 +159,7 @@ class LLMSession:
         system: str | None = None,
         tools: list[ToolSchema] | None = None,
         native_tools: tuple[str, ...] = (),
+        web_search_max_uses: int | None = None,
         max_tokens: int | None = None,
         temperature: float = 0.4,
         reasoning_effort: ReasoningEffort | None = None,
@@ -195,6 +196,7 @@ class LLMSession:
             max_tokens=effective_max,
             temperature=temperature,
             native_tools=native_tools,
+            web_search_max_uses=web_search_max_uses,
             reasoning_effort=reasoning_effort,
             # Multi-turn tool-use loop: cache the growing prefix so each
             # turn re-reads prior tool results instead of re-billing them.

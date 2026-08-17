@@ -212,7 +212,11 @@ _EARNINGS_DATA_PRIORITY = (
     "versus estimates, and the earnings call transcript and management "
     "commentary. When a tool group exposes a discovery interface (a "
     "list/describe/call pattern), use it to find and call those "
-    "earnings-specific tools so the analysis rests on primary reported data."
+    "earnings-specific tools so the analysis rests on primary reported data. "
+    "Corroborate the quarter's key figures and management claims across "
+    "multiple independent sources, favoring the primary filing and official "
+    "release and treating secondary coverage as a cross-check rather than "
+    "relying on a single outlet."
 )
 
 

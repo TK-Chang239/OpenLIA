@@ -200,7 +200,11 @@ Work in this order:
      Search across Reddit (r/investing, r/wallstreetbets, r/stocks),
      StockTwits, X/Twitter, and investing forums. Also search for recent news
      articles and analyst commentary that retail traders are reacting to.
-     Read enough distinct sources to form a credible count.
+     Read enough distinct sources to form a credible count. Spread your
+     reading across multiple independent communities and outlets so no single
+     thread, subreddit, or account skews the count, and corroborate any
+     notable claim against a second independent source before treating it as
+     signal.
   2. Tally how many distinct discussion items (posts, threads, articles) are
      bullish, how many are bearish, and how many are neutral. Judge a
      qualitative buzz_level — "low" when discussion is sparse, "elevated" when
