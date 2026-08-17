@@ -108,6 +108,9 @@ def _build_responses_tools(request: LLMRequest) -> list[dict] | None:
         for t in function_tools
     ]
     if native:
+        # OpenAI's web_search tool takes no per-request use cap on the wire,
+        # so `request.web_search_max_uses` is not sent here; the runtime
+        # enforces any cap softly rather than the provider.
         tools.append({"type": _WEB_SEARCH_NATIVE_TYPE})
     return tools or None
 

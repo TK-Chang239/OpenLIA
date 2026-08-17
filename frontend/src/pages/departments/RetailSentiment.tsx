@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { fetchHoldings } from "../../api/portfolio";
+import { useToast } from "../../components/primitives/Toast";
 import { TickerSelector } from "../../components/retail-sentiment/TickerSelector";
 import RsOverviewView from "./retail_sentiment/RsOverviewView";
 import RsSettingsPanel from "./retail_sentiment/RsSettingsPanel";
@@ -30,9 +32,11 @@ const DEMO_TICKERS =
 
 export default function RetailSentiment(): JSX.Element {
   const { t } = useTranslation();
+  const { push } = useToast();
   const [tickers, setTickers] = useState<string[]>(DEMO_TICKERS);
   const [selected, setSelected] = useState<string | null>(DEMO_TICKERS[0] ?? null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const onAddTicker = (ticker: string) => {
     setTickers((prev) => (prev.includes(ticker) ? prev : [...prev, ticker]));
@@ -42,6 +46,35 @@ export default function RetailSentiment(): JSX.Element {
   const onRemoveTicker = (ticker: string) => {
     setTickers((prev) => prev.filter((x) => x !== ticker));
     setSelected((prev) => (prev === ticker ? (tickers.find((t) => t !== ticker) ?? null) : prev));
+  };
+
+  const onImportFromPortfolio = async () => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const holdings = await fetchHoldings();
+      const imported = holdings
+        .map((h) => h.ticker.trim().toUpperCase())
+        .filter(Boolean);
+      if (imported.length === 0) {
+        push({ title: t("retail_sentiment.ticker_selector.import_empty"), tone: "info" });
+        return;
+      }
+      setTickers((prev) => {
+        const seen = new Set(prev);
+        const additions = imported.filter((tk) => !seen.has(tk));
+        return additions.length ? [...prev, ...additions] : prev;
+      });
+      setSelected((prev) => prev ?? imported[0]);
+      push({
+        title: t("retail_sentiment.ticker_selector.import_added", { count: imported.length }),
+        tone: "success",
+      });
+    } catch {
+      push({ title: t("retail_sentiment.ticker_selector.import_error"), tone: "error" });
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -100,7 +133,7 @@ export default function RetailSentiment(): JSX.Element {
           onSelect={setSelected}
           onAdd={onAddTicker}
           onRemove={onRemoveTicker}
-          onImportFromPortfolio={undefined}
+          onImportFromPortfolio={onImportFromPortfolio}
         />
       </div>
 

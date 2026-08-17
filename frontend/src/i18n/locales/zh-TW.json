@@ -1167,6 +1167,7 @@
     "crisis_indicators": "危機指標",
     "open_settings": "開啟設定",
     "settings": "設定",
+    "auto_refresh_label": "自動更新",
     "red_of_total": "{{red}} / {{total}} 紅燈",
     "loading": "載入即時儀表板…",
     "error_title": "無法載入儀表板",
@@ -1227,7 +1228,12 @@
       "status_amber": "黃燈",
       "status_red": "紅燈",
       "status_dark_red": "深紅",
-      "status_disabled": "關閉"
+      "status_disabled": "關閉",
+      "keywords": "關鍵字",
+      "milestone_date": "里程碑日期",
+      "status_override": "狀態覆寫",
+      "override_none": "無（自動）",
+      "override_note": "覆寫備註（選填）"
     },
     "hero": {
       "headline_id_aria": "pt-hero-headline",
@@ -1582,6 +1588,9 @@
       "add": "+ 新增",
       "input_placeholder": "代號",
       "import_from_portfolio": "從投資組合匯入",
+      "import_empty": "投資組合中尚無可匯入的持股。",
+      "import_added": "已從投資組合匯入 {{count}} 檔代號。",
+      "import_error": "無法載入投資組合持股。",
       "remove_aria": "移除 {{ticker}}",
       "warning": "目前追蹤 {{count}} 檔代號 — 更新成本將呈線性成長，建議精簡觀察名單。"
     },

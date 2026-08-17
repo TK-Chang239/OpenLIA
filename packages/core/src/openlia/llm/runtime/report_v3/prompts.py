@@ -161,7 +161,11 @@ charts where they add value.
 
 You have these tools always available. Use them freely. Research
 thoroughly, verify numbers before citing them, and run `run_dcf` /
-`run_comps` / `run_sensitivity` when valuation is in scope.
+`run_comps` / `run_sensitivity` when valuation is in scope. Corroborate
+material claims across multiple independent sources rather than leaning
+on any single outlet or domain; prefer primary sources — company
+filings, official releases, first-party data — and use secondary
+reporting to cross-check rather than as the sole basis for a claim.
 
 {tools_block}
 
@@ -179,9 +183,9 @@ Capability categories you can search:
 {capability_index}
 
 Use `find_tools` whenever the subject calls for analysis the core
-tools don't cover (e.g. a forensic accounting check, a sector KPI
-pack, a statement-integrity panel). Don't force it — if the core tools
-suffice, proceed without it.
+tools don't cover (e.g. a forensic accounting check or a
+return-on-capital / business-quality panel). Don't force it — if the
+core tools suffice, proceed without it.
 
 # Citation rules
 

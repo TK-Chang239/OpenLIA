@@ -3,7 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as api from "../../../api/retail-sentiment";
 import * as deptHealth from "../../../api/dept-health";
+import * as portfolio from "../../../api/portfolio";
 import RetailSentiment from "../RetailSentiment";
+
+function makeHolding(ticker: string): portfolio.PortfolioHolding {
+  return {
+    id: `h-${ticker}`,
+    ticker,
+    name: null,
+    shares: null,
+    cost_basis: null,
+    currency: "USD",
+    groups: [],
+    notes_text: null,
+    added_at: "2026-06-01T00:00:00Z",
+    updated_at: "2026-06-01T00:00:00Z",
+  };
+}
 
 const basePayload: api.RetailSentimentPayload = {
   subject: "AAPL",
@@ -213,6 +229,34 @@ describe("RetailSentiment page", () => {
     await waitFor(() => {
       expect(screen.getByTestId("rs-stale-badge")).toBeInTheDocument();
     });
+  });
+
+  it("imports holdings from the portfolio into the watchlist", async () => {
+    vi.spyOn(portfolio, "fetchHoldings").mockResolvedValue([
+      makeHolding("NVDA"),
+      makeHolding("AMD"),
+    ]);
+
+    render(<RetailSentiment />);
+    fireEvent.click(screen.getByTestId("ticker-import-portfolio"));
+
+    await waitFor(() => {
+      expect(portfolio.fetchHoldings).toHaveBeenCalled();
+      expect(screen.getByTestId("ticker-pill-NVDA")).toBeInTheDocument();
+      expect(screen.getByTestId("ticker-pill-AMD")).toBeInTheDocument();
+    });
+  });
+
+  it("shows empty state and adds no tickers when portfolio has no holdings", async () => {
+    vi.spyOn(portfolio, "fetchHoldings").mockResolvedValue([]);
+
+    render(<RetailSentiment />);
+    fireEvent.click(screen.getByTestId("ticker-import-portfolio"));
+
+    await waitFor(() => {
+      expect(portfolio.fetchHoldings).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId("rs-empty-watchlist")).toBeInTheDocument();
   });
 
   it("renders bull/bear percentages from payload", async () => {

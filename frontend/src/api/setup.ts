@@ -28,13 +28,6 @@ export interface WizardSetupState {
   system_role_ids: string[];
 }
 
-export interface ReviewPoll {
-  state: "running" | "complete" | "failed";
-  progress: number;
-  result: unknown | null;
-  error: string | null;
-}
-
 export interface AccessControlPayload {
   signup_policy: "invite_only" | "closed";
   allowed_domains?: string;
@@ -70,11 +63,6 @@ export const saveProviders = () =>
 
 export const setAccessControl = (payload: AccessControlPayload) =>
   fetchJson<{ ok: boolean }>("/api/setup/access_control", { method: "POST", json: payload });
-
-export const runReview = () =>
-  fetchJson<{ review_id: string }>("/api/setup/review/run", { method: "POST" });
-
-export const pollReview = (id: string) => fetchJson<ReviewPoll>(`/api/setup/review/${id}`);
 
 export const finish = () =>
   fetchJson<{ redirect: string; mode: Mode }>("/api/setup/finish", { method: "POST" });

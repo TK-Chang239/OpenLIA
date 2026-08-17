@@ -117,11 +117,12 @@ def build_find_tools_tool(state: ToolDiscoveryState) -> ResearchTool:
             name=FIND_TOOLS_NAME,
             description=(
                 "Discover specialized analysis tools that are not loaded by "
-                "default (forensic scores, sector KPI packs, statement-integrity "
-                "panels, NLP extractors, etc.). Pass a `category` from the "
-                "capability index and/or a free-text `query` describing what you "
-                "need; the matched tools become callable immediately. Call this "
-                "whenever the subject needs analysis the core tools don't cover."
+                "default (forensic and business-quality scores such as "
+                "Piotroski F, Beneish M, and ROIC panels). Pass a `category` "
+                "from the capability index and/or a free-text `query` describing "
+                "what you need; the matched tools become callable immediately. "
+                "Call this whenever the subject needs analysis the core tools "
+                "don't cover."
             ),
             parameters={
                 "type": "object",

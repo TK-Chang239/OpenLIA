@@ -227,7 +227,10 @@ _MARKET_DATA_PRIORITY = (
     "the scheduled macro catalysts for the day, and the rates, volatility, "
     "and currency backdrop. When a tool group exposes a discovery interface "
     "(a list/describe/call pattern), use it to find and call the relevant "
-    "market tools so the briefing rests on primary observed data."
+    "market tools so the briefing rests on primary observed data. "
+    "Corroborate market-moving claims across multiple independent sources, "
+    "favoring official releases and primary data and using secondary "
+    "coverage as a cross-check rather than a single outlet's take."
 )
 
 

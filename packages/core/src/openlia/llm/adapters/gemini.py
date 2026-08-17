@@ -74,6 +74,9 @@ def _build_gemini_tools(request: LLMRequest) -> list[dict] | None:
             }
         )
     if "web_search" in request.native_tools:
+        # Gemini's google_search grounding tool takes no per-request use cap
+        # on the wire, so `request.web_search_max_uses` is not sent here; the
+        # runtime enforces any cap softly rather than the provider.
         tools.append(_GOOGLE_SEARCH_TOOL)
     return tools or None
 

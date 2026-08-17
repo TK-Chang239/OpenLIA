@@ -1,9 +1,9 @@
 """Extended (discoverable) tool registry for v3.
 
 The v3 model always sees a small *core* tool set (data, valuation,
-output, web_search). Everything else — the long tail of forensic
-scores, sector KPI packs, statement-integrity panels, NLP extractors —
-lives here in the *extended* tier. Extended tools are NOT placed in the
+output, web_search). Everything else — the long tail of forensic and
+business-quality scores — lives here in the *extended* tier. Extended
+tools are NOT placed in the
 model's request up front. Instead the model calls ``find_tools`` (see
 ``find_tools.py``) to discover the ones a given subject needs; matched
 tools are then injected into subsequent turns and become callable.
@@ -58,28 +58,6 @@ CATEGORY_INDEX: dict[str, str] = {
     "forensic_ratios": (
         "Quality/manipulation/bankruptcy scores: Piotroski F-score, "
         "Beneish M-score, Altman Z, cash conversion cycle."
-    ),
-    "statement_integrity": (
-        "Statement-tie checks, one-time-item bridges, organic vs "
-        "inorganic growth, constant-currency, common-size statements."
-    ),
-    "valuation_deliverables": (
-        "Valuation visuals and solvers: reverse DCF, scenario weighting, "
-        "football field, tornado, FY-to-FY waterfalls."
-    ),
-    "trend_earnings_quality": (
-        "Trend regressions: margin trajectory, operating leverage, SBC "
-        "intensity, share-count dilution."
-    ),
-    "risk_macro": (
-        "Risk and macro context: drawdown panel, yield-curve shape, commodity exposure."
-    ),
-    "nlp_extraction": (
-        "Filing/transcript extraction: MD&A, guidance tracking, risk factors, management tone."
-    ),
-    "sector_modules": ("Sector KPI packs: banks, REITs, insurance, energy/E&P, pharma rNPV."),
-    "market_data_extras": (
-        "Extended market data and stats: technicals, options chains, OLS/multi-factor regressions."
     ),
 }
 

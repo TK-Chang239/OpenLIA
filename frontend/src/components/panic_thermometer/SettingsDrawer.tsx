@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createPreset,
@@ -9,6 +9,7 @@ import {
   type CompositeSettings,
   type PanelConfig,
   type PanelId as PtBackendPanelId,
+  type PanelStatus,
   type UserConfig,
 } from "../../api/panic-thermometer";
 import { usePtConfig } from "../../hooks/usePtConfig";
@@ -16,11 +17,19 @@ import { usePtPresets } from "../../hooks/usePtPresets";
 
 type Tab = "presets" | "panels" | "composite" | "data";
 
+type FocusSection = "rules" | "keywords" | "milestone" | "override";
+
+export interface DrawerFocus {
+  panelId: PtBackendPanelId;
+  section?: FocusSection;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
   refreshIntervalSeconds: number | null;
   onRefreshIntervalChange: (s: number | null) => void;
+  focus?: DrawerFocus | null;
 }
 
 const REFRESH_OPTIONS: Array<{ key: string; value: number | null }> = [
@@ -46,11 +55,33 @@ const STATUS_KEY: Record<string, string> = {
   disabled: "panic_thermometer.settings_drawer.status_disabled",
 };
 
+const OVERRIDE_STATUSES: PanelStatus[] = [
+  "green",
+  "amber",
+  "red",
+  "dark_red",
+  "disabled",
+];
+
+/** Fed keyword lists live in panel params as plain string arrays. */
+const FED_KEYWORD_FIELDS: Array<{ paramKey: string; labelKey: string }> = [
+  { paramKey: "dovish_keywords", labelKey: "panic_thermometer.fed_section.tone_dovish" },
+  { paramKey: "neutral_keywords", labelKey: "panic_thermometer.fed_section.tone_neutral" },
+  { paramKey: "hawkish_keywords", labelKey: "panic_thermometer.fed_section.tone_hawkish" },
+  { paramKey: "crisis_keywords", labelKey: "panic_thermometer.fed_section.tone_crisis" },
+];
+
+function paramStringList(params: Record<string, unknown>, key: string): string[] {
+  const v = params[key];
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+
 export function SettingsDrawer({
   open,
   onClose,
   refreshIntervalSeconds,
   onRefreshIntervalChange,
+  focus,
 }: Props): JSX.Element | null {
   const { t } = useTranslation();
   const cfg = usePtConfig();
@@ -71,6 +102,15 @@ export function SettingsDrawer({
       setFormulaError(null);
     }
   }, [open]);
+
+  // When opened with a focus target, jump to the Panels tab and expand the
+  // requested panel so its sub-editor is reachable.
+  useEffect(() => {
+    if (open && focus) {
+      setTab("panels");
+      setOpenPanelId(focus.panelId);
+    }
+  }, [open, focus]);
 
   if (!open) return null;
 
@@ -205,6 +245,7 @@ export function SettingsDrawer({
             <PanelsTab
               config={cfg.config}
               openPanelId={openPanelId}
+              focus={focus ?? null}
               onTogglePanel={(id) =>
                 setOpenPanelId((prev) => (prev === id ? null : id))
               }
@@ -397,12 +438,14 @@ function PresetsTab({
 function PanelsTab({
   config,
   openPanelId,
+  focus,
   onTogglePanel,
   onSave,
   t,
 }: {
   config: UserConfig | null;
   openPanelId: PtBackendPanelId | null;
+  focus: DrawerFocus | null;
   onTogglePanel: (id: PtBackendPanelId) => void;
   onSave: (
     next: Pick<UserConfig, "panel_config" | "composite_settings">,
@@ -443,6 +486,11 @@ function PanelsTab({
               <div className="pt-panel-acc-body">
                 <PanelEditor
                   panel={p}
+                  focusSection={
+                    focus && focus.panelId === p.panel_id
+                      ? focus.section ?? null
+                      : null
+                  }
                   t={t}
                   onChange={async (next) => {
                     const updated = panels.map((q) =>
@@ -465,18 +513,39 @@ function PanelsTab({
 
 function PanelEditor({
   panel,
+  focusSection,
   onChange,
   t,
 }: {
   panel: PanelConfig;
+  focusSection: FocusSection | null;
   onChange: (next: PanelConfig) => Promise<void>;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }): JSX.Element {
   const [draft, setDraft] = useState<PanelConfig>(panel);
+  const keywordsRef = useRef<HTMLDivElement>(null);
+  const milestoneRef = useRef<HTMLDivElement>(null);
+  const overrideRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setDraft(panel);
   }, [panel]);
+
+  // Scroll the requested sub-editor into view when the drawer opens focused.
+  useEffect(() => {
+    if (!focusSection) return;
+    const target =
+      focusSection === "keywords"
+        ? keywordsRef.current
+        : focusSection === "milestone"
+          ? milestoneRef.current
+          : focusSection === "override"
+            ? overrideRef.current
+            : null;
+    if (target && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [focusSection]);
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(panel);
 
@@ -545,6 +614,106 @@ function PanelEditor({
           />
           {t("panic_thermometer.settings_drawer.enabled")}
         </label>
+      </div>
+
+      {draft.panel_id === "fed_language" ? (
+        <div className="pt-drawer-row" ref={keywordsRef}>
+          <label>{t("panic_thermometer.settings_drawer.keywords")}</label>
+          {FED_KEYWORD_FIELDS.map((f) => (
+            <div
+              key={f.paramKey}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "80px 1fr",
+                gap: 6,
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+              }}
+            >
+              <span style={{ color: "var(--color-text-tertiary)" }}>
+                {t(f.labelKey)}
+              </span>
+              <input
+                type="text"
+                value={paramStringList(draft.params, f.paramKey).join(", ")}
+                onChange={(e) => {
+                  const list = e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  setDraft({
+                    ...draft,
+                    params: { ...draft.params, [f.paramKey]: list },
+                  });
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="pt-drawer-row" ref={milestoneRef}>
+        <label htmlFor={`pt-milestone-${draft.panel_id}`}>
+          {t("panic_thermometer.settings_drawer.milestone_date")}
+        </label>
+        <input
+          id={`pt-milestone-${draft.panel_id}`}
+          type="date"
+          value={draft.milestone_date ?? ""}
+          onChange={(e) =>
+            setDraft({ ...draft, milestone_date: e.target.value || null })
+          }
+        />
+      </div>
+
+      <div className="pt-drawer-row" ref={overrideRef}>
+        <label htmlFor={`pt-override-${draft.panel_id}`}>
+          {t("panic_thermometer.settings_drawer.status_override")}
+        </label>
+        <select
+          id={`pt-override-${draft.panel_id}`}
+          value={draft.manual_override?.status ?? ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "") {
+              setDraft({ ...draft, manual_override: null });
+            } else {
+              setDraft({
+                ...draft,
+                manual_override: {
+                  status: v as PanelStatus,
+                  note: draft.manual_override?.note ?? null,
+                  set_at: new Date().toISOString(),
+                },
+              });
+            }
+          }}
+        >
+          <option value="">
+            {t("panic_thermometer.settings_drawer.override_none")}
+          </option>
+          {OVERRIDE_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {t(STATUS_KEY[s])}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={draft.manual_override?.note ?? ""}
+          disabled={!draft.manual_override}
+          placeholder={t("panic_thermometer.settings_drawer.override_note")}
+          onChange={(e) => {
+            if (!draft.manual_override) return;
+            setDraft({
+              ...draft,
+              manual_override: {
+                ...draft.manual_override,
+                note: e.target.value || null,
+              },
+            });
+          }}
+        />
       </div>
 
       <div className="pt-drawer-actions">

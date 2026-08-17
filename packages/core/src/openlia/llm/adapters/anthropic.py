@@ -59,6 +59,11 @@ _REASONING_BUDGET_BY_EFFORT: dict[ReasoningEffort, int] = {
 # https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
 _WEB_SEARCH_NATIVE_TYPE = "web_search_20250305"
 _WEB_SEARCH_NATIVE_NAME = "web_search"
+# Anthropic's own per-run cap on native web_search, applied only when the
+# request omits an explicit `web_search_max_uses`. Anthropic enforces this
+# server-side via the tool block's `max_uses`; a caller that sets the request
+# field overrides it. Kept provider-local so no single shared constant caps
+# every provider implicitly.
 _WEB_SEARCH_DEFAULT_MAX_USES = 5
 
 # Maps Anthropic's `web_search_tool_result_error.error_code` values onto

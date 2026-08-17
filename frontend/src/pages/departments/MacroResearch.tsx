@@ -53,10 +53,6 @@ const TCODE_BY_SLUG: Record<string, string> = {
   five_forces: "T5",
 };
 
-// In auto mode, re-fetch the active dashboard on this interval so a backend
-// regeneration shows up without a manual reload.
-const AUTO_POLL_MS = 300_000;
-
 const PAGE_EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function MacroResearch(): JSX.Element {
@@ -64,6 +60,7 @@ export default function MacroResearch(): JSX.Element {
   const [dashboards, setDashboards] = useState<DashboardTab[]>(FALLBACK_TABS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cadence, setCadence] = useState<CadenceMode>("auto");
+  const [asOf, setAsOf] = useState<string | null>(null);
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
 
@@ -103,17 +100,42 @@ export default function MacroResearch(): JSX.Element {
       .catch(() => undefined);
   }, []);
 
-  useEffect(() => {
-    if (cadence !== "auto") return;
+  // The visible dashboard slug. The index route is the Summary tab, whose
+  // cache slug is "summary"; every other route's last path segment is the
+  // dashboard slug itself.
+  const activeSlug = useMemo(() => {
     const segments = location.pathname.split("/").filter(Boolean);
-    const activeSlug = segments[segments.length - 1];
-    const knownSlugs = new Set(dashboards.map((d) => d.slug));
-    if (!activeSlug || !knownSlugs.has(activeSlug)) return;
-    const id = window.setInterval(() => {
-      getDashboard(activeSlug).catch(() => undefined);
-    }, AUTO_POLL_MS);
-    return () => window.clearInterval(id);
-  }, [cadence, location.pathname, dashboards]);
+    const last = segments[segments.length - 1];
+    return dashboards.some((d) => d.slug === last) ? last : "summary";
+  }, [location.pathname, dashboards]);
+
+  // The header "as of" badge reflects the visible dashboard's freshness. The
+  // per-view components own their own polling and generation; this is a light,
+  // read-only read of the cache metadata purely for the header.
+  useEffect(() => {
+    let cancelled = false;
+    getDashboard(activeSlug)
+      .then((r) => {
+        if (!cancelled) setAsOf(r.generated_at);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSlug]);
+
+  // Real "as of" date for the header badge, derived from the visible
+  // dashboard's cached generated_at. With no cached run yet, fall back to the
+  // plain live label rather than a fabricated date.
+  const asOfLabel = asOf
+    ? new Date(asOf)
+        .toLocaleDateString(undefined, {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+        .toUpperCase()
+    : null;
 
   /* Page-mount entrance: animates the whole macro-research shell in
      when the user navigates from another route. With reduced-motion,
@@ -156,12 +178,12 @@ export default function MacroResearch(): JSX.Element {
         <span className="ml-3 border-l border-[--color-border-subtle] pl-3 font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
           {t("macro.dalio_frameworks")} ·{" "}
           <strong className="font-medium text-[--color-feedback-success]">
-            {t("macro.live_label")} · TUE 02 MAY 2026
+            {t("macro.live_label")}
           </strong>
         </span>
         <div className="flex-1" />
         <span className="mr-live-pill" data-testid="mr-live-pill">
-          {t("macro.streaming_series", { count: 42 })}
+          {asOfLabel ?? t("macro.live_label")}
         </span>
         <select
           aria-label={t("macro.auto_refresh_aria")}

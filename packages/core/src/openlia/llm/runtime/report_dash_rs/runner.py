@@ -44,6 +44,13 @@ from .tools import build_catalog
 
 log = logging.getLogger(__name__)
 
+# Explicit per-run cap on native web_search calls for research turns.
+# Threaded into every LLMRequest so the cap is intentional at the engine
+# level rather than silently inherited from a provider adapter's default.
+# 5 matches the prior effective default (Anthropic's server-side max_uses);
+# providers without a server-side cap ignore the field.
+_RESEARCH_WEB_SEARCH_MAX_USES = 5
+
 
 @dataclass
 class Runner:
@@ -213,6 +220,9 @@ class Runner:
                 system=system_prompt,
                 tools=tool_schemas,
                 native_tools=native_tools,
+                web_search_max_uses=(
+                    _RESEARCH_WEB_SEARCH_MAX_USES if "web_search" in native_tools else None
+                ),
                 reasoning_effort=request.reasoning_effort,
             )
 
