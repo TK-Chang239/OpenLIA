@@ -17,7 +17,7 @@ invite-based auth).
 docker run -d \
     -p 8000:8000 \
     -v openlia_data:/home/openlia/.openlia \
-    ghcr.io/TK-Chang239/openlia:latest
+    ghcr.io/tk-chang239/openlia:latest
 ```
 
 Then open <http://127.0.0.1:8000> and follow the Setup Wizard.

@@ -24,7 +24,7 @@ docker compose logs -f openlia
 Every recipe needs:
 
 - `OPENLIA_IMAGE` — the OpenLIA container image (default
-  `ghcr.io/TK-Chang239/openlia:latest`; pin to a versioned tag in production).
+  `ghcr.io/tk-chang239/openlia:latest`; pin to a versioned tag in production).
 - `OPENLIA_SECRET_KEY` — base64-encoded 32-byte AES-256-GCM key used to
   encrypt provider credentials at rest. Generate it with:
 

@@ -15,7 +15,7 @@
 #   docker compose up -d
 services:
   openlia:
-    image: ${OPENLIA_IMAGE:-ghcr.io/openlia/openlia:latest}
+    image: ${OPENLIA_IMAGE:-ghcr.io/tk-chang239/openlia:latest}
     restart: unless-stopped
     environment:
       OPENLIA_MODE: company
