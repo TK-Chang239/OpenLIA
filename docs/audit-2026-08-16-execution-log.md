@@ -11,7 +11,7 @@ Running record of the staged remediation of `docs/audit-2026-08-16.md`, executed
 | 2 | Report rendering (PDF, tables, charts, tombstone, sanitization) | #281 | **Merged** |
 | 3 | Company-mode / multi-user hardening | #282 | **Merged** |
 | 4 | Documentation reconciliation | #283 | **Merged** |
-| 5 | Incomplete features | (branch `feat/audit-stage-5`, not pushed) | **In progress** |
+| 5 | Incomplete features | #284 | **Open, CI running** |
 | 6 | Open-source release | — | Not started |
 
 ## Stage 0 (#279, merged) — public-exposure + CI
@@ -36,10 +36,14 @@ Skills per-user isolation (`DatabaseSkillStore`, system-toggle + folder-install 
 ## Stage 4 (#283, merged) — docs reconciliation
 Rewrote the stale `planning/README.md` entry point (was a v2.2 build guide citing 5 dead paths); supersede banners on v2.2/v2.3 docs; wrote 4 missing page specs (ER v3, EU v2, Home, Memory) + fixed 5 stale specs; regenerated both route matrices from the live app (41 routers) + a coverage test; fixed false claims (`config.py` stub not loader; Fernet not AES-256-GCM); `.env.example` 17→58 vars; `projectStructure.md` 29→83 tables; GAPS stale banner.
 
-## Stage 5 (feat/audit-stage-5, in progress) — incomplete features
-- **Committed:** RS Import-from-Portfolio + dead setup-review-endpoint removal (5.D/5.A.3); Macro Research real header date + no-op poll removal + de-hardcoded dashboard list (5.C); deferred-backlog doc (`docs/audit-2026-08-16-stage5-deferred.md`).
-- **Pending re-run** (2 agents failed on the usage limit ~13:50 ET, reset 2:10pm; partial edits reverted, tree clean): **5.B Panic Thermometer** (3 distinct panel editors, render the unrendered ReleasesTable, header auto-refresh control, un-hardcode `total:5`) and **5.F engine** (source-diversity prompt guidance for #176, `web_search_max_uses` cap per provider, trim v3 `CATEGORY_INDEX` to `business_quality`+`forensic_ratios`). A `ScheduleWakeup` is armed to resume after the reset.
-- **Deferred** (with per-item decisions in `-stage5-deferred.md`): MB 3-tab rebuild, Portfolio remake APIs, RS Evidence/Insights tabs, Home backlog, v3 connector-dispatcher access, dead-instruction-surface removal, Secretary/ER i18n, MB backlog P0s, Smart Mode.
+## Stage 5 (#284, open — CI running) — incomplete features
+All bounded work committed and pushed; PR #284 open.
+- **5.D / 5.A.3 Retail Sentiment:** Import-from-Portfolio wired; dead setup review-endpoint removed.
+- **5.C Macro Research:** real header date; no-op poll removed; dashboard list de-hardcoded via `listDashboards`.
+- **5.B Panic Thermometer:** each section's edit callback now routes to its own drawer target (new `SettingsDrawer` `focus` prop expands the correct panel and scrolls to a sub-editor); added contract-safe milestone-date and status-override editors plus a Fed keywords editor (verified `PUT /config` round-trips `manual_override`/`milestone_date`/`params`); added an Off/1/5/15min header auto-refresh control sharing the drawer's state; derived the composite "red of total" from the live panel count. **ReleasesTable stays unrendered** — no live economic-calendar feed exists; its only source is a static mock, so rendering it would ship fabricated economic prints as live data (deferral recorded).
+- **5.F engine:** positively-phrased source-diversity guidance (#176) in v3/EU/MB/RS prompts; native web-search cap made explicit and provider-local (Anthropic reads request then its own default; Gemini/OpenAI documented as no-wire-cap) and threaded into all four v3-family sessions; trimmed v3 `CATEGORY_INDEX` from 9 advertised categories to the 2 with real tools (`business_quality`, `forensic_ratios`), cleaning up the dangling references.
+- **Verification:** core ruff clean + `import openlia` ok + `CATEGORY_INDEX` == 2 keys + 509 targeted engine/adapter tests pass; frontend `tsc` clean + build ✓ + full vitest 1369/1369.
+- **Deferred** (per-item decisions in `-stage5-deferred.md`): MB 3-tab rebuild, Portfolio remake APIs, RS Evidence/Insights tabs, Home backlog, v3 connector-dispatcher access, dead-instruction-surface removal, Secretary/ER i18n, MB backlog P0s, Smart Mode, and the PT ReleasesTable feed.
 
 ## Stage 6 (not started) — open-source release
 Ship the artifacts every doc promises (GHCR image, PyPI packages, git tags — issue #262; reconcile 3 inconsistent image names); merge the README rewrite; add SECURITY.md/CONTRIBUTING/issue templates + financial disclaimer; repo hygiene (root scratch docs, `/Users/tkchang` paths in source); first-run pass on a clean machine.
