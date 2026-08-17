@@ -1582,6 +1582,9 @@
       "add": "+ 新增",
       "input_placeholder": "代號",
       "import_from_portfolio": "從投資組合匯入",
+      "import_empty": "投資組合中尚無可匯入的持股。",
+      "import_added": "已從投資組合匯入 {{count}} 檔代號。",
+      "import_error": "無法載入投資組合持股。",
       "remove_aria": "移除 {{ticker}}",
       "warning": "目前追蹤 {{count}} 檔代號 — 更新成本將呈線性成長，建議精簡觀察名單。"
     },

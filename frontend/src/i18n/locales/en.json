@@ -1582,6 +1582,9 @@
       "add": "+ Add",
       "input_placeholder": "TICKER",
       "import_from_portfolio": "Import from Portfolio",
+      "import_empty": "Your portfolio has no holdings to import yet.",
+      "import_added": "Imported {{count}} tickers from your portfolio.",
+      "import_error": "Could not load your portfolio holdings.",
       "remove_aria": "Remove {{ticker}}",
       "warning": "Tracking {{count}} tickers — refresh cost scales linearly. Consider trimming the watchlist."
     },
