@@ -152,9 +152,9 @@ async def test_render_html_round_trips_through_persistence(create_tables, db_ses
     positions = [html.index(title) for title in section_titles]
     assert positions == sorted(positions), "sections must appear in template order"
 
-    # Citation marker rewritten to display_index
-    assert "[^1]" in html
-    assert "[^eodhd_1]" not in html
+    # Citation marker rewritten to a linked display_index
+    assert '<a href="#fn-1">' in html
+    assert "[^" not in html
 
     # Chart embedded as data URL
     assert 'src="data:image/png;base64,' in html
