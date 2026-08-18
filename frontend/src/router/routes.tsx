@@ -88,7 +88,7 @@ function SecretaryRoute() {
   const { user } = useAuth();
   return (
     <SecretaryPage
-      user={{ id: user?.id ?? 'local', display_name: user?.display_name ?? 'there' }}
+      user={{ id: user?.id ?? 'local', display_name: user?.display_name ?? '' }}
     />
   );
 }

@@ -122,7 +122,7 @@ export function SecretaryPage({ user }: SecretaryPageProps) {
     <div className="secretary-page h-full">
       <ChatInterface
         sessionId={sessionId}
-        greeting={`Welcome back, ${user.display_name}.`}
+        greeting={user.display_name ? `Welcome back, ${user.display_name}.` : "Welcome back."}
         subtext="What can I help you with today?"
         chips={CHIPS}
         inputPlaceholder="Ask LIA anything..."

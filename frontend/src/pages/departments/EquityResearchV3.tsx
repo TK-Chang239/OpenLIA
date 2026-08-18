@@ -97,9 +97,9 @@ function saveSettings(next: V3SettingsValue): void {
 }
 
 function firstName(displayName: string | null | undefined): string {
-  if (!displayName) return "there";
+  if (!displayName) return "";
   const trimmed = displayName.trim();
-  if (!trimmed) return "there";
+  if (!trimmed) return "";
   return trimmed.split(/\s+/)[0];
 }
 

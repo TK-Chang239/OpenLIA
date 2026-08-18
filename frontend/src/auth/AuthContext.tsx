@@ -15,6 +15,7 @@ import {
   type LoginInput,
 } from "../api/auth";
 import { ApiError } from "../api/client";
+import { getPrefs } from "../api/settings";
 
 export type AuthStatus =
   | "loading"
@@ -70,6 +71,16 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         setUser(LOCAL_USER);
         setMustChangePasswordState(false);
         setStatus("personal");
+        // Personal mode has no auth session, but the wizard-provided name
+        // lives in prefs — hydrate it so greetings use the real name.
+        try {
+          const prefs = await getPrefs();
+          if (prefs.display_name) {
+            setUser({ ...LOCAL_USER, display_name: prefs.display_name });
+          }
+        } catch {
+          /* keep the anonymous local user */
+        }
         return;
       }
       setUser(null);
