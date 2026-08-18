@@ -138,6 +138,10 @@ function splitMarkdownWithCharts(
   const pushText = (raw: string): void => {
     const rewritten = rewriteCitations(raw, displayIndexById).trim();
     if (rewritten.length === 0) return;
+    // Legacy stored markdown may carry inline chart markers whose removal
+    // leaves punctuation-only fragments ("."); never render those as
+    // their own paragraphs.
+    if (/^[.,;:\u2014\u2013\-\s]*$/.test(rewritten)) return;
     blocks.push({ type: "text", content: rewritten });
   };
 
