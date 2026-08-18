@@ -235,7 +235,12 @@ def _build_emit_chart_tool(workspace: RunWorkspace) -> ResearchTool:
                             "type": "object",
                             "description": (
                                 "Each item carries either {label, value} for "
-                                "categorical charts or {x, y} for scatter/line."
+                                "categorical charts or {x, y} for scatter/line. "
+                                "Multi-series line/area charts add a 'series' "
+                                "name per item; items sharing a series name "
+                                "are drawn as one line over the shared x axis. "
+                                "Table values may be pre-formatted strings "
+                                "('$126.38') and are rendered verbatim."
                             ),
                         },
                     },

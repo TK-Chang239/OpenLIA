@@ -136,6 +136,41 @@ describe("adaptV3DetailToSchema — citations + cover", () => {
     expect(schema.cover.consensus_rating).toBeNull();
   });
 
+  test("cover highlights rewrite [^source_id] markers like body sections do", () => {
+    const detail = makeDetail({
+      cover: {
+        subtitle: "Initiation [^web_1]",
+        tagline: "Leader in launch [^eodhd_2]",
+        tldr: ["Backlog grew 40%.[^web_1]", "Cash burn narrowing.[^ghost_9]"],
+        key_metrics: [],
+        rating: null,
+        upside_pct: null,
+      },
+      citations: [
+        {
+          source_id: "web_1",
+          tool_name: "web_search",
+          display_index: 1,
+          provenance: {},
+        },
+        {
+          source_id: "eodhd_2",
+          tool_name: "get_fundamentals",
+          display_index: 2,
+          provenance: {},
+        },
+      ],
+    });
+    const schema = adaptV3DetailToSchema(detail);
+    expect(schema.cover.subtitle).toBe("Initiation [1]");
+    expect(schema.cover.tagline).toBe("Leader in launch [2]");
+    expect(schema.cover.tldr).toEqual([
+      "Backlog grew 40%.[1]",
+      // Unknown ids lose the caret but keep the id visible.
+      "Cash burn narrowing.[ghost_9]",
+    ]);
+  });
+
   test("cover populates subtitle / tagline / tldr / metrics / rating from detail.cover (PR9)", () => {
     const schema = adaptV3DetailToSchema({
       ...DETAIL,
@@ -329,6 +364,49 @@ describe("adaptV3DetailToSchema — chart shape mapping", () => {
     expect(series).toHaveLength(1);
     expect(series[0].name).toBe("Revenue ($M)");
     expect(series[0].values).toEqual([436, 575, 740]);
+  });
+
+  test("line chart groups points by series over shared deduplicated categories", () => {
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:ln}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "ln",
+          chart_type: "line",
+          title: "Revenue and FCF",
+          spec: {
+            data: [
+              { x: "FY2024", y: 60.9, series: "Revenue" },
+              { x: "FY2025", y: 130.5, series: "Revenue" },
+              { x: "FY2026", y: 215.9, series: "Revenue" },
+              { x: "FY2024", y: 27.0, series: "Free Cash Flow" },
+              { x: "FY2025", y: 60.9, series: "Free Cash Flow" },
+              { x: "FY2026", y: 96.7, series: "Free Cash Flow" },
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const blocks = adaptV3DetailToSchema(detail).sections[0].blocks;
+    const chartBlock = blocks.find((b) => b.type === "line_chart") as
+      | Record<string, unknown>
+      | undefined;
+    expect(chartBlock).toBeDefined();
+    expect(chartBlock?.categories).toEqual(["FY2024", "FY2025", "FY2026"]);
+    const series = chartBlock?.series as Array<{ name: string; values: number[] }>;
+    expect(series).toHaveLength(2);
+    expect(series[0]).toEqual({ name: "Revenue", values: [60.9, 130.5, 215.9] });
+    expect(series[1]).toEqual({ name: "Free Cash Flow", values: [27.0, 60.9, 96.7] });
   });
 
   test("pie chart emits segments, not categories/series", () => {

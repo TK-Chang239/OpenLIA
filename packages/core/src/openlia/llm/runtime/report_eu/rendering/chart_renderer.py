@@ -109,24 +109,60 @@ def _draw(ax, chart: ChartSpec, points: list[ChartDataPoint]) -> bool:
 
 
 def _draw_line_or_area(ax, points: list[ChartDataPoint], *, fill: bool) -> bool:
-    xs: list[float | str] = []
-    ys: list[float] = []
+    """One plotted line per ``series`` value over a shared x axis.
+
+    Points without a ``series`` field form a single unnamed series, which
+    preserves the old single-line behavior. String x values become one
+    deduplicated, first-seen-ordered category axis shared by all series.
+    """
+    series_points: dict[str | None, list[tuple[float | str | None, float]]] = {}
+    series_order: list[str | None] = []
     for p in points:
-        x = _coerce_x(p)
         y = _coerce_y(p)
         if y is None:
             continue
-        xs.append(x if x is not None else len(xs))
-        ys.append(y)
-    if not ys:
+        key = _coerce_series(p)
+        if key not in series_points:
+            series_points[key] = []
+            series_order.append(key)
+        series_points[key].append((_coerce_x(p), y))
+    if not series_points:
         raise _NotRenderable("no numeric y values")
-    indices = list(range(len(ys)))
-    ax.plot(indices, ys, marker="o")
-    if fill:
-        ax.fill_between(indices, ys, alpha=0.2)
-    if all(isinstance(x, str) for x in xs):
-        ax.set_xticks(indices)
-        ax.set_xticklabels([str(x) for x in xs], rotation=20, ha="right")
+
+    xs_all = [x for pts in series_points.values() for x, _ in pts]
+    categorical = bool(xs_all) and all(isinstance(x, str) for x in xs_all)
+
+    if categorical:
+        categories: list[str] = []
+        index_of: dict[str, int] = {}
+        for x in xs_all:
+            if x not in index_of:
+                index_of[x] = len(categories)
+                categories.append(x)
+        for key in series_order:
+            pts = series_points[key]
+            idxs = [index_of[x] for x, _ in pts]
+            ys = [y for _, y in pts]
+            (line,) = ax.plot(idxs, ys, marker="o", label=key or "")
+            if fill:
+                ax.fill_between(idxs, ys, alpha=0.2, color=line.get_color())
+        ax.set_xticks(range(len(categories)))
+        ax.set_xticklabels(categories, rotation=20, ha="right")
+    else:
+        for key in series_order:
+            pts = series_points[key]
+            xs = [
+                float(x) if isinstance(x, (int, float)) else float(i)
+                for i, (x, _) in enumerate(pts)
+            ]
+            ys = [y for _, y in pts]
+            (line,) = ax.plot(xs, ys, marker="o", label=key or "")
+            if fill:
+                ax.fill_between(xs, ys, alpha=0.2, color=line.get_color())
+
+    if len(series_order) > 1:
+        ax.legend(fontsize=8)
+    _apply_value_axis_format(ax.yaxis)
     return True
 
 
@@ -148,10 +184,12 @@ def _draw_bar(ax, points: list[ChartDataPoint], *, horizontal: bool) -> bool:
         ax.set_yticks(list(indices))
         ax.set_yticklabels(labels)
         ax.invert_yaxis()
+        _apply_value_axis_format(ax.xaxis)
     else:
         ax.bar(list(indices), values)
         ax.set_xticks(list(indices))
         ax.set_xticklabels(labels, rotation=20, ha="right")
+        _apply_value_axis_format(ax.yaxis)
     return True
 
 
@@ -197,8 +235,16 @@ def _draw_table(ax, points: list[ChartDataPoint]) -> bool:
     rows: list[tuple[str, str]] = []
     for p in points:
         label = _coerce_label(p) or _coerce_x_str(p) or ""
-        value = _coerce_value(p)
-        rows.append((label, _format_value(value)))
+        # Tables are text: pre-formatted string values ("$126.38", "12.4x")
+        # must survive verbatim — only bare numerics get formatted.
+        raw = p.value if p.value is not None else p.y
+        if isinstance(raw, str):
+            cell = raw.strip()
+        elif raw is None:
+            cell = ""
+        else:
+            cell = _format_value(float(raw))
+        rows.append((label, cell))
     if not rows:
         raise _NotRenderable("no rows")
     ax.axis("off")
@@ -225,6 +271,34 @@ def _apply_axes_labels(ax, chart: ChartSpec) -> None:
 # ---------------------------------------------------------------------------
 # Coercion helpers — permissive per spec decision #7
 # ---------------------------------------------------------------------------
+
+
+def _coerce_series(p: ChartDataPoint) -> str | None:
+    s = getattr(p, "series", None)
+    if s is None:
+        return None
+    s = str(s).strip()
+    return s or None
+
+
+def _apply_value_axis_format(axis) -> None:
+    """Human-readable value ticks (200B, 1.5T) instead of the matplotlib
+    scientific offset ("1e11")."""
+    from matplotlib.ticker import FuncFormatter
+
+    axis.set_major_formatter(FuncFormatter(lambda v, _pos: _format_axis_value(v)))
+
+
+def _format_axis_value(v: float) -> str:
+    if abs(v) >= 1e12:
+        return f"{v / 1e12:g}T"
+    if abs(v) >= 1e9:
+        return f"{v / 1e9:g}B"
+    if abs(v) >= 1e6:
+        return f"{v / 1e6:g}M"
+    if abs(v) >= 1e3:
+        return f"{v / 1e3:g}K"
+    return f"{v:g}"
 
 
 def _coerce_label(p: ChartDataPoint) -> str | None:

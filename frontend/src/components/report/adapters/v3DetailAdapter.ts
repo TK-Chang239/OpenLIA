@@ -109,7 +109,7 @@ export function adaptV3DetailToSchema(detail: V3ReportDetail): ReportSchema {
     department: "equity_research",
     generated_at:
       detail.report.completed_at ?? detail.report.created_at ?? undefined,
-    cover: buildCover(detail),
+    cover: buildCover(detail, displayIndexById),
     sections,
     citations,
     meta_stats: buildMetaStats(detail, citations),
@@ -183,7 +183,10 @@ function rewriteCitations(
   });
 }
 
-function buildCover(detail: V3ReportDetail): ReportCover {
+function buildCover(
+  detail: V3ReportDetail,
+  displayIndexById: Map<string, number>,
+): ReportCover {
   const eyebrow =
     TEMPLATE_EYEBROW[detail.report.template_id] ?? "Equity Research Report";
   const cover = detail.cover ?? null;
@@ -193,9 +196,11 @@ function buildCover(detail: V3ReportDetail): ReportCover {
     // v1's ReportCover requires subtitle + tagline as strings. When
     // the model hasn't populated them via set_cover, fall back to
     // empty so the hero degrades to just the title + eyebrow.
-    subtitle: cover?.subtitle ?? "",
-    tagline: cover?.tagline ?? "",
-    tldr: cover?.tldr ?? [],
+    // Cover copy carries the same [^source_id] markers as section
+    // markdown and must go through the same rewrite.
+    subtitle: rewriteCitations(cover?.subtitle ?? "", displayIndexById),
+    tagline: rewriteCitations(cover?.tagline ?? "", displayIndexById),
+    tldr: (cover?.tldr ?? []).map((p) => rewriteCitations(p, displayIndexById)),
     tldr_label: "Highlights",
     key_metrics: (cover?.key_metrics ?? []).map(adaptCoverMetric),
     ticker: detail.report.subject || null,
@@ -326,21 +331,44 @@ function chartRowToBlock(chart: V3ChartRow): ReportBlock {
   // with units) are dropped so they don't poison the y-axis math
   // downstream.
   const axes = (spec.axes as Record<string, string> | undefined) ?? {};
-  const seriesName = axes.y ?? "Value";
+  const fallbackName = axes.y ?? "Value";
+  // Points may carry a ``series`` name; group per series over a shared,
+  // first-seen-ordered category axis. Without one, everything lands in a
+  // single series — the pre-multi-series behavior.
   const categories: string[] = [];
-  const values: number[] = [];
+  const catIndex = new Map<string, number>();
+  const seriesOrder: string[] = [];
+  const seriesValues = new Map<string, Array<number | null>>();
   for (const point of data) {
     const reading = readCategorical(point);
     if (!reading) continue;
-    categories.push(reading.label);
-    values.push(reading.value);
+    const rawSeries = (point as { series?: unknown }).series;
+    const seriesKey =
+      typeof rawSeries === "string" && rawSeries.trim() ? rawSeries.trim() : fallbackName;
+    if (!catIndex.has(reading.label)) {
+      catIndex.set(reading.label, categories.length);
+      categories.push(reading.label);
+    }
+    if (!seriesValues.has(seriesKey)) {
+      seriesValues.set(seriesKey, []);
+      seriesOrder.push(seriesKey);
+    }
+    const values = seriesValues.get(seriesKey)!;
+    const idx = catIndex.get(reading.label)!;
+    while (values.length < idx) values.push(null);
+    values[idx] = reading.value;
   }
-  if (values.length === 0) return chartPlaceholder(chart, data.length);
+  if (seriesOrder.length === 0) return chartPlaceholder(chart, data.length);
+  const series = seriesOrder.map((name) => {
+    const values = seriesValues.get(name)!;
+    while (values.length < categories.length) values.push(null);
+    return { name, values };
+  });
   return {
     type: blockType,
     title: chart.title,
     categories,
-    series: [{ name: seriesName, values }],
+    series,
     source_ids: sourceIds,
   } as ChartLikeBlock;
 }
