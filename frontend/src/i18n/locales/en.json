@@ -1647,6 +1647,7 @@
     "col_weight": "WEIGHT",
     "col_spark": "7D",
     "prices_refreshed": "Prices refreshed",
+    "prices_refresh_failed": "No quote received for {{tickers}} — check the financial connector in Settings",
     "retry_in_seconds": "Try again in {{seconds}} seconds",
     "removed_undo": "{{ticker}} removed",
     "undo": "Undo",

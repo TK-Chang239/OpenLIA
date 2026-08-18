@@ -1647,6 +1647,7 @@
     "col_weight": "權重",
     "col_spark": "7 日",
     "prices_refreshed": "報價已更新",
+    "prices_refresh_failed": "無法取得 {{tickers}} 的報價 — 請檢查設定中的金融資料連接器",
     "retry_in_seconds": "請於 {{seconds}} 秒後再試",
     "removed_undo": "已移除 {{ticker}}",
     "undo": "復原",

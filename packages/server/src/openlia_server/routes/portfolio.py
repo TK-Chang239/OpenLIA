@@ -474,7 +474,12 @@ def build_portfolio_router(
         }
 
     @router.post("/refresh-prices")
-    def refresh_prices(market: str | None = None, user: User = require_user) -> dict:
+    def refresh_prices(
+        background: BackgroundTasks,
+        request: Request,
+        market: str | None = None,
+        user: User = require_user,
+    ) -> dict:
         from datetime import UTC, datetime
 
         market_filter = _resolve_market(market)
@@ -501,6 +506,13 @@ def build_portfolio_router(
             }
             from openlia_server.db.models.content import PortfolioQuoteIntraday
 
+            failed = sorted(t for t, price in prices.items() if price is None)
+            if failed:
+                logger.warning(
+                    "refresh-prices: no quote resolved for %s — check the "
+                    "financial connector and runner spec homing",
+                    ", ".join(failed),
+                )
             for t, price in prices.items():
                 if price is None:
                     continue
@@ -518,8 +530,31 @@ def build_portfolio_router(
                 )
                 s.add(PortfolioQuoteIntraday(ticker=t, ts=now, close=price))
             s.commit()
+
+            # Repair pass: a held ticker missing its 5Y daily-history backfill
+            # leaves the NAV chart empty at every range. Manual refresh is the
+            # user's lever, so use it to schedule the backfill too. A handful
+            # of rows can exist without history (the post-close job upserts
+            # one per day), so treat "almost no rows" as missing.
+            from sqlalchemy import func as sa_func
+
+            from openlia_server.db.models.content import PortfolioQuoteDaily
+
+            adapter = _resolve_financial_adapter(request)
+            if adapter is not None:
+                for t in tickers:
+                    daily_rows = (
+                        s.query(sa_func.count(PortfolioQuoteDaily.ticker))
+                        .filter(PortfolioQuoteDaily.ticker == t)
+                        .scalar()
+                    ) or 0
+                    if daily_rows < 5:
+                        background.add_task(_run_backfill, db_session_factory, t, adapter)
         cache.mark_refresh(user.id)
-        return {"prices": {t: (str(p) if p is not None else None) for t, p in prices.items()}}
+        return {
+            "prices": {t: (str(p) if p is not None else None) for t, p in prices.items()},
+            "failed": failed,
+        }
 
     @router.post("/import-csv")
     def import_csv(body: dict, user: User = require_user) -> dict:

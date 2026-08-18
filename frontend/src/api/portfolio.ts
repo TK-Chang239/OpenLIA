@@ -87,6 +87,7 @@ export interface CsvImportResponse {
 
 export interface RefreshPricesResponse {
   prices: Record<string, string | null>;
+  failed?: string[];
 }
 
 export interface SearchResult {

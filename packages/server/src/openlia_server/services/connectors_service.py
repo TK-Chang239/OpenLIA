@@ -582,6 +582,110 @@ def sync_template_specs(session: Session, connector_id: str) -> int:
     return inserted
 
 
+def reconcile_runner_specs(session: Session) -> int:
+    """Startup guardrail keeping runner_callable_specs homed per
+    _NEED_DEPARTMENT_MAP.
+
+    The map lives in code while the rows live in data; a rescope that edits
+    the map without a data migration strands existing rows under the old
+    department and every fetch_need for the new home raises NeedNotResolved
+    (this is exactly what killed Portfolio price refresh after the June 2026
+    portfolio rescope). Returns the number of rows fixed (re-homed, deleted
+    as duplicates, or inserted from an installed template).
+    """
+    fixed = 0
+    rows = (
+        session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.need_id.in_(_NEED_DEPARTMENT_MAP.keys()))
+        .all()
+    )
+    by_need: dict[str, list[RunnerCallableSpec]] = {}
+    for row in rows:
+        by_need.setdefault(row.need_id, []).append(row)
+
+    for need_id, dept_id in _NEED_DEPARTMENT_MAP.items():
+        need_rows = by_need.get(need_id, [])
+        correct = [r for r in need_rows if r.department_id == dept_id]
+        misfiled = [r for r in need_rows if r.department_id != dept_id]
+        if correct:
+            for row in misfiled:
+                log.warning(
+                    "reconcile_runner_specs: dropping duplicate spec for need %r "
+                    "misfiled under department %r",
+                    need_id,
+                    row.department_id,
+                )
+                session.delete(row)
+                fixed += 1
+            continue
+        if misfiled:
+            keeper, *extras = misfiled
+            log.warning(
+                "reconcile_runner_specs: re-homing spec for need %r from department %r to %r",
+                need_id,
+                keeper.department_id,
+                dept_id,
+            )
+            keeper.department_id = dept_id
+            fixed += 1
+            for row in extras:
+                session.delete(row)
+                fixed += 1
+            continue
+        # No row anywhere: source the spec from an installed, validated
+        # built-in connector whose template provides it.
+        inserted = _insert_spec_from_installed_template(session, need_id, dept_id)
+        if inserted:
+            fixed += 1
+
+    if fixed:
+        session.commit()
+        _invalidate(session)
+    return fixed
+
+
+def _insert_spec_from_installed_template(
+    session: Session,
+    need_id: str,
+    dept_id: str,
+) -> bool:
+    connectors = (
+        session.query(Connector)
+        .filter(
+            Connector.source == ConnectorSource.BUILT_IN.value,
+            Connector.status == ConnectorStatus.VALIDATED.value,
+        )
+        .order_by(Connector.created_at)
+        .all()
+    )
+    for connector in connectors:
+        template = get_template(connector.provider_id)
+        if template is None:
+            continue
+        spec = next((s for s in template.runner_specs if s.need_id == need_id), None)
+        if spec is None:
+            continue
+        log.warning(
+            "reconcile_runner_specs: inserting missing spec for need %r under "
+            "department %r from connector %r",
+            need_id,
+            dept_id,
+            connector.provider_id,
+        )
+        session.add(
+            RunnerCallableSpec(
+                id=str(uuid.uuid4()),
+                department_id=dept_id,
+                need_id=need_id,
+                connector_id=connector.id,
+                access_mode=spec.access_mode,
+                spec=asdict(spec),
+            )
+        )
+        return True
+    return False
+
+
 def list_connectors(session: Session) -> list[Connector]:
     return list(session.query(Connector).order_by(Connector.created_at).all())
 

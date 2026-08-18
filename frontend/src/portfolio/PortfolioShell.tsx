@@ -91,9 +91,17 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await refreshPrices(market);
+      const result = await refreshPrices(market);
       await refresh();
-      toast.push({ title: t("portfolio_page.prices_refreshed"), tone: "success" });
+      const failed = result.failed ?? [];
+      if (failed.length > 0) {
+        toast.push({
+          title: t("portfolio_page.prices_refresh_failed", { tickers: failed.join(", ") }),
+          tone: "error",
+        });
+      } else {
+        toast.push({ title: t("portfolio_page.prices_refreshed"), tone: "success" });
+      }
     } catch (e) {
       const err = e as Error & { retryAfter?: number; status?: number };
       const msg =
