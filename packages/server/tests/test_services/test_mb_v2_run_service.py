@@ -80,7 +80,6 @@ class _FakeMacroReader:
 
 
 def test_resolve_macro_snapshot_populated(macro_dept_reader):
-    from datetime import date
 
     from openlia.macro_research.schemas import SnapshotEntry
 
@@ -101,8 +100,10 @@ def test_resolve_macro_snapshot_populated(macro_dept_reader):
     assert ctx.debt_cycle_phase == "Late Plateau"
     assert ctx.economic_season == "Summer"
     assert ctx.active_force_count == 3
+    # Only assert against the injected clock — comparing to date.today() as
+    # well made the test flake in the window where UTC has rolled past
+    # midnight but local time has not.
     assert ctx.as_of == now.date().isoformat()
-    assert ctx.as_of == date.today().isoformat()
     assert ctx.has_data() is True
 
 
