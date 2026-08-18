@@ -95,6 +95,29 @@ def _null_transports() -> MbDataTransports:
     )
 
 
+def _dedupe_evidence(evidence: list) -> list:
+    """Drop evidence items that repeat an earlier item's story.
+
+    Key is normalized title + published date — the observed duplicate pair
+    shared both but differed in the ``source`` string (syndicated copy), so
+    URL equality is not a sufficient key. First occurrence wins.
+    """
+    seen: set[tuple[str, str]] = set()
+    out: list = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        title = " ".join(str(item.get("title") or "").lower().split())
+        published = str(item.get("published_at") or "")[:10]
+        key = (title, published)
+        if title and key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
 def _prior_scores(db: DBSession, *, user_id: str, ticker: str) -> list[float]:
     """Read prior sentiment-score history for ``(user_id, ticker)``, oldest-first.
 
@@ -223,6 +246,13 @@ async def run_to_cache(
         momentum, trend_label = momentum_from_history([*prior, float(score)])
         payload["momentum"] = momentum
         payload["trend_label"] = trend_label
+
+    # The evidence list is LLM-authored; the same story sometimes arrives
+    # twice under different source strings (syndication). Dedupe on
+    # normalized title + date before persisting.
+    evidence = payload.get("evidence")
+    if isinstance(evidence, list):
+        payload["evidence"] = _dedupe_evidence(evidence)
 
     # Stamp captured_at if not already set by the engine.
     if not payload.get("captured_at"):

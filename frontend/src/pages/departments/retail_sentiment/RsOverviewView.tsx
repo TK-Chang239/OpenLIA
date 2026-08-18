@@ -156,6 +156,13 @@ function SignalRow({
   );
 }
 
+function evidenceAgeDays(publishedAt: string | null | undefined): number {
+  if (!publishedAt) return 0;
+  const ts = new Date(publishedAt).getTime();
+  if (Number.isNaN(ts)) return 0;
+  return Math.max(0, Math.floor((Date.now() - ts) / 86_400_000));
+}
+
 function EvidenceRow({
   item,
 }: {
@@ -198,6 +205,14 @@ function EvidenceRow({
         <div className="text-[11.5px] text-[--color-text-tertiary]">
           {item.source}
           {item.published_at ? ` · ${new Date(item.published_at).toLocaleDateString()}` : ""}
+          {evidenceAgeDays(item.published_at) > 30 ? (
+            <span
+              className="ml-1.5 font-mono text-[9px] uppercase tracking-[0.1em]"
+              style={{ color: "var(--color-feedback-warning)" }}
+            >
+              {`${Math.floor(evidenceAgeDays(item.published_at) / 30)}mo old`}
+            </span>
+          ) : null}
         </div>
       </div>
     </li>

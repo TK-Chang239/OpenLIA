@@ -22,6 +22,17 @@ function metricToneClass(tone: string | null): string {
   return "text-text-primary";
 }
 
+function isFromToday(iso: string): boolean {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
 function editionDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -109,7 +120,12 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
   }
 
   const lede = run.highlights?.subtitle || run.subject;
-  const rating = run.highlights?.rating;
+  const rawRating = run.highlights?.rating;
+  // Placeholder sentinels ("N/A") add noise, not information — hide them.
+  const rating =
+    rawRating && !["n/a", "na", "none", "—", "-"].includes(rawRating.trim().toLowerCase())
+      ? rawRating
+      : null;
   const metrics: MbCoverMetric[] = run.highlights?.metrics ?? [];
 
   return (
@@ -153,7 +169,11 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
         </span>
         <div className="flex flex-col gap-[6px] min-w-0">
           <div className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.12em] uppercase text-text-tertiary">
-            <span>{t("home_cards.todays_read")}</span>
+            <span>
+              {isFromToday(run.created_at)
+                ? t("home_cards.todays_read")
+                : t("home_cards.latest_read")}
+            </span>
           </div>
           <p className="m-0 text-[16px] leading-[1.4] font-medium text-text-primary tracking-[-0.005em]">
             {lede}

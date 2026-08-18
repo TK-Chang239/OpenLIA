@@ -314,3 +314,46 @@ def test_resolve_enabled_connectors_honors_capability_override(db_session):
         db_session, provider_kind="anthropic", model="claude-haiku-4-6"
     )
     assert gated.web_search is True
+
+
+def test_dedupe_evidence_drops_syndicated_duplicate():
+    """Same story emitted twice under different source strings (audit M1)."""
+    from openlia_server.services.rs_dash_run_service import _dedupe_evidence
+
+    items = [
+        {
+            "title": "Reddit Has Turned Bearish on Tesla and the Crowd Might Be Right",
+            "url": "https://247wallst.com/a",
+            "source": "24/7 Wall St.",
+            "published_at": "2026-03-12",
+            "classification": "bearish",
+        },
+        {
+            "title": "Reddit Has Turned Bearish on Tesla and the Crowd Might Be Right",
+            "url": "https://finance.yahoo.com/b",
+            "source": "Yahoo Finance / 24/7 Wall St.",
+            "published_at": "2026-03-12T09:00:00Z",
+            "classification": "bearish",
+        },
+        {
+            "title": "Vanda: retail investors buying the dip",
+            "url": "https://barchart.com/c",
+            "source": "Barchart",
+            "published_at": "2026-08-14",
+            "classification": "bullish",
+        },
+    ]
+    out = _dedupe_evidence(items)
+    assert len(out) == 2
+    assert out[0]["source"] == "24/7 Wall St."
+    assert out[1]["title"].startswith("Vanda")
+
+
+def test_dedupe_evidence_keeps_same_title_on_different_dates():
+    from openlia_server.services.rs_dash_run_service import _dedupe_evidence
+
+    items = [
+        {"title": "TSLA daily sentiment wrap", "published_at": "2026-08-14"},
+        {"title": "TSLA daily sentiment wrap", "published_at": "2026-08-15"},
+    ]
+    assert len(_dedupe_evidence(items)) == 2

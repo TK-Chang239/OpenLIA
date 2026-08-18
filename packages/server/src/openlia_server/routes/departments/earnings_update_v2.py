@@ -779,12 +779,18 @@ def build_earnings_update_v2_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> ScheduleListOut:
+        # Pending rows whose scheduled time has passed are orphans (missed
+        # dispatch sweep, or the print already happened) — the weekly
+        # forward-only calendar sync can never repair them, so surfacing
+        # them as "up next" presents stale dates as upcoming.
+        now = datetime.now(UTC)
         rows = (
             db.execute(
                 select(EuV2EarningsSchedule)
                 .where(
                     EuV2EarningsSchedule.user_id == user.id,
                     EuV2EarningsSchedule.status == "pending",
+                    EuV2EarningsSchedule.scheduled_run_at >= now,
                 )
                 .order_by(EuV2EarningsSchedule.scheduled_run_at.asc())
             )

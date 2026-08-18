@@ -50,11 +50,28 @@ def build_macro_research_router(
 
     @router.get("/dashboards")
     def list_dashboards(user: User = require_auth) -> dict[str, Any]:
-        return {
-            "dashboards": [
-                {"slug": slug, "display_name": d.display_name} for slug, d in DASHBOARDS.items()
-            ]
-        }
+        # One query for all cache rows so the summary page can show
+        # per-framework age/staleness without N+1 dashboard reads.
+        with db_session_factory() as session:
+            rows = session.query(MrDashboardCache).filter_by(user_id=user.id).all()
+        generated_by_slug: dict[str, datetime] = {}
+        for row in rows:
+            generated_at = row.generated_at
+            if generated_at.tzinfo is None:
+                generated_at = generated_at.replace(tzinfo=UTC)
+            generated_by_slug[row.dashboard] = generated_at
+        out = []
+        for slug, d in DASHBOARDS.items():
+            generated_at = generated_by_slug.get(slug)
+            out.append(
+                {
+                    "slug": slug,
+                    "display_name": d.display_name,
+                    "generated_at": generated_at.isoformat() if generated_at else None,
+                    "is_stale": _is_stale(slug, generated_at) if generated_at else True,
+                }
+            )
+        return {"dashboards": out}
 
     @router.get("/dashboards/{slug}")
     def get_dashboard(slug: str, user: User = require_auth) -> dict[str, Any]:
