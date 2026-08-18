@@ -51,6 +51,9 @@ _DEFAULT_RULESET: dict[str, Any] = {
         ],
         "news_lookback_days": 30,
         "news_search_tags": "Fed,FOMC,Powell,Federal Reserve",
+        # Wide enough to cover the last few FOMC meetings (8/year) so the
+        # posture timeline has real meeting dates to plot.
+        "events_lookback_days": 240,
         # A category counts as a real signal only once this many distinct
         # articles match it, so a single stray keyword mention in a loosely
         # related feed does not flip the panel (e.g. a false "emergency").
@@ -90,6 +93,7 @@ class FedLanguagePanel:
             "matched_headline",
             "matched_date",
             "days_since_fomc",
+            "fomc_dates",
             "manual_override",
         }
         names |= set(self.default_ruleset.get("params", {}).keys())
@@ -142,6 +146,11 @@ class FedLanguagePanel:
                 break
 
         fomc_events = [e for e in events if _is_fomc_event(e.get("event_name", ""))]
+        # Distinct meeting dates, newest first, for the posture timeline.
+        fomc_dates = sorted(
+            {str(e.get("date") or "")[:10] for e in fomc_events if e.get("date")},
+            reverse=True,
+        )[:3]
         days_since_fomc: float | None = None
         if fomc_events:
             latest_fomc = max(fomc_events, key=lambda e: e.get("date", ""))
@@ -159,6 +168,7 @@ class FedLanguagePanel:
             "matched_headline": matched_headline,
             "matched_date": matched_date,
             "days_since_fomc": days_since_fomc,
+            "fomc_dates": fomc_dates,
             "manual_override": panel_config.get("manual_override"),
         }
         return PanelContextBuildResult(scalars=scalars, raw_series={}, warnings=warnings)

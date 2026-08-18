@@ -132,3 +132,44 @@ def test_diplomacy_exposes_full_counts() -> None:
     assert scalars["progress_count"] == 0
     # Headline lists stay capped for display.
     assert len(scalars["matched_escalation_headlines"]) == 10
+
+
+def test_fed_panel_exposes_fomc_meeting_dates() -> None:
+    panel = FedLanguagePanel()
+    built = panel.build_context(
+        panel_config={"params": panel.default_ruleset["params"]},
+        payloads={
+            "company_news": [],
+            "economic_events": [
+                {"event_name": "FOMC Statement", "date": "2026-07-29"},
+                {"event_name": "Fed Interest Rate Decision", "date": "2026-06-17"},
+                {"event_name": "FOMC Minutes", "date": "2026-05-06"},
+                {"event_name": "FOMC Statement", "date": "2026-03-18"},
+                {"event_name": "CPI", "date": "2026-08-12"},
+            ],
+        },
+    )
+    assert built.scalars["fomc_dates"] == ["2026-07-29", "2026-06-17", "2026-05-06"]
+
+
+def test_wage_panel_exposes_dates_series() -> None:
+    from openlia.panic_thermometer.panels.wage_growth import WageGrowthPanel
+
+    panel = WageGrowthPanel()
+    built = panel.build_context(
+        panel_config={"params": panel.default_ruleset["params"]},
+        payloads={
+            "economic_events": [
+                {
+                    "event_name": "Average Hourly Earnings",
+                    "date": f"2026-{m:02d}-05",
+                    "actual": 0.2 + (m % 3) / 10,
+                    "comparison": "mom",
+                }
+                for m in range(1, 9)
+            ]
+        },
+    )
+    assert len(built.raw_series["value"]) == 8
+    assert built.raw_series["date"][0] == "2026-01-05"
+    assert built.raw_series["date"][-1] == "2026-08-05"
