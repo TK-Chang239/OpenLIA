@@ -42,12 +42,12 @@ def test_fed_panel_default_ruleset_evaluates_red() -> None:
             "company_news": [
                 {
                     "date": "2026-04-22",
-                    "headline": "Persistent inflation persists",
+                    "headline": "Fed warns persistent inflation persists",
                     "summary": "concerns about persistent inflation",
                 },
                 {
                     "date": "2026-04-21",
-                    "headline": "Officials flag persistent inflation risk",
+                    "headline": "FOMC officials flag persistent inflation risk",
                     "summary": "more persistent inflation commentary",
                 },
             ],
@@ -135,7 +135,7 @@ def test_fed_panel_matched_phrase_reflects_winning_category() -> None:
                 },
                 {
                     "date": "2026-04-21",
-                    "headline": "Second emergency warning",
+                    "headline": "Fed issues second emergency warning",
                     "summary": "expedited action possible",
                 },
                 {

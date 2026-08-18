@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-from openlia.panic_thermometer.panels._scanning import matching_articles
+from openlia.panic_thermometer.panels._scanning import matching_articles, matching_headlines
 from openlia.panic_thermometer.panels.base import PanelContextBuildResult
 
 _DEFAULT_RULESET: dict[str, Any] = {
@@ -35,22 +35,39 @@ _DEFAULT_RULESET: dict[str, Any] = {
     "params": {
         "window_days": 30,
         "window_amber_pct": 50,
+        # Topic relevance only — an article must match one of these to enter
+        # the corpus at all. Sentiment is classified separately below.
         "news_keywords": [
-            "ceasefire",
             "Hormuz",
             "strait",
             "Iran",
+            "ceasefire",
             "diplomatic",
             "negotiations",
             "peace talks",
             "de-escalation",
         ],
+        # Progress sentiment — a corpus article is a progress signal only
+        # when one of these matches (and no escalation keyword does).
+        "progress_keywords": [
+            "ceasefire",
+            "peace talks",
+            "de-escalation",
+            "negotiations",
+            "truce",
+            "agreement",
+            "breakthrough",
+        ],
         "escalation_keywords": [
             "military escalation",
             "strike",
+            "strikes",
+            "attack",
+            "attacks",
             "blockade",
             "retaliation",
             "mobilization",
+            "war",
         ],
         "news_lookback_days": 30,
         # Require this many matching articles before progress/escalation is
@@ -76,6 +93,8 @@ class DiplomacyPanel:
             "days_remaining",
             "progress_detected",
             "escalation_detected",
+            "progress_count",
+            "escalation_count",
             "matched_progress_headlines",
             "matched_escalation_headlines",
             "manual_override",
@@ -109,8 +128,24 @@ class DiplomacyPanel:
 
         news = payloads.get("company_news") or []
         min_articles = int(params.get("min_signal_articles", 2))
-        progress = matching_articles(news, news_keywords)
-        escalation = matching_articles(news, escalation_keywords)
+        progress_keywords = params.get(
+            "progress_keywords",
+            _DEFAULT_RULESET["params"]["progress_keywords"],
+        )
+
+        # news_keywords define topic relevance only; sentiment is classified
+        # inside the relevant corpus. Progress needs a HEADLINE-level match
+        # (a passing "negotiations" in an escalation story's body must not
+        # tag it as progress), while escalation may match anywhere — the
+        # conservative direction. Escalation wins when both match.
+        corpus = [a for _, a in matching_articles(news, news_keywords)]
+        escalation = matching_articles(corpus, escalation_keywords)
+        escalated_ids = {id(a) for _, a in escalation}
+        progress = [
+            (hit, a)
+            for hit, a in matching_headlines(corpus, progress_keywords)
+            if id(a) not in escalated_ids
+        ]
 
         return PanelContextBuildResult(
             scalars={
@@ -118,6 +153,8 @@ class DiplomacyPanel:
                 "days_remaining": days_remaining,
                 "progress_detected": len(progress) >= min_articles,
                 "escalation_detected": len(escalation) >= min_articles,
+                "progress_count": len(progress),
+                "escalation_count": len(escalation),
                 "matched_progress_headlines": [a.get("headline", "") for _, a in progress[:10]],
                 "matched_escalation_headlines": [a.get("headline", "") for _, a in escalation[:10]],
                 "manual_override": panel_config.get("manual_override"),

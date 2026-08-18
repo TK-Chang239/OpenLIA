@@ -1126,18 +1126,22 @@
   gap: 0;
   margin-top: 14px;
 }
-.pt-fed-news .pt-fed-news-head {
+/* The head renders as a sibling of .pt-fed-news in both Fed and Diplomacy
+   sections, so these must match standalone (a descendant selector left the
+   head unstyled and its two spans ran together: "last 20progress / ..."). */
+.pt-fed-news-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  gap: 12px;
   padding-bottom: 4px;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.pt-fed-news .pt-fed-news-title { color: var(--color-text-secondary); }
-.pt-fed-news .pt-fed-news-meta { color: var(--color-text-tertiary); font-size: 10px; }
+.pt-fed-news-title { color: var(--color-text-secondary); }
+.pt-fed-news-meta { color: var(--color-text-tertiary); font-size: 10px; }
 .pt-fed-item {
   padding: 11px 8px 11px 0;
   border-bottom: 1px dashed var(--color-border-subtle);

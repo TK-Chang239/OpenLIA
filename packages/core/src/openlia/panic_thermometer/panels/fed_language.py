@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-from openlia.panic_thermometer.panels._scanning import matching_articles
+from openlia.panic_thermometer.panels._scanning import headline_anchored, matching_articles
 from openlia.panic_thermometer.panels.base import PanelContextBuildResult
 
 _DEFAULT_RULESET: dict[str, Any] = {
@@ -108,7 +108,15 @@ class FedLanguagePanel:
         warnings: list[str] = []
         min_articles = int(params.get("min_signal_articles", 2))
 
-        sorted_news = sorted(news, key=lambda a: a.get("date", ""), reverse=True)
+        # The news feed returns anything the provider's auto-tagger loosely
+        # associates with the search tags. Signal keywords are only
+        # meaningful inside articles actually about Fed communications, so
+        # require a tag anchor in the headline before scanning.
+        anchors = [
+            t.strip() for t in str(params.get("news_search_tags", "")).split(",") if t.strip()
+        ]
+        relevant = headline_anchored(news, anchors)
+        sorted_news = sorted(relevant, key=lambda a: a.get("date", ""), reverse=True)
 
         # Highest-severity first, so the winning category also supplies the
         # phrase/headline shown in the label.

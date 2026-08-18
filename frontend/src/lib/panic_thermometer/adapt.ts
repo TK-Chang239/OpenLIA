@@ -910,8 +910,16 @@ export function adaptDiplomacy(r: PanelResult): DiplomacyPanel {
       endLabel: `Day ${total} · window closes`,
     },
     signals: {
-      progress: progressDetected ? progressHeadlines.length || 1 : progressHeadlines.length,
-      escalation: escalationDetected ? escalationHeadlines.length || 1 : escalationHeadlines.length,
+      // Backend exposes full counts; the headline arrays are capped at 10
+      // for display and must not be used as counts.
+      progress: num(
+        r.extras.progress_count,
+        progressDetected ? progressHeadlines.length || 1 : progressHeadlines.length,
+      ),
+      escalation: num(
+        r.extras.escalation_count,
+        escalationDetected ? escalationHeadlines.length || 1 : escalationHeadlines.length,
+      ),
     },
     headlines,
   };

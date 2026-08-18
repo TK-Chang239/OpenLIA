@@ -31,12 +31,12 @@ def test_diplomacy_build_context_computes_days_elapsed():
         },
         {
             "date": "2026-04-21",
-            "headline": "Mobilization announced",
+            "headline": "Iran mobilization announced",
             "summary": "Retaliation threatened",
         },
         {
             "date": "2026-04-23",
-            "headline": "Blockade tightens",
+            "headline": "Hormuz blockade tightens",
             "summary": "further military escalation",
         },
     ]

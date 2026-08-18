@@ -44,3 +44,37 @@ def matching_articles(
         if hit:
             out.append((hit, article))
     return out
+
+
+def matching_headlines(
+    articles: Sequence[dict[str, Any]], keywords: Sequence[str]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Like :func:`matching_articles` but scans the HEADLINE only.
+
+    For sentiment classification a passing body mention is too weak a
+    signal — "negotiations" deep inside an escalation story must not tag
+    the story as progress. Headlines state what a story is about.
+    """
+    out: list[tuple[str, dict[str, Any]]] = []
+    for article in articles:
+        hit = keyword_hit(str(article.get("headline", "")), keywords)
+        if hit:
+            out.append((hit, article))
+    return out
+
+
+def headline_anchored(
+    articles: Sequence[dict[str, Any]], anchors: Sequence[str]
+) -> list[dict[str, Any]]:
+    """Keep only articles whose HEADLINE contains one of ``anchors``.
+
+    Corpus-relevance guard: news feeds return anything the provider's
+    auto-tagger loosely associates with a query, so signal keywords must
+    only be scanned inside articles that are actually *about* the topic.
+    A passing mention deep in an unrelated article's body (the classic
+    false positive: "persistent inflation" inside an equity note) never
+    reaches the scan. Empty ``anchors`` disables the filter.
+    """
+    if not anchors:
+        return list(articles)
+    return [a for a in articles if keyword_hit(str(a.get("headline", "")), anchors)]

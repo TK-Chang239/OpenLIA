@@ -32,8 +32,8 @@ def test_diplomacy_detects_progress_and_escalation() -> None:
             "company_news": [
                 {"headline": "Ceasefire announced", "summary": "talks resumed"},
                 {"headline": "Peace talks progress", "summary": "de-escalation hopes"},
-                {"headline": "Military escalation reported", "summary": "blockade"},
-                {"headline": "Retaliation feared", "summary": "further mobilization"},
+                {"headline": "Military escalation reported near Hormuz", "summary": "blockade"},
+                {"headline": "Iran retaliation feared", "summary": "further mobilization"},
             ]
         },
     )

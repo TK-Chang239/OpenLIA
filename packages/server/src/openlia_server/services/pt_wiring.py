@@ -214,6 +214,10 @@ class EodhdPtDispatcher:
         tags_raw = params.get("news_search_tags") or ""
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()] or [_DEFAULT_NEWS_TAG]
         limit = int(params.get("news_limit", _NEWS_LIMIT_DEFAULT))
+        # Panels advertise a lookback window ("(30d)" in the UI); enforce it
+        # here so stale articles never reach the keyword scanners.
+        lookback_days = int(params.get("news_lookback_days", 30))
+        cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).date().isoformat()
         collected: list[dict[str, Any]] = []
         seen: set[str] = set()
         for tag in tags:
@@ -225,6 +229,9 @@ class EodhdPtDispatcher:
             for row in rows or []:
                 title = row.get("title") or ""
                 if title in seen:
+                    continue
+                row_date = str(row.get("date") or "")
+                if row_date and row_date[:10] < cutoff:
                     continue
                 seen.add(title)
                 collected.append(
