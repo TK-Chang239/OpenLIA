@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
+import { stripCitationMarkers } from "../../../lib/citations";
 
 import "./styles.css";
 import type {
@@ -68,8 +69,9 @@ export function SummaryHero({
 }
 
 function renderInline(text: string): ReactNode {
-  // **bold** and *italic* markdown-lite
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  // **bold** and *italic* markdown-lite; ledger citation markers are
+  // stripped because dashboard payloads carry no citation table.
+  const parts = stripCitationMarkers(text).split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return parts.map((p, i) => {
     if (p.startsWith("**") && p.endsWith("**")) {
       return <strong key={i}>{p.slice(2, -2)}</strong>;

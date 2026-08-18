@@ -94,7 +94,7 @@ export function adaptEuV2DetailToSchema(detail: RunDetail): ReportSchema {
     department: "earnings_update",
     generated_at:
       detail.report.completed_at ?? detail.report.created_at ?? undefined,
-    cover: buildCover(detail),
+    cover: buildCover(detail, displayIndexById),
     sections,
     citations,
     meta_stats: buildMetaStats(detail, citations),
@@ -168,16 +168,21 @@ function rewriteCitations(
   });
 }
 
-function buildCover(detail: RunDetail): ReportCover {
+function buildCover(
+  detail: RunDetail,
+  displayIndexById: Map<string, number>,
+): ReportCover {
   const eyebrow =
     TEMPLATE_EYEBROW[detail.report.template_id] ?? "Earnings Update Report";
   const cover = detail.cover ?? null;
   return {
     eyebrow,
     title: detail.report.subject,
-    subtitle: cover?.subtitle ?? "",
-    tagline: cover?.tagline ?? "",
-    tldr: cover?.tldr ?? [],
+    // Cover copy carries the same [^source_id] markers as section
+    // markdown and must go through the same rewrite.
+    subtitle: rewriteCitations(cover?.subtitle ?? "", displayIndexById),
+    tagline: rewriteCitations(cover?.tagline ?? "", displayIndexById),
+    tldr: (cover?.tldr ?? []).map((p) => rewriteCitations(p, displayIndexById)),
     tldr_label: "Highlights",
     key_metrics: (cover?.key_metrics ?? []).map(adaptCoverMetric),
     ticker: detail.report.ticker || null,

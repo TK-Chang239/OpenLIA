@@ -34,6 +34,7 @@ from .chart_renderer import RenderedChart, render_chart_png
 from .citation_rewriter import (
     BibliographyEntry,
     build_bibliography,
+    linkify_citation_markers,
     rewrite_section_markdown,
     strip_anthropic_citation_markup,
 )
@@ -83,7 +84,13 @@ def assemble_html(
             markdown=cleaned,
             display_index_by_source_id=display_index_by_source_id,
         )
-        rewritten_sections.append((rewritten.section_id, rewritten.title, rewritten.markdown))
+        rewritten_sections.append(
+            (
+                rewritten.section_id,
+                rewritten.title,
+                linkify_citation_markers(rewritten.markdown),
+            )
+        )
 
     bibliography = build_bibliography(citations)
 
@@ -272,6 +279,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Ar
 .v3-bib-list { list-style: none; padding-left: 0; }
 .v3-bib-list li { padding: .25rem 0; font-size: .9rem; }
 .v3-bib-index { font-weight: 600; margin-right: .35rem; }
+a[href^="#fn-"] { text-decoration: none; font-size: .75em; vertical-align: super; }
 code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; }
 """
 

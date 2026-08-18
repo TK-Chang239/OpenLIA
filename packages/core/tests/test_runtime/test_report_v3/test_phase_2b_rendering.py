@@ -307,10 +307,10 @@ def test_assemble_html_self_contained_with_chart_and_bibliography():
     assert "Template: initiation" in html
     # Sections in template order (overview before risks)
     assert html.index("Overview") < html.index("Risks")
-    # Citation markers rewritten
-    assert "[^1]" in html
-    assert "[^2]" in html
-    assert "[^web_1]" not in html
+    # Citation markers rewritten and linked to the bibliography anchors
+    assert '<a href="#fn-1">' in html
+    assert '<a href="#fn-2">' in html
+    assert "[^" not in html
     # Chart inlined as data URL
     assert 'src="data:image/png;base64,' in html
     # Bibliography appended with both entries
@@ -374,8 +374,8 @@ def test_assemble_html_cleans_anthropic_markers_and_lists_unlinked_sources():
     assert "[^16-2]" not in html
     # Inner text preserved
     assert "Product revenue reached $1.33B" in html
-    # Resolvable marker still rewrites
-    assert "[^1]" in html
+    # Resolvable marker still rewrites, now as a bibliography link
+    assert '<a href="#fn-1">' in html
     # Every ledger entry surfaces in bibliography
     assert 'class="v3-bibliography"' in html
     assert "SNOW Q1" in html
