@@ -257,9 +257,11 @@ _RETAIL_SENTIMENT_PAYLOAD_SHAPE = """\
     "bullish"/"bearish"/"neutral"; published_at is ISO-8601 or null.
   - `narrative`: string — the synthesis paragraph from step 7.
   - `aggregated_sentiment`: float or null — an aggregated sentiment score you
-    read from a cited source as a cross-check; null when no such figure surfaces.
+    read from a cited source as a cross-check, normalized to [-1, 1] (rescale
+    a 0-100 vendor score: (score - 50) / 50); null when no such figure surfaces.
   - `analyst_gap`: float or null — difference between an analyst consensus
-    rating and the retail sentiment score; null when either figure is unavailable.
+    rating and the retail sentiment score, on the same [-1, 1] scale; null
+    when either figure is unavailable.
   - `captured_at`: ISO-8601 timestamp string or null — set to the current
     timestamp when emitting."""
 

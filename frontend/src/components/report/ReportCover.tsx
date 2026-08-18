@@ -26,7 +26,13 @@ function ConsensusBlock({ cover }: { cover: ReportCoverData }) {
   // All three fields populate from server-side facts; absent fields
   // degrade gracefully.
   const { t } = useTranslation();
-  const rating = cover.consensus_rating;
+  // Placeholder sentinels ("N/A") must suppress the pill entirely — a
+  // rating badge reading "N/A" is noise, not information.
+  const rawRating = cover.consensus_rating;
+  const rating =
+    rawRating != null && !['n/a', 'na', 'none', '—', '-', ''].includes(rawRating.trim().toLowerCase())
+      ? rawRating
+      : null;
   const target = cover.consensus_target_mean;
   const upside = cover.consensus_upside_pct;
   if (rating == null && target == null && upside == null) return null;
@@ -36,7 +42,7 @@ function ConsensusBlock({ cover }: { cover: ReportCoverData }) {
       {rating ? (
         <span className="report-cover__consensus-badge" data-tone="neutral">
           <span className="report-cover__consensus-badge-label">
-            {t('report.consensus_rating_label', 'Consensus')}
+            {t('report.rating_label', 'Rating')}
           </span>
           <span className="report-cover__consensus-badge-value">{rating}</span>
         </span>
