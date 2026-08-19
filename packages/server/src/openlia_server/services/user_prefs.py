@@ -34,6 +34,24 @@ _VALID_REPORT_LANG = {"en", "zh-TW", "both"}
 _VALID_TZ_SOURCES = {"auto", "manual"}
 
 
+def resolve_report_language(db: Session, *, user_id: str, explicit: str | None = None) -> str:
+    """Report-language resolution shared by the report engines.
+
+    Precedence: an explicit per-department choice, else the user's global
+    ``report_language`` pref (Settings > General), else ``en``.
+
+    The global pref may be ``both`` (bilingual), which only the legacy report
+    runner understands — the modern engines (v3 / EU v2 / MB) take a single
+    ``Language``, so ``both`` resolves to ``en`` here.
+    """
+    if explicit is not None:
+        return explicit
+    stored = db.query(UserPrefs.report_language).filter_by(user_id=user_id).scalar()
+    if stored in ("en", "zh-TW"):
+        return stored
+    return "en"
+
+
 def get_or_create(db: Session, *, user_id: str) -> UserPrefs:
     prefs = db.query(UserPrefs).filter_by(user_id=user_id).one_or_none()
     if prefs is None:

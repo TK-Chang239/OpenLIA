@@ -44,10 +44,14 @@ export function SettingsPage(): JSX.Element {
           }
         />
         <Route path="disclaimer" element={<DisclaimerSection mode={mode} />} />
-        <Route path="guardrails" element={<GuardrailActivitySection mode={mode} />} />
+        {/* Guardrails and cache are served by admin-gated routers; hiding the
+            routes (like connectors above) keeps non-admins from a silent 403. */}
+        {isAdmin ? (
+          <Route path="guardrails" element={<GuardrailActivitySection mode={mode} />} />
+        ) : null}
         <Route path="skills" element={<SkillsSection />} />
         <Route path="report-templates" element={<CustomTemplatesSection />} />
-        <Route path="cache" element={<CacheAdmin />} />
+        {isAdmin ? <Route path="cache" element={<CacheAdmin />} /> : null}
         {isAdmin && import.meta.env.VITE_DEMO_MODE !== 'true' ? (
           <Route path="admin" element={<AdminSection />}>
             <Route index element={<Navigate to="invites" replace />} />

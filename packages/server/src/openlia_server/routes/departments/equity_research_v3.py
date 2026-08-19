@@ -72,6 +72,7 @@ from openlia_server.services import v3_revision_service as revision_svc
 from openlia_server.services import v3_run_service as svc
 from openlia_server.services import v3_template_service as templates_svc
 from openlia_server.services.attachments import FileUpload, extract_text, validate_uploads
+from openlia_server.services.user_prefs import resolve_report_language
 from openlia_server.services.v3_attachments import prepare_v3_attachments
 from openlia_server.services.v3_filename import build_download_filename
 from openlia_server.services.v3_wiring import build_v3_transports, resolve_eodhd_api_key
@@ -158,7 +159,9 @@ def _resolve_revision_shape(
 
 class StartV3Payload(BaseModel):
     subject: str = Field(..., min_length=1)
-    language: Language = Language.EN
+    # None = no explicit choice; the run falls back to the user's global
+    # report-language pref (Settings > General).
+    language: Language | None = None
     length: ReportLength = ReportLength.NORMAL
     # ``template_id`` resolves against ``report_v3_templates`` (built-in
     # or user-uploaded). When omitted, falls back to the ``report_type``
@@ -602,7 +605,7 @@ def build_equity_research_v3_router(
         run_request = RunRequest(
             subject=payload.subject,
             template=template,
-            language=payload.language,
+            language=payload.language or Language(resolve_report_language(db, user_id=user.id)),
             length=payload.length,
             provider_kind=payload.provider_kind,
             model=payload.model,
@@ -706,7 +709,7 @@ def build_equity_research_v3_router(
         run_request = RunRequest(
             subject=payload.subject,
             template=template,
-            language=payload.language,
+            language=payload.language or Language(resolve_report_language(db, user_id=user.id)),
             length=payload.length,
             provider_kind=payload.provider_kind,
             model=payload.model,

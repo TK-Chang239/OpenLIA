@@ -16,13 +16,25 @@ export const DisclaimerSection: FC<Props> = ({ mode }) => {
   const { t } = useTranslation();
   const [payload, setPayload] = useState<DisclaimerPayload | null>(null);
   const [status, setStatus] = useState<DisclaimerStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    Promise.all([fetchDisclaimer(), fetchDisclaimerStatus(mode)]).then(([p, s]) => {
-      setPayload(p);
-      setStatus(s);
-    });
+    Promise.all([fetchDisclaimer(), fetchDisclaimerStatus(mode)])
+      .then(([p, s]) => {
+        setPayload(p);
+        setStatus(s);
+      })
+      .catch((e: Error) => setError(e.message));
   }, [mode]);
-  if (!payload || !status) return null;
+  if (error) {
+    return (
+      <p className="text-sm text-red-500">
+        {t('settings.disclaimer.load_error')} {error}
+      </p>
+    );
+  }
+  if (!payload || !status) {
+    return <p className="text-sm text-slate-500">{t('common.loading')}</p>;
+  }
   const stale =
     status.accepted_version && status.accepted_version !== status.current_version;
   return (

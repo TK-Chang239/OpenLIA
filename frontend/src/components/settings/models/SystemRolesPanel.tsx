@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getEnabledModels, RosterEntry } from '../../../api/settings';
-import { listSlotDefaults, setSlotDefault } from '../../../api/llm_slots';
+import { deleteSlotDefault, listSlotDefaults, setSlotDefault } from '../../../api/llm_slots';
 
 const SYSTEM_ROLES: { id: string; label: string }[] = [
   { id: 'connector_agentic_resolver', label: 'Connector agentic resolver' },
@@ -25,9 +25,17 @@ export function SystemRolesPanel(): JSX.Element {
   }, []);
 
   const onChange = async (roleId: string, modelId: string) => {
-    if (!modelId) return;
-    await setSlotDefault('system_role', roleId, modelId);
-    setAssignments((prev) => ({ ...prev, [roleId]: modelId }));
+    if (modelId) {
+      await setSlotDefault('system_role', roleId, modelId);
+      setAssignments((prev) => ({ ...prev, [roleId]: modelId }));
+    } else {
+      await deleteSlotDefault('system_role', roleId);
+      setAssignments((prev) => {
+        const next = { ...prev };
+        delete next[roleId];
+        return next;
+      });
+    }
   };
 
   return (

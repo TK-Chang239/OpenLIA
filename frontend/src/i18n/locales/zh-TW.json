@@ -97,8 +97,6 @@
       "notifications_title": "通知",
       "notifications_description": "在報告與排程任務完成時提醒您。",
       "notify_inapp": "應用程式內通知",
-      "notify_email": "電子郵件通知",
-      "notify_email_hint": "需由管理員設定 SMTP。",
       "appearance_title": "外觀",
       "theme_system": "跟隨系統",
       "theme_light": "淺色",
@@ -147,7 +145,8 @@
       "accepted_yes": "是",
       "accepted_no": "否",
       "reaccept_hint": "（您已接受 {{version}}，請重新確認）",
-      "accepted_prefix": "已接受："
+      "accepted_prefix": "已接受：",
+      "load_error": "無法載入免責聲明："
     },
     "guardrails": {
       "title": "風控紀錄",
@@ -1741,7 +1740,7 @@
     "mb_empty": "尚無簡報",
     "mb_empty_hint": "排定晨間簡報後，即可在此看到今日重點。",
     "mb_loading": "載入簡報...",
-    "ticker_source_as_of": "EODHD \u00b7 \u6578\u64da\u6642\u9593 {{time}}",
+    "ticker_source_as_of": "EODHD · 數據時間 {{time}}",
     "ticker_connect_eodhd": "連接 EODHD 以查看市場指數"
   },
   "report": {

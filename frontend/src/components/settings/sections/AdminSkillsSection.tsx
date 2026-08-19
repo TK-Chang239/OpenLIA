@@ -1,22 +1,27 @@
 import { useEffect, useState } from 'react';
-
-interface AuditEntry {
-  id: string; created_at: string; user_id: string | null;
-  session_id: string | null; department_id: string | null;
-  event_type: string; skill_id: string; payload: Record<string, unknown>;
-}
+import { listSkillAudit, type SkillAuditEntry } from '../../../api/skills';
 
 export function AdminSkillsSection(): JSX.Element {
-  const [audit, setAudit] = useState<AuditEntry[] | null>(null);
+  const [audit, setAudit] = useState<SkillAuditEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    fetch('/api/admin/skills/audit?since_days=30', { credentials: 'include' })
-      .then(r => r.json())
-      .then(j => setAudit(j.items));
+    let mounted = true;
+    listSkillAudit(30)
+      .then((items) => {
+        if (mounted) setAudit(items);
+      })
+      .catch((e: Error) => {
+        if (mounted) setError(e.message);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
   return (
     <div className="p-6 space-y-4">
       <h2 className="text-xl font-semibold">Skill Activity (admin)</h2>
-      {audit === null ? <p>Loading…</p>
+      {error ? <p className="text-sm text-red-500">Failed to load skill activity: {error}</p>
+        : audit === null ? <p>Loading…</p>
         : audit.length === 0 ? <p>No skill events.</p>
         : <table className="w-full text-sm">
             <thead>

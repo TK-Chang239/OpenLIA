@@ -15,6 +15,8 @@ import { ToastProvider, useToast } from "../components/primitives/Toast";
 import { SavedReportsProvider } from "../components/repo/SavedReportsContext";
 import { useDeptHealth } from "../store/dept-health";
 import { useNotificationsStream } from "../app/useNotificationsStream";
+import { getPrefs } from "../api/settings";
+import { setThemeSetting } from "../hooks/useTheme";
 
 // Demo mode shows a one-time intro modal on load. Gated + lazy so it stays out
 // of the normal build.
@@ -61,6 +63,13 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
   useEffect(() => {
     void refreshHealth();
   }, [refreshHealth]);
+  useEffect(() => {
+    // The server pref is the theme source of truth; localStorage is only the
+    // fast-boot cache. One sync per app load; offline keeps the cached theme.
+    void getPrefs()
+      .then((p) => setThemeSetting(p.theme))
+      .catch(() => undefined);
+  }, []);
   useEffect(() => {
     closeViewer();
   }, [pathname, closeViewer]);

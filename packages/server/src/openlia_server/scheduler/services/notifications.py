@@ -10,12 +10,21 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from openlia_server.db.models.config import UserPrefs
 from openlia_server.db.models.scheduler import UserNotification
 from openlia_server.scheduler.registry import NotificationType
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _inapp_enabled(session: Session, user_id: str) -> bool:
+    enabled = session.execute(
+        select(UserPrefs.notify_inapp).where(UserPrefs.user_id == user_id)
+    ).scalar_one_or_none()
+    # No prefs row yet = the column's default (on).
+    return enabled is None or bool(enabled)
 
 
 def insert(
@@ -26,7 +35,11 @@ def insert(
     department: str,
     message: str,
     job_run_id: str | None,
-) -> str:
+) -> str | None:
+    """Insert a notification row, or return None when the user has in-app
+    notifications turned off (Settings > General)."""
+    if not _inapp_enabled(session, user_id):
+        return None
     notif_id = uuid.uuid4().hex
     row = UserNotification(
         id=notif_id,

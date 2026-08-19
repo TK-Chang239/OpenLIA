@@ -97,8 +97,6 @@
       "notifications_title": "Notifications",
       "notifications_description": "Alerts when reports and scheduled jobs finish.",
       "notify_inapp": "In-app notifications",
-      "notify_email": "Email notifications",
-      "notify_email_hint": "Requires SMTP setup by an admin.",
       "appearance_title": "Appearance",
       "theme_system": "System",
       "theme_light": "Light",
@@ -147,7 +145,8 @@
       "accepted_yes": "yes",
       "accepted_no": "no",
       "reaccept_hint": "(you accepted {{version}}; please re-accept)",
-      "accepted_prefix": "Accepted:"
+      "accepted_prefix": "Accepted:",
+      "load_error": "Could not load the disclaimer:"
     },
     "guardrails": {
       "title": "Guardrail activity",
@@ -1742,7 +1741,7 @@
     "mb_empty": "No briefing yet",
     "mb_empty_hint": "Schedule a Morning Briefing to see today’s read here.",
     "mb_loading": "Loading briefing...",
-    "ticker_source_as_of": "EODHD \u00b7 as of {{time}}",
+    "ticker_source_as_of": "EODHD · as of {{time}}",
     "ticker_connect_eodhd": "Connect EODHD to see market indices"
   },
   "report": {
