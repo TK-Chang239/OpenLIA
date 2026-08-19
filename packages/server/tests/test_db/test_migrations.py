@@ -39,6 +39,7 @@ EXPECTED_TABLES = {
     # Dashboard (6)
     "pt_user_configs",
     "pt_presets",
+    "pt_dashboard_cache",
     "mr_dashboard_state",
     "mr_dashboard_cache",
     "rs_user_config",
