@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.dashboard import MrDashboardCache
 from openlia_server.services import connectors_service, portfolio
+from openlia_server.services.dash_citations import citation_rows
 from openlia_server.services.llm_providers import (
     get_capability_override,
     resolve_provider_api_key,
@@ -452,11 +453,16 @@ async def run_to_cache(
             f"status={result.status} message={result.message}"
         )
 
+    # Attach the run's citation ledger so the UI can render the prose's
+    # [^source_id] markers as links instead of showing/stripping raw tokens.
+    payload = dict(result.payload)
+    payload["citations"] = citation_rows(result.citations)
+
     _upsert_cache(
         db,
         user_id=user_id,
         dashboard_slug=dashboard_slug,
-        payload=result.payload,
+        payload=payload,
         model_ref=request.model,
     )
     return dashboard_slug

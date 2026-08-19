@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { useLinkedProse } from "../../../lib/citationLinks";
+
 import "./styles.css";
 import type { Status } from "../../../lib/macro_research/dalio_copy/types";
 
@@ -94,6 +96,7 @@ export function DashHero({
   stats?: HeroStat[];
   side?: ReactNode;
 }): JSX.Element {
+  const prose = useLinkedProse();
   return (
     <section className="mr-hero">
       <div className="left">
@@ -105,7 +108,7 @@ export function DashHero({
           {headline}
           {headlineAccent ? <span className="accent"> {headlineAccent}</span> : null}
         </h1>
-        <p className="lede">{lede}</p>
+        <p className="lede">{prose(lede)}</p>
         {stats && stats.length > 0 ? (
           <div className="stat-row">
             {stats.map((s) => (
@@ -205,6 +208,7 @@ export function IndCard({
   body?: ReactNode;
   fillPct?: number;
 }): JSX.Element {
+  const prose = useLinkedProse();
   return (
     <div className="mr-ind">
       <div className="row1">
@@ -220,7 +224,7 @@ export function IndCard({
           <div className={`fill ${fillClassFor(status)}`} style={{ width: `${fillPct}%` }} />
         </div>
       ) : null}
-      {body ? <div className="body">{body}</div> : null}
+      {body ? <div className="body">{prose(body)}</div> : null}
     </div>
   );
 }
@@ -244,13 +248,14 @@ export function Verdict({
   tags?: { label: string; href?: string }[];
   testid?: string;
 }): JSX.Element {
+  const prose = useLinkedProse();
   return (
     <div className={`mr-verdict ${tone ?? ""}`} data-testid={testid}>
       <div className="badge">{badge}</div>
       <div className="body">
         {meta ? <div className="meta">{meta}</div> : null}
         <h2>{headline}</h2>
-        <p>{body}</p>
+        <p>{prose(body)}</p>
         {tags && tags.length > 0 ? (
           <div className="tags">
             {tags.map((t) =>
@@ -373,17 +378,18 @@ export function ScenarioDuo({
   bull: { label: string; title: string; body: string };
   bear: { label: string; title: string; body: string };
 }): JSX.Element {
+  const prose = useLinkedProse();
   return (
     <div className="mr-scen-duo">
       <div className="mr-scen bull">
         <span className="st">{bull.label}</span>
         <h4>{bull.title}</h4>
-        <p>{bull.body}</p>
+        <p>{prose(bull.body)}</p>
       </div>
       <div className="mr-scen bear">
         <span className="st">{bear.label}</span>
         <h4>{bear.title}</h4>
-        <p>{bear.body}</p>
+        <p>{prose(bear.body)}</p>
       </div>
     </div>
   );
@@ -400,11 +406,12 @@ export function ProseCard({
   title: string;
   body: string;
 }): JSX.Element {
+  const prose = useLinkedProse();
   return (
     <div className="mr-card-sm">
       {eyebrow ? <SectionLabel>{eyebrow}</SectionLabel> : null}
       <div className="mr-card-title">{title}</div>
-      <div className="mr-card-body-text">{body}</div>
+      <div className="mr-card-body-text">{prose(body)}</div>
     </div>
   );
 }

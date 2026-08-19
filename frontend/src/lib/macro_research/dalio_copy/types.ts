@@ -89,7 +89,15 @@ export interface T1WatchRow {
   body: string;
 }
 
+/** Payload-attached citation row: resolves `[^source_id]` prose markers. */
+export interface MrCitation {
+  source_id: string;
+  title?: string | null;
+  url?: string | null;
+}
+
 export interface DebtCycleData {
+  citations?: MrCitation[];
   header: {
     title: string;
     subtitle: string;
@@ -228,6 +236,7 @@ export interface T2TransitionProbabilities {
 }
 
 export interface FourSeasonsData {
+  citations?: MrCitation[];
   header: {
     title: string;
     subtitle: string;
@@ -347,6 +356,7 @@ export interface T3StressTest {
 }
 
 export interface AllWeatherData {
+  citations?: MrCitation[];
   header: {
     title: string;
     subtitle: string;
@@ -474,6 +484,7 @@ export interface T4ProseCard {
 }
 
 export interface WorldOrderData {
+  citations?: MrCitation[];
   header: {
     title: string;
     subtitle: string;
@@ -617,6 +628,7 @@ export interface T5ForceNetwork {
 }
 
 export interface FiveForcesData {
+  citations?: MrCitation[];
   header: {
     title: string;
     subtitle: string;
@@ -733,6 +745,7 @@ export interface ConsolidatedTrigger {
 }
 
 export interface SummaryData {
+  citations?: MrCitation[];
   hero: {
     eyebrow: string;
     eyebrowStrong?: string;

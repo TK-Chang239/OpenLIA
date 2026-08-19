@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.dashboard import RsDashboardCache
 from openlia_server.services import connectors_service
+from openlia_server.services.dash_citations import citation_rows
 from openlia_server.services.llm_providers import (
     get_capability_override,
     resolve_provider_api_key,
@@ -257,6 +258,10 @@ async def run_to_cache(
     # Stamp captured_at if not already set by the engine.
     if not payload.get("captured_at"):
         payload["captured_at"] = datetime.now(UTC).isoformat()
+
+    # Attach the run's citation ledger so the UI can render the narrative's
+    # [^source_id] markers as links instead of stripping them.
+    payload["citations"] = citation_rows(result.citations)
 
     _insert_cache(
         db,

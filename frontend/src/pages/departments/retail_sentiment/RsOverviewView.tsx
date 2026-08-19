@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { stripCitationMarkers } from "../../../lib/citations";
+import { linkifyCitations } from "../../../lib/citationLinks";
 
 import {
   getDashboard,
@@ -291,7 +291,7 @@ function PayloadView({
             style={{ fontSize: 14.5, lineHeight: 1.65 }}
             data-testid="rs-narrative"
           >
-            {stripCitationMarkers(payload.narrative)}
+            {linkifyCitations(payload.narrative, payload.citations)}
           </p>
           <div className="flex items-center gap-4 pt-1">
             <div className="flex flex-col gap-0.5">
@@ -408,7 +408,7 @@ function PayloadView({
                 key={i}
                 className="px-5 py-3 text-[13.5px] text-[--color-text-secondary]"
               >
-                {stripCitationMarkers(n)}
+                {linkifyCitations(n, payload.citations)}
               </li>
             ))}
           </ul>

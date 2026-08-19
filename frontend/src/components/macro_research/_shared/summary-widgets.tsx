@@ -1,7 +1,13 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useContext, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { stripCitationMarkers } from "../../../lib/citations";
+import {
+  CitationTableContext,
+  linkifyCitations,
+  useLinkedProse,
+  type DashCitation,
+} from "../../../lib/citationLinks";
 
 import "./styles.css";
 import type {
@@ -43,6 +49,7 @@ export function SummaryHero({
   hero: SummaryData["hero"];
   liaTake: LiaTake;
 }): JSX.Element {
+  const prose = useLinkedProse();
   return (
     <section className="mr-summary-hero">
       <div className="left">
@@ -53,7 +60,7 @@ export function SummaryHero({
         <h1>
           {hero.headline} <span className="accent">{hero.headlineAccent}</span>
         </h1>
-        <p className="lede">{hero.lede}</p>
+        <p className="lede">{prose(hero.lede)}</p>
         <div className="stat-row">
           {hero.stats.map((s) => (
             <div key={s.k} className="mr-hstat">
@@ -68,22 +75,24 @@ export function SummaryHero({
   );
 }
 
-function renderInline(text: string): ReactNode {
-  // **bold** and *italic* markdown-lite; ledger citation markers are
-  // stripped because dashboard payloads carry no citation table.
-  const parts = stripCitationMarkers(text).split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+function renderInline(text: string, citations?: DashCitation[] | null): ReactNode {
+  // **bold** and *italic* markdown-lite. With a citation table the ledger
+  // markers become superscript links; without one they are stripped.
+  const cleaned = citations && citations.length > 0 ? text : stripCitationMarkers(text);
+  const parts = cleaned.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
   return parts.map((p, i) => {
     if (p.startsWith("**") && p.endsWith("**")) {
-      return <strong key={i}>{p.slice(2, -2)}</strong>;
+      return <strong key={i}>{linkifyCitations(p.slice(2, -2), citations)}</strong>;
     }
     if (p.startsWith("*") && p.endsWith("*") && p.length > 2) {
-      return <em key={i}>{p.slice(1, -1)}</em>;
+      return <em key={i}>{linkifyCitations(p.slice(1, -1), citations)}</em>;
     }
-    return <span key={i}>{p}</span>;
+    return <span key={i}>{linkifyCitations(p, citations)}</span>;
   });
 }
 
 function LiaTakeCard({ take }: { take: LiaTake }): JSX.Element {
+  const citations = useContext(CitationTableContext);
   return (
     <div className="mr-lia-take" data-testid="summary-lia-take">
       <div className="head">
@@ -97,7 +106,7 @@ function LiaTakeCard({ take }: { take: LiaTake }): JSX.Element {
       </div>
       <div className="body">
         {take.paragraphs.map((p, i) => (
-          <p key={i}>{renderInline(p)}</p>
+          <p key={i}>{renderInline(p, citations)}</p>
         ))}
       </div>
       <div className="pulls">
@@ -160,6 +169,7 @@ export function FrameworkGrid({
   testid?: string;
 }): JSX.Element {
   const prefersReducedMotion = useReducedMotion();
+  const citations = useContext(CitationTableContext);
   const stagger = prefersReducedMotion ? 0 : 0.06;
   return (
     <motion.div
@@ -201,7 +211,7 @@ export function FrameworkGrid({
             <Spill status={c.stamp.status}>{c.stamp.label}</Spill>
           </div>
           <p className="verdict-line">
-            {c.spotlight && c.verdictLine ? renderInline(c.verdictLine) : c.summary}
+            {c.spotlight && c.verdictLine ? renderInline(c.verdictLine, citations) : c.summary}
           </p>
           {c.spotlight && c.spotlightChart ? (
             <div className="mr-fw-spotlight-vis">
@@ -275,11 +285,12 @@ export function DepMap({
 /* ===== Gold thesis cascade ===== */
 
 function CascadeStepEl({ step }: { step: CascadeStep }): JSX.Element {
+  const citations = useContext(CitationTableContext);
   return (
     <div className={`step ${step.target ? "target" : ""}`}>
       <span className="badge">{step.badge}</span>
       <span className="h">{step.title}</span>
-      <span className="b">{renderInline(step.body)}</span>
+      <span className="b">{renderInline(step.body, citations)}</span>
     </div>
   );
 }

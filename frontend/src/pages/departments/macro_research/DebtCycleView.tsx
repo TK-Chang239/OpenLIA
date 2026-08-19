@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getDashboard, runAssessment } from "../../../api/macro_research";
+import { CitationTableContext, linkifyCitations } from "../../../lib/citationLinks";
 import type {
   DebtCycleData,
   Status,
@@ -123,6 +124,7 @@ export default function DebtCycleView(): JSX.Element {
   }));
 
   return (
+    <CitationTableContext.Provider value={data.citations ?? null}>
     <article>
       <DashHero
         eyebrow={data.header.subtitle}
@@ -167,7 +169,7 @@ export default function DebtCycleView(): JSX.Element {
         }}
       >
         <div className="mr-card-title">{data.phaseBox.title}</div>
-        <div className="mr-card-body-text">{data.phaseBox.body}</div>
+        <div className="mr-card-body-text">{linkifyCitations(data.phaseBox.body, data.citations)}</div>
       </div>
       <div className="mr-grid2" style={{ marginBottom: 14 }}>
         <ProseCard
@@ -219,7 +221,7 @@ export default function DebtCycleView(): JSX.Element {
             <div key={r.name} className="mr-trig">
               <span className={`dot ${toneToStatus(r.tone)}`} />
               <div className="name">{r.name}</div>
-              <div className="body">{r.body}</div>
+              <div className="body">{linkifyCitations(r.body, data.citations)}</div>
               <Spill status={toneToStatus(r.tone)}>{toneToStatus(r.tone)}</Spill>
             </div>
           ))}
@@ -239,5 +241,6 @@ export default function DebtCycleView(): JSX.Element {
         {data.sources}
       </SrcFoot>
     </article>
+    </CitationTableContext.Provider>
   );
 }

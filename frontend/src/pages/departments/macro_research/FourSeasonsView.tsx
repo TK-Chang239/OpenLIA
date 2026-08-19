@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getDashboard, runAssessment } from "../../../api/macro_research";
+import { CitationTableContext } from "../../../lib/citationLinks";
 import type {
   FourSeasonsData,
   Status,
@@ -142,6 +143,7 @@ export default function FourSeasonsView(): JSX.Element {
     }));
 
   return (
+    <CitationTableContext.Provider value={data.citations ?? null}>
     <article>
       <DashHero
         eyebrow={data.header.subtitle}
@@ -318,6 +320,7 @@ export default function FourSeasonsView(): JSX.Element {
         {data.sources}
       </SrcFoot>
     </article>
+    </CitationTableContext.Provider>
   );
 }
 
