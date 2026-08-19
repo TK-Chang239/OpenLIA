@@ -187,6 +187,29 @@ class MrDashboardCache(Base):
     )
 
 
+class PtDashboardCache(Base):
+    """Latest computed Panic Thermometer dashboard payload per user.
+
+    Written by the request path (compute-on-stale) and the scheduled
+    pt_dash job; the route serves it so page loads stop paying the
+    ~12-upstream-call compute cost, and cold loads survive restarts."""
+
+    __tablename__ = "pt_dashboard_cache"
+
+    id: Mapped[int] = mapped_column(Integer, autoincrement=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_pt_dashboard_cache"),
+        UniqueConstraint("user_id", name="uq_pt_dashboard_cache_user"),
+        Index("ix_pt_dashboard_cache_user", "user_id"),
+    )
+
+
 # ---------- Retail Sentiment ----------
 
 

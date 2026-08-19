@@ -26,6 +26,7 @@ from openlia_server.scheduler.executors.mr_dash import MrDashExecutor
 from openlia_server.scheduler.executors.portfolio_prices import (
     production_executor as portfolio_executor_factory,
 )
+from openlia_server.scheduler.executors.pt_dash import PtDashExecutor
 from openlia_server.scheduler.executors.rs import RSSnapshotExecutor
 from openlia_server.scheduler.payloads import (
     EUScanPlanner,
@@ -49,6 +50,7 @@ def build_scheduler_service(
     financial_adapter_provider: Callable[[], Any] | None = None,
     eu_v2_syncer: EuV2CalendarSyncer | None = None,
     eu_v2_dispatcher: EuV2Dispatcher | None = None,
+    pt_runner_provider: Callable[[], Any] | None = None,
 ) -> SchedulerService:
     executors: dict[JobType, Any] = {
         # The MB executor runs the report_mb engine inline via mb_v2_run_service
@@ -89,6 +91,12 @@ def build_scheduler_service(
         executors[JobType.EU_V2_DISPATCH] = EuV2DispatchExecutor(
             session_factory=session_factory,
             dispatcher=eu_v2_dispatcher,
+        )
+
+    if pt_runner_provider is not None:
+        executors[JobType.PT_DASH] = PtDashExecutor(
+            session_factory=session_factory,
+            runner_provider=pt_runner_provider,
         )
 
     return SchedulerService(

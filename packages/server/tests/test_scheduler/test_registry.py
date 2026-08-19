@@ -23,6 +23,7 @@ def test_job_types_match_spec() -> None:
         "portfolio_price_refresh",
         "eu_v2_sync",
         "eu_v2_dispatch",
+        "pt_dash",
     }
 
 
@@ -85,3 +86,11 @@ def test_department_mapping() -> None:
 def test_department_mapping_rejects_maintenance() -> None:
     with pytest.raises(ValueError, match="no department"):
         department_for_job_type(JobType.SYSTEM_MAINTENANCE)
+
+
+def test_pt_dash_job_key_is_global() -> None:
+    """The PT warm-cache job is global fan-out — its key carries no user id
+    and round-trips through parse_job_key."""
+    key = job_key(JobType.PT_DASH)
+    assert key == "pt_dash"
+    assert parse_job_key(key) == (JobType.PT_DASH, None)

@@ -246,51 +246,51 @@ class PtRunner:
     ) -> None:
         """Insert a PtTriggerEvent + notification when composite level changes."""
 
-        session = self.session_factory()
-        try:
-            stmt = (
-                select(PtTriggerEvent)
-                .where(PtTriggerEvent.user_id == user_id)
-                .order_by(desc(PtTriggerEvent.occurred_at))
-                .limit(1)
-            )
-            latest = session.execute(stmt).scalar_one_or_none()
-            new_level = composite["level"]
-            if latest is not None and latest.level_to == new_level:
-                return
+        with self.session_factory() as session:
+            try:
+                stmt = (
+                    select(PtTriggerEvent)
+                    .where(PtTriggerEvent.user_id == user_id)
+                    .order_by(desc(PtTriggerEvent.occurred_at))
+                    .limit(1)
+                )
+                latest = session.execute(stmt).scalar_one_or_none()
+                new_level = composite["level"]
+                if latest is not None and latest.level_to == new_level:
+                    return
 
-            from_level = latest.level_to if latest is not None else None
-            now = datetime.now(UTC)
-            event = PtTriggerEvent(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                level_from=from_level,
-                level_to=new_level,
-                occurred_at=now,
-                payload_json={
-                    "composite": composite,
-                    "panel_statuses": panel_statuses,
-                },
-            )
-            session.add(event)
+                from_level = latest.level_to if latest is not None else None
+                now = datetime.now(UTC)
+                event = PtTriggerEvent(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    level_from=from_level,
+                    level_to=new_level,
+                    occurred_at=now,
+                    payload_json={
+                        "composite": composite,
+                        "panel_statuses": panel_statuses,
+                    },
+                )
+                session.add(event)
 
-            message = (
-                f"Panic level: {from_level} -> {new_level}"
-                if from_level
-                else f"Panic level: {new_level}"
-            )
-            notifications_svc.insert(
-                session,
-                user_id=user_id,
-                type=NotificationType.PANIC_LEVEL_CHANGE,
-                department="panic_thermometer",
-                message=message,
-                job_run_id=None,
-            )
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
+                message = (
+                    f"Panic level: {from_level} -> {new_level}"
+                    if from_level
+                    else f"Panic level: {new_level}"
+                )
+                notifications_svc.insert(
+                    session,
+                    user_id=user_id,
+                    type=NotificationType.PANIC_LEVEL_CHANGE,
+                    department="panic_thermometer",
+                    message=message,
+                    job_run_id=None,
+                )
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
 
     def cached_panel_inputs(self, user_id: str, panel_id: str) -> dict[str, Any] | None:
         return self._cache.get((user_id, panel_id))
