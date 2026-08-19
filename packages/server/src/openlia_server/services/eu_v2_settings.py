@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.report_eu import EuV2Settings
+from openlia_server.services.user_prefs import resolve_report_language
 
 _VALID_LENGTHS = {"concise", "normal", "elaborative"}
 _VALID_EFFORTS = {None, "medium", "high"}
@@ -15,7 +16,6 @@ _VALID_EFFORTS = {None, "medium", "high"}
 _DEFAULT_PROVIDER_KIND = "anthropic"
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 _DEFAULT_TEMPLATE_ID = "eu_default"
-_DEFAULT_LANGUAGE = "en"
 _DEFAULT_LENGTH = "normal"
 
 
@@ -51,7 +51,11 @@ def _row_to_dto(row: EuV2Settings) -> EuSettingsDTO:
 
 
 def get_settings(db: Session, *, user_id: str) -> EuSettingsDTO:
-    """Return the user's settings row, or defaults when absent."""
+    """Return the user's settings row, or defaults when absent.
+
+    A user who never saved EU settings has no explicit language choice, so
+    the default follows the global report-language pref.
+    """
     row = db.get(EuV2Settings, user_id)
     if row is None:
         return EuSettingsDTO(
@@ -59,7 +63,7 @@ def get_settings(db: Session, *, user_id: str) -> EuSettingsDTO:
             provider_kind=_DEFAULT_PROVIDER_KIND,
             model=_DEFAULT_MODEL,
             template_id=_DEFAULT_TEMPLATE_ID,
-            language=_DEFAULT_LANGUAGE,
+            language=resolve_report_language(db, user_id=user_id),
             length=_DEFAULT_LENGTH,
             reasoning_effort=None,
             enabled_provider_ids=frozenset({"eodhd"}),

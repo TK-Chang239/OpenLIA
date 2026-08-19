@@ -1,36 +1,96 @@
-import { useCallback, useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
-export type Theme = "light" | "dark";
+/** What the user picked. `system` follows the OS preference live. */
+export type ThemeSetting = "system" | "light" | "dark";
+/** What is actually painted on `<html data-theme>`. */
+export type ResolvedTheme = "light" | "dark";
+
 const STORAGE_KEY = "openlia:theme";
 
-function read(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "dark") return "dark";
-  if (stored === "light") return "light";
-  // No stored value: respect the OS preference so dark-mode users do not flash light.
-  if (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function"
-  ) {
-    try {
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        return "dark";
-      }
-    } catch {
-      // matchMedia unsupported; fall through
-    }
+function systemPrefersDark(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
   }
-  return "light";
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch {
+    return false;
+  }
 }
 
-export function useTheme(): { theme: Theme; setTheme: (t: Theme) => void } {
-  const [theme, setThemeState] = useState<Theme>(read);
+function readStored(): ThemeSetting {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === "dark" || stored === "light" || stored === "system") return stored;
+  return "system";
+}
 
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
+export function resolveTheme(setting: ThemeSetting): ResolvedTheme {
+  return setting === "system" ? (systemPrefersDark() ? "dark" : "light") : setting;
+}
 
-  const setTheme = useCallback((t: Theme) => setThemeState(t), []);
-  return { theme, setTheme };
+// Module-level store so every useTheme() consumer (TopBar toggle, Settings
+// radio) sees the same value instead of holding divergent copies.
+let setting: ThemeSetting = readStored();
+const listeners = new Set<() => void>();
+
+function apply(): void {
+  document.documentElement.setAttribute("data-theme", resolveTheme(setting));
+}
+
+function notify(): void {
+  for (const l of listeners) l();
+}
+
+/**
+ * Set + persist the theme locally (localStorage cache). The server pref
+ * (`user_prefs.theme`) is the source of truth; callers that change the theme
+ * on the user's behalf also PATCH /api/settings/prefs themselves.
+ */
+export function setThemeSetting(next: ThemeSetting): void {
+  setting = next;
+  localStorage.setItem(STORAGE_KEY, next);
+  apply();
+  notify();
+}
+
+if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  try {
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", () => {
+        if (setting === "system") {
+          apply();
+          notify();
+        }
+      });
+  } catch {
+    // matchMedia without addEventListener (old engines/jsdom): system mode
+    // then only re-resolves on reload.
+  }
+}
+
+// Paint the stored theme at import time so the app never flashes the wrong one.
+apply();
+
+function subscribe(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+
+// Snapshot encodes setting + resolution so an OS-preference flip in `system`
+// mode re-renders subscribers even though the setting itself is unchanged.
+function getSnapshot(): string {
+  return `${setting}:${resolveTheme(setting)}`;
+}
+
+export function useTheme(): {
+  theme: ThemeSetting;
+  resolved: ResolvedTheme;
+  setTheme: (t: ThemeSetting) => void;
+} {
+  const snap = useSyncExternalStore(subscribe, getSnapshot);
+  const [theme, resolved] = snap.split(":") as [ThemeSetting, ResolvedTheme];
+  return { theme, resolved, setTheme: setThemeSetting };
 }

@@ -78,6 +78,7 @@ from openlia_server.services.attachments import (
     validate_uploads,
 )
 from openlia_server.services.mb_v2_filename import build_download_filename
+from openlia_server.services.user_prefs import resolve_report_language
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +114,9 @@ class ScheduleIn(BaseModel):
     enabled_connectors: EnabledConnectorsIn = Field(default_factory=EnabledConnectorsIn)
     provider_kind: str | None = None
     model: str | None = None
-    language: str = "en"
+    # None = no explicit choice; the route resolves it against the user's
+    # global report-language pref.
+    language: str | None = None
     length: str = "normal"
     reasoning_effort: str | None = None
     is_enabled: bool = True
@@ -191,7 +194,7 @@ class RunStartIn(BaseModel):
     enabled_connectors: EnabledConnectorsIn = Field(default_factory=EnabledConnectorsIn)
     provider_kind: str = _DEFAULT_PROVIDER_KIND
     model: str = _DEFAULT_MODEL
-    language: str = "en"
+    language: str | None = None
     length: str = "normal"
     reasoning_effort: str | None = None
 
@@ -508,7 +511,7 @@ def build_morning_briefing_router(
                 enabled_connectors=payload.enabled_connectors.model_dump(),
                 provider_kind=payload.provider_kind,
                 model=payload.model,
-                language=payload.language,
+                language=resolve_report_language(db, user_id=user.id, explicit=payload.language),
                 length=payload.length,
                 reasoning_effort=payload.reasoning_effort,
                 web_search=payload.enabled_connectors.web_search,
@@ -541,7 +544,7 @@ def build_morning_briefing_router(
                 enabled_connectors=payload.enabled_connectors.model_dump(),
                 provider_kind=payload.provider_kind,
                 model=payload.model,
-                language=payload.language,
+                language=resolve_report_language(db, user_id=user.id, explicit=payload.language),
                 length=payload.length,
                 reasoning_effort=payload.reasoning_effort,
                 web_search=payload.enabled_connectors.web_search,
@@ -837,7 +840,7 @@ def build_morning_briefing_router(
             enabled_connectors = payload.enabled_connectors.model_dump()
             provider_kind = payload.provider_kind
             model = payload.model
-            language = payload.language
+            language = resolve_report_language(db, user_id=user.id, explicit=payload.language)
             length = payload.length
             reasoning_effort = payload.reasoning_effort
 

@@ -10,6 +10,7 @@ import {
   type UiLangCode,
 } from '../../../api/settings';
 import { setUiLanguage } from '../../../i18n';
+import { setThemeSetting } from '../../../hooks/useTheme';
 import { useDirtyForm } from '../useDirtyForm';
 import { SaveButton, SaveState } from '../SaveButton';
 import { SettingGroup } from '../SettingGroup';
@@ -83,7 +84,6 @@ export function GeneralSection(): JSX.Element {
         display_name: form.values.display_name,
         theme: form.values.theme,
         notify_inapp: form.values.notify_inapp,
-        notify_email: form.values.notify_email,
         display_language: form.values.display_language,
         response_language: form.values.response_language,
         report_language: form.values.report_language,
@@ -97,6 +97,9 @@ export function GeneralSection(): JSX.Element {
       if (next.display_language === 'zh-TW' || next.display_language === 'en') {
         setUiLanguage(next.display_language);
       }
+      // Apply the saved appearance immediately (and keep the TopBar toggle,
+      // which shares the same store, in sync).
+      setThemeSetting(next.theme);
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 1500);
     } catch (e) {
@@ -155,12 +158,6 @@ export function GeneralSection(): JSX.Element {
           label={t('settings.general.notify_inapp')}
           checked={form.values.notify_inapp}
           onChange={(v) => form.setField('notify_inapp', v)}
-        />
-        <ToggleSwitch
-          label={t('settings.general.notify_email')}
-          description={t('settings.general.notify_email_hint')}
-          checked={form.values.notify_email}
-          onChange={(v) => form.setField('notify_email', v)}
         />
       </SettingGroup>
 

@@ -23,6 +23,7 @@ import { type JSX, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../api/_request";
+import { getPrefs } from "../../api/settings";
 import {
   FREEFORM_TEMPLATE_ID,
   type V3ReportDetail,
@@ -128,6 +129,21 @@ export default function EquityResearchV3(): JSX.Element {
   const [prompt, setPrompt] = useState("");
   const [settings, setSettings] = useState<V3SettingsValue>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    // First visit (no saved pill settings yet): seed the language from the
+    // global report-language pref so Settings > General supplies the default.
+    // Once the user saves the settings modal, the stored value wins.
+    if (window.localStorage.getItem(SETTINGS_LS_KEY)) return;
+    void getPrefs()
+      .then((p) => {
+        const lang = p.report_language;
+        if (lang === "en" || lang === "zh-TW") {
+          setSettings((s) => ({ ...s, language: lang }));
+        }
+      })
+      .catch(() => undefined);
+  }, []);
   const [model, setModel] = useState<V3ModelSelection | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [templatesRefreshKey, setTemplatesRefreshKey] = useState(0);

@@ -20,10 +20,13 @@ const ITEMS: NavItem[] = [
   { to: '/settings/timezone', labelKey: 'settings.tabs.timezone' },
   { to: '/settings/account', labelKey: 'settings.tabs.account' },
   { to: '/settings/disclaimer', labelKey: 'settings.tabs.disclaimer' },
-  { to: '/settings/guardrails', labelKey: 'settings.tabs.guardrails' },
+  // Guardrail events and the document cache are served by admin-gated routers
+  // (routes/guardrail_events.py, routes/cache.py) — same reasoning as the
+  // connectors tab above. Personal mode's single user is an admin.
+  { to: '/settings/guardrails', labelKey: 'settings.tabs.guardrails', adminOnly: true },
   { to: '/settings/skills', labelKey: 'settings.tabs.skills' },
   { to: '/settings/report-templates', labelKey: 'settings.tabs.report_templates' },
-  { to: '/settings/cache', labelKey: 'settings.tabs.cache' },
+  { to: '/settings/cache', labelKey: 'settings.tabs.cache', adminOnly: true },
   { to: '/settings/admin', labelKey: 'settings.tabs.admin', adminOnly: true },
 ];
 

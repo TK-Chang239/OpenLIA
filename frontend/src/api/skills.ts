@@ -10,6 +10,26 @@ export interface SkillSummary {
   installed_at: string;
 }
 
+export interface SkillAuditEntry {
+  id: string;
+  created_at: string;
+  user_id: string | null;
+  session_id: string | null;
+  department_id: string | null;
+  event_type: string;
+  skill_id: string;
+  payload: Record<string, unknown>;
+}
+
+export async function listSkillAudit(sinceDays: number): Promise<SkillAuditEntry[]> {
+  const res = await fetch(`/api/admin/skills/audit?since_days=${sinceDays}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`listSkillAudit: ${res.status}`);
+  const json = await res.json();
+  return (json.items ?? []) as SkillAuditEntry[];
+}
+
 export async function listSkills(): Promise<SkillSummary[]> {
   const res = await fetch('/api/skills', { credentials: 'include' });
   if (!res.ok) throw new Error(`listSkills: ${res.status}`);
