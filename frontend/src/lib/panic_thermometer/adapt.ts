@@ -219,6 +219,14 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
 }
 
+/** Uppercase short month ("AUG") for bar labels; empty when unparseable. */
+function monthLabel(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+}
+
 /** Compact "HH:MM" time for chips/labels; empty string when unparseable. */
 function shortTime(iso: string): string {
   if (!iso) return "";
@@ -674,7 +682,7 @@ export function adaptInflation(r: PanelResult): InflationPanel {
     params: paramRows(r.params),
     bigValue: `${fmt(mich, 1)}%`,
     bigValueTone: bigTone,
-    bigValueUnit: "Michigan 5y · y/y",
+    bigValueUnit: "Michigan 5y · survey level",
     bigValueStamp: {
       tone: bigTone,
       label: `${delta >= 0 ? "+" : ""}${fmt(delta, 1)}pp m/m`,
@@ -774,13 +782,21 @@ export function adaptFed(r: PanelResult): FedPanel {
           : []),
       ],
     },
-    postureTimeline: [
-      {
-        label: matchedDateLabel || "current",
-        tone,
-        isCurrent: true,
-      },
-    ],
+    // Real FOMC meeting dates (newest first from the panel); the current
+    // detected tone applies to the newest meeting, older ones render
+    // neutral. Falls back to a single "current" point when the events
+    // window returned no meetings.
+    postureTimeline: (() => {
+      const fomcDates = strArray(r.extras.fomc_dates);
+      if (fomcDates.length === 0) {
+        return [{ label: matchedDateLabel || "current", tone, isCurrent: true }];
+      }
+      return [...fomcDates].reverse().map((d, i, all) => ({
+        label: shortDate(d) || d,
+        tone: i === all.length - 1 ? tone : ("neutral" as Tone),
+        isCurrent: i === all.length - 1,
+      }));
+    })(),
     headlines:
       headline || matchedDate
         ? [
@@ -819,8 +835,13 @@ export function adaptWage(r: PanelResult): WagePanel {
   const required = num(r.params.consecutive_required, 2);
 
   const series = (r.raw_series.value ?? []).slice(-12);
+  // The wage panel ships a parallel "date" series (ISO strings); the shared
+  // raw_series type is numeric, so read it loosely.
+  const seriesDates = ((r.raw_series as Record<string, Array<number | string>>).date ?? [])
+    .slice(-12)
+    .map(String);
   const bars = series.map((v, i) => ({
-    month: "",
+    month: monthLabel(seriesDates[i]),
     value: v,
     status: wageBarStatus(v, amber, red),
     isCurrent: i === series.length - 1,
@@ -910,8 +931,16 @@ export function adaptDiplomacy(r: PanelResult): DiplomacyPanel {
       endLabel: `Day ${total} · window closes`,
     },
     signals: {
-      progress: progressDetected ? progressHeadlines.length || 1 : progressHeadlines.length,
-      escalation: escalationDetected ? escalationHeadlines.length || 1 : escalationHeadlines.length,
+      // Backend exposes full counts; the headline arrays are capped at 10
+      // for display and must not be used as counts.
+      progress: num(
+        r.extras.progress_count,
+        progressDetected ? progressHeadlines.length || 1 : progressHeadlines.length,
+      ),
+      escalation: num(
+        r.extras.escalation_count,
+        escalationDetected ? escalationHeadlines.length || 1 : escalationHeadlines.length,
+      ),
     },
     headlines,
   };

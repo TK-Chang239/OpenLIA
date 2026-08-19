@@ -45,6 +45,8 @@ export interface RetailSentimentPayload {
   aggregated_sentiment: number | null;
   analyst_gap: number | null;
   captured_at: string | null;
+  /** Run's citation ledger: resolves [^source_id] markers in the narrative. */
+  citations?: { source_id: string; title?: string | null; url?: string | null }[];
 }
 
 export interface DashboardResponse<T = unknown> {

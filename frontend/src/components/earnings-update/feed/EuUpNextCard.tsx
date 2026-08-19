@@ -49,14 +49,23 @@ export function EuUpNextCard({ entry }: Props) {
       </span>
       {entry.eps_estimate || entry.revenue_estimate ? (
         <span className="font-mono text-[10.5px] tracking-[0.04em] text-[--color-text-tertiary]">
-          {t("earnings.feed.up_next_est_eps")}{" "}
-          <strong className="text-[--color-text-secondary] font-semibold">
-            {entry.eps_estimate ?? "—"}
-          </strong>{" "}
-          · {t("earnings.feed.up_next_rev")}{" "}
-          <strong className="text-[--color-text-secondary] font-semibold">
-            {entry.revenue_estimate ?? "—"}
-          </strong>
+          {entry.eps_estimate ? (
+            <>
+              {t("earnings.feed.up_next_est_eps")}{" "}
+              <strong className="text-[--color-text-secondary] font-semibold">
+                {entry.eps_estimate}
+              </strong>
+            </>
+          ) : null}
+          {entry.eps_estimate && entry.revenue_estimate ? " · " : null}
+          {entry.revenue_estimate ? (
+            <>
+              {t("earnings.feed.up_next_rev")}{" "}
+              <strong className="text-[--color-text-secondary] font-semibold">
+                {entry.revenue_estimate}
+              </strong>
+            </>
+          ) : null}
         </span>
       ) : null}
     </article>

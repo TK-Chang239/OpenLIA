@@ -105,6 +105,25 @@ def rewrite_section_markdown(
     )
 
 
+_NUMERIC_MARKER_RE = re.compile(r"\[\^(\d+)\]")
+
+
+def linkify_citation_markers(markdown: str) -> str:
+    """Make rewritten markers reader-facing for markdown → HTML output.
+
+    The HTML renderer is plain commonmark (no footnote extension), so
+    ``[^N]`` caret syntax would pass through as literal text. Convert
+    resolved markers into markdown links targeting the bibliography's
+    ``#fn-N`` anchors, and strip the caret from any unresolved marker so
+    raw source ids never reach the reader.
+    """
+    linked = _NUMERIC_MARKER_RE.sub(
+        lambda m: rf"[\[{m.group(1)}\]](#fn-{m.group(1)})",
+        markdown,
+    )
+    return CITATION_MARKER_RE.sub(lambda m: f"[{m.group(1)}]", linked)
+
+
 def build_bibliography(
     citations: Iterable,
 ) -> list[BibliographyEntry]:

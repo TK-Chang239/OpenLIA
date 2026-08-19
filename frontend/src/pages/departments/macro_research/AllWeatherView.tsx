@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getDashboard, runAssessment } from "../../../api/macro_research";
+import { CitationTableContext } from "../../../lib/citationLinks";
 import type {
   AllWeatherData,
   Status,
@@ -132,6 +133,7 @@ export default function AllWeatherView(): JSX.Element {
   if (!data) return <DashEmpty onGenerate={onGenerate} generating={generating} note={note} />;
 
   return (
+    <CitationTableContext.Provider value={data.citations ?? null}>
     <article>
       <DashHero
         eyebrow={data.header.subtitle}
@@ -289,6 +291,7 @@ export default function AllWeatherView(): JSX.Element {
         {data.sources}
       </SrcFoot>
     </article>
+    </CitationTableContext.Provider>
   );
 }
 

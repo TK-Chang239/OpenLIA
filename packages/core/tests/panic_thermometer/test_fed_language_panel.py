@@ -25,7 +25,7 @@ def test_fed_build_context_detects_hawkish_keyword():
         },
         {
             "date": "2026-04-19",
-            "headline": "Officials echo persistent inflation worry",
+            "headline": "Fed officials echo persistent inflation worry",
             "summary": "More persistent inflation commentary.",
             "source": "Bloomberg",
         },
@@ -53,7 +53,7 @@ def test_fed_build_context_no_matches_is_dovish_green():
         },
         {
             "date": "2026-04-19",
-            "headline": "Officials remain patient",
+            "headline": "Fed officials remain patient",
             "summary": "expectations well anchored",
             "source": "WSJ",
         },

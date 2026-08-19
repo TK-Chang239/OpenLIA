@@ -34,6 +34,7 @@ from openlia_server.scheduler.registry import (
     EU_V2_SYNC_KEY,
     MAINTENANCE_JOB_KEY,
     PORTFOLIO_PRICE_REFRESH_KEY,
+    PT_DASH_KEY,
     JobType,
     department_for_job_type,
     job_key,
@@ -89,6 +90,7 @@ class SchedulerService:
         await self._register_maintenance_job()
         await self._register_portfolio_price_refresh_job()
         await self._register_eu_v2_jobs()
+        await self._register_pt_dash_job()
 
         with self.session_factory() as session:
             enabled_user_ids = {
@@ -452,6 +454,24 @@ class SchedulerService:
             )
         else:
             log.info("EU v2 dispatch executor not configured; skipping schedule")
+
+    async def _register_pt_dash_job(self) -> None:
+        # Panic Thermometer warm-cache: a global fan-out recompute every 30
+        # minutes (offset from the top of the hour so it doesn't stack on
+        # the EU dispatch sweep). Keeps pt_dashboard_cache fresh so page
+        # loads are instant and level-change alerts fire unattended.
+        if JobType.PT_DASH not in self.executors:
+            log.info("PT dash executor not configured; skipping schedule")
+            return
+        await self.scheduler.add_schedule(
+            self._run_job,
+            CronTrigger(minute="7,37", timezone=UTC),
+            id=PT_DASH_KEY,
+            args=(JobType.PT_DASH, None, None),
+            misfire_grace_time=self.settings.misfire_grace_seconds,
+            max_instances=1,
+            coalesce=True,
+        )
 
     async def _maybe_backfill(
         self,

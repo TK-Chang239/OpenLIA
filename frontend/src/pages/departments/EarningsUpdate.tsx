@@ -152,10 +152,16 @@ export default function EarningsUpdate() {
   const heroToday = !live && todayReports.length > 0 ? todayReports[0] : null;
   const restToday = heroToday ? todayReports.slice(1) : todayReports;
 
-  const upNext = useMemo(
-    () => schedule.filter((s) => s.status === "pending"),
-    [schedule],
-  );
+  const upNext = useMemo(() => {
+    // Guard against stale rows the server may still return: "up next"
+    // means pending AND actually in the future.
+    const now = Date.now();
+    return schedule.filter((s) => {
+      if (s.status !== "pending") return false;
+      const ts = new Date(s.scheduled_run_at).getTime();
+      return !Number.isNaN(ts) && ts >= now;
+    });
+  }, [schedule]);
 
   const reportsThisWeek = useMemo(() => {
     const now = Date.now();

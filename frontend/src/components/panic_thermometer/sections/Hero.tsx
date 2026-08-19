@@ -10,6 +10,14 @@ interface Props {
   onModeChange: (mode: "count" | "weighted") => void;
 }
 
+function formatThermDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const mon = d.toLocaleDateString(undefined, { month: "short" });
+  return `${day} ${mon}`;
+}
+
 export function Hero({ hero, stats, mode, onModeChange }: Props): JSX.Element {
   const { t } = useTranslation();
   const tubeY1 = 10;
@@ -128,7 +136,7 @@ export function Hero({ hero, stats, mode, onModeChange }: Props): JSX.Element {
               />
             </svg>
           </div>
-          <span className="pt-therm-date">04 May</span>
+          <span className="pt-therm-date">{formatThermDate(stats.lastRefreshIso)}</span>
         </div>
 
         <div className="pt-therm-side">

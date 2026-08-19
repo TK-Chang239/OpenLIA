@@ -1,6 +1,11 @@
 export interface DashboardSummary {
   slug: string;
   display_name: string;
+  /** ISO timestamp of the framework's last generated cache row; null when
+   * never generated. */
+  generated_at?: string | null;
+  /** True when never generated or older than the framework's TTL. */
+  is_stale?: boolean;
 }
 
 export interface DashboardResponse<T = unknown> {

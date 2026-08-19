@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getDashboard, runAssessment } from "../../../api/macro_research";
+import { CitationTableContext } from "../../../lib/citationLinks";
 import type { SummaryData } from "../../../lib/macro_research/dalio_copy/types";
 import {
   Cascade,
@@ -103,6 +104,7 @@ export default function SummaryView(): JSX.Element {
   if (!data) return <DashEmpty onGenerate={onGenerate} generating={generating} note={note} />;
 
   return (
+    <CitationTableContext.Provider value={data.citations ?? null}>
     <article>
       <SummaryHero hero={data.hero} liaTake={data.liaTake} />
 
@@ -132,5 +134,6 @@ export default function SummaryView(): JSX.Element {
         {data.sources}
       </SrcFoot>
     </article>
+    </CitationTableContext.Provider>
   );
 }

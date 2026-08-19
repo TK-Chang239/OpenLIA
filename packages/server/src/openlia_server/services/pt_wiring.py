@@ -21,7 +21,9 @@ Design notes:
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -46,6 +48,10 @@ _NEWS_LIMIT_DEFAULT = 50
 _DEFAULT_NEWS_TAG = "geopolitics"
 _EODHD_NEWS_URL = "https://eodhd.com/api/news"
 _NEWS_TIMEOUT_SECONDS = 20.0
+# Slightly under the UI's 5-minute auto-refresh so every poll recomputes
+# against fresh upstream data while repeat page loads within the window
+# come back instantly.
+_FETCH_CACHE_TTL_SECONDS = 240.0
 
 
 def _to_float(value: Any) -> float | None:
@@ -116,6 +122,12 @@ class EodhdPtDispatcher:
         self._news_fetcher = news_fetcher
         self._cached_key: str | None = None
         self._cached_client: Any = None
+        # Short-TTL fetch cache. One dashboard compute issues ~12 upstream
+        # calls (three of them identical economic_events pulls) and the UI
+        # auto-refreshes every 5 minutes; caching fetches for slightly less
+        # than that keeps repeat loads instant while every poll still sees
+        # fresh data.
+        self._fetch_cache: dict[tuple[str, str], tuple[float, Any]] = {}
 
     def _client(self) -> Any | None:
         key = self._key_resolver()
@@ -131,20 +143,31 @@ class EodhdPtDispatcher:
         if client is None:
             return None
         params = params or {}
+        cache_key = (requirement, json.dumps(params, sort_keys=True, default=str))
+        cached = self._fetch_cache.get(cache_key)
+        now = time.monotonic()
+        if cached is not None and cached[0] > now:
+            return cached[1]
         try:
+            result: Any = None
             if requirement == "historical_prices":
-                return self._historical_prices(client, params)
-            if requirement == "stock_quote":
-                return self._stock_quote(client, params)
-            if requirement == "economic_events":
-                return self._economic_events(client)
-            if requirement == "company_news":
-                return self._company_news(params)
+                result = self._historical_prices(client, params)
+            elif requirement == "stock_quote":
+                result = self._stock_quote(client, params)
+            elif requirement == "economic_events":
+                result = self._economic_events(client, params)
+            elif requirement == "company_news":
+                result = self._company_news(params)
+            else:
+                log.debug(
+                    "PT dispatcher: unhandled requirement %r for panel %s", requirement, panel_id
+                )
+                return None
         except Exception as exc:  # degrade to a panel warning rather than raising
             log.warning("PT EODHD fetch failed (%s/%s): %s", panel_id, requirement, exc)
             return None
-        log.debug("PT dispatcher: unhandled requirement %r for panel %s", requirement, panel_id)
-        return None
+        self._fetch_cache[cache_key] = (now + _FETCH_CACHE_TTL_SECONDS, result)
+        return result
 
     def _historical_prices(self, client: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
         ticker = _ticker_from_params(params)
@@ -180,14 +203,36 @@ class EodhdPtDispatcher:
             "low": _to_float(raw.get("low")),
         }
 
-    def _economic_events(self, client: Any) -> list[dict[str, Any]]:
+    def _economic_events(self, client: Any, params: dict[str, Any]) -> list[dict[str, Any]]:
+        # Honor a panel's declared lookback: an explicit events_lookback_days
+        # wins, then a monthly history window (wage growth's 12-month
+        # lookback needs ~366 days, not the 70-day default that starved its
+        # chart down to 2 bars).
+        days = int(params.get("events_lookback_days") or 0)
+        if days <= 0:
+            months = int(params.get("history_lookback_months") or 0)
+            days = months * 31 + 10 if months > 0 else _ECON_EVENTS_LOOKBACK_DAYS
         today = datetime.now(UTC).date()
-        rows = client.get_economic_events_data(
-            date_from=(today - timedelta(days=_ECON_EVENTS_LOOKBACK_DAYS)).isoformat(),
-            date_to=today.isoformat(),
-            country="US",
-            limit=_ECON_EVENTS_LIMIT,
-        )
+        # EODHD caps a single call at 1000 events, which covers only ~2.5
+        # months of US releases — a 12-month window silently truncates to
+        # the newest slice (the wage chart's 2-3 bar bug). Fetch long
+        # windows in ~80-day chunks that each fit under the cap.
+        rows: list[dict[str, Any]] = []
+        chunk_days = 80
+        window_start = today - timedelta(days=days)
+        chunk_from = window_start
+        while chunk_from <= today:
+            chunk_to = min(today, chunk_from + timedelta(days=chunk_days - 1))
+            rows.extend(
+                client.get_economic_events_data(
+                    date_from=chunk_from.isoformat(),
+                    date_to=chunk_to.isoformat(),
+                    country="US",
+                    limit=_ECON_EVENTS_LIMIT,
+                )
+                or []
+            )
+            chunk_from = chunk_to + timedelta(days=1)
         out: list[dict[str, Any]] = []
         for row in rows or []:
             out.append(
@@ -214,6 +259,10 @@ class EodhdPtDispatcher:
         tags_raw = params.get("news_search_tags") or ""
         tags = [t.strip() for t in tags_raw.split(",") if t.strip()] or [_DEFAULT_NEWS_TAG]
         limit = int(params.get("news_limit", _NEWS_LIMIT_DEFAULT))
+        # Panels advertise a lookback window ("(30d)" in the UI); enforce it
+        # here so stale articles never reach the keyword scanners.
+        lookback_days = int(params.get("news_lookback_days", 30))
+        cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).date().isoformat()
         collected: list[dict[str, Any]] = []
         seen: set[str] = set()
         for tag in tags:
@@ -225,6 +274,9 @@ class EodhdPtDispatcher:
             for row in rows or []:
                 title = row.get("title") or ""
                 if title in seen:
+                    continue
+                row_date = str(row.get("date") or "")
+                if row_date and row_date[:10] < cutoff:
                     continue
                 seen.add(title)
                 collected.append(

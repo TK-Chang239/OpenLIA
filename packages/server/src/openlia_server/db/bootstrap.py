@@ -86,6 +86,19 @@ def bootstrap() -> None:
     if os.environ.get("OPENLIA_MODE", "personal").lower() != "company":
         _seed_local_user()
     _seed_config_store()
+    _reconcile_runner_specs()
+
+
+def _reconcile_runner_specs() -> None:
+    """Keep runner_callable_specs department homes in sync with the
+    code-level need→department map (see connectors_service). Guards against
+    rescopes that edit the map without a data migration — the failure mode
+    that silently broke Portfolio price refresh in June 2026."""
+    from openlia_server.db import session as _session_mod
+    from openlia_server.services.connectors_service import reconcile_runner_specs
+
+    with _session_mod.SessionLocal() as s:
+        reconcile_runner_specs(s)
 
 
 def _run_alembic_upgrade(url: str) -> None:

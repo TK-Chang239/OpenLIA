@@ -61,6 +61,7 @@ export default function MacroResearch(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cadence, setCadence] = useState<CadenceMode>("auto");
   const [asOf, setAsOf] = useState<string | null>(null);
+  const [asOfStale, setAsOfStale] = useState(false);
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
 
@@ -116,7 +117,10 @@ export default function MacroResearch(): JSX.Element {
     let cancelled = false;
     getDashboard(activeSlug)
       .then((r) => {
-        if (!cancelled) setAsOf(r.generated_at);
+        if (!cancelled) {
+          setAsOf(r.generated_at);
+          setAsOfStale(r.is_stale && r.generated_at != null);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -182,8 +186,16 @@ export default function MacroResearch(): JSX.Element {
           </strong>
         </span>
         <div className="flex-1" />
-        <span className="mr-live-pill" data-testid="mr-live-pill">
-          {asOfLabel ?? t("macro.live_label")}
+        <span
+          className="mr-live-pill"
+          data-testid="mr-live-pill"
+          data-stale={asOfStale ? "true" : undefined}
+        >
+          {asOfLabel
+            ? asOfStale
+              ? `${t("macro.stale_label")} · ${asOfLabel}`
+              : asOfLabel
+            : t("macro.live_label")}
         </span>
         <select
           aria-label={t("macro.auto_refresh_aria")}

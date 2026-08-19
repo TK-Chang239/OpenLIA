@@ -544,6 +544,10 @@ def _make_lifespan(
                     ),
                     eu_v2_syncer=eu_v2_syncer,
                     eu_v2_dispatcher=eu_v2_dispatcher,
+                    # PT warm-cache job: the runner is constructed later in
+                    # the app factory, so hand the scheduler a provider that
+                    # resolves it off app.state at fire time.
+                    pt_runner_provider=lambda: getattr(app.state, "pt_runner", None),
                 )
                 # Phase 10: scheduler skip-on-disabled. Reads the live cache
                 # off app.state at fire time so invalidation-driven recomputes

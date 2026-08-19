@@ -33,6 +33,7 @@ export function TickerStrip(): JSX.Element | null {
   const [quotes, setQuotes] = useState<IndexQuote[] | null>(null);
   // null = unknown (loading/error); false = server has no EODHD key configured.
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [asOf, setAsOf] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +43,7 @@ export function TickerStrip(): JSX.Element | null {
         if (!cancelled) {
           setQuotes(res.indices);
           setAvailable(res.available);
+          setAsOf(res.as_of ?? null);
         }
       } catch {
         // Transient fetch error: hide the strip, but do not claim EODHD is
@@ -60,7 +62,7 @@ export function TickerStrip(): JSX.Element | null {
   // Distinct states (audit 1.A.6): live quotes -> strip; server reports no EODHD
   // key -> a connect hint (the route's documented purpose); empty/error -> hidden.
   if (quotes && quotes.length > 0) {
-    return renderStrip(quotes);
+    return renderStrip(quotes, asOf, t);
   }
   if (available === false) {
     return (
@@ -74,9 +76,20 @@ export function TickerStrip(): JSX.Element | null {
   return null;
 }
 
-function renderStrip(quotes: IndexQuote[]): JSX.Element {
+function formatAsOf(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderStrip(
+  quotes: IndexQuote[],
+  asOf: string | null,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): JSX.Element {
   return (
-    <div className="flex border border-border-subtle rounded-lg bg-bg-elevated overflow-hidden">
+    <div className="flex flex-col border border-border-subtle rounded-lg bg-bg-elevated overflow-hidden">
+      <div className="flex">
       {quotes.map((q, i) => {
         const delta = formatDelta(q);
         return (
@@ -102,6 +115,12 @@ function renderStrip(quotes: IndexQuote[]): JSX.Element {
           </div>
         );
       })}
+      </div>
+      {asOf ? (
+        <div className="px-[14px] py-[3px] border-t border-border-subtle font-mono text-[8.5px] tracking-[0.1em] uppercase text-text-tertiary text-right">
+          {t("home_cards.ticker_source_as_of", { time: formatAsOf(asOf) })}
+        </div>
+      ) : null}
     </div>
   );
 }

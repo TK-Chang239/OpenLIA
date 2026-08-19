@@ -20,15 +20,17 @@ import { useAuth } from "../auth/AuthContext";
 
 const STAGGER = 0.06;
 
-function firstName(displayName: string | null | undefined, fallback: string): string {
-  if (!displayName) return fallback;
+function firstName(displayName: string | null | undefined): string | null {
+  if (!displayName) return null;
   const trimmed = displayName.trim();
-  if (!trimmed) return fallback;
+  if (!trimmed) return null;
   return trimmed.split(/\s+/)[0];
 }
 
 export default function Home(): JSX.Element {
-  const { t } = useTranslation();
+  // i18n instance kept mounted so the greeting bank re-renders on
+  // language change even though the hero itself is template-driven.
+  useTranslation();
   const { user } = useAuth();
   const [now, setNow] = useState<Date>(() => new Date());
 
@@ -43,7 +45,9 @@ export default function Home(): JSX.Element {
   const phrase = pickGreeting(bank, localDaySeed(now));
   const [pre, post] = phrase.template.split("{accent}");
   const tod = timeOfDayGreeting(now);
-  const name = firstName(user?.display_name, t("welcome.greeting_hello"));
+  // Without a display name, greet without one — never substitute a
+  // placeholder word into the name slot ("Good evening, Hello.").
+  const name = firstName(user?.display_name);
 
   return (
     <div className="mx-auto w-full max-w-[760px] px-8 pt-10 pb-16 flex flex-col gap-7">
@@ -57,7 +61,7 @@ export default function Home(): JSX.Element {
           {formatDateStamp(now)}
         </span>
         <h1 className="m-0 font-display text-[52px] leading-[1.05] tracking-[-0.025em] font-medium text-text-primary">
-          {tod}, {name}.<br />
+          {name ? `${tod}, ${name}.` : `${tod}.`}<br />
           {pre}
           <em className="font-serif font-normal italic text-feedback-success">
             {phrase.accent}

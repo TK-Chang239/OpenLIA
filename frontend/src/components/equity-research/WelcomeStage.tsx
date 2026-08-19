@@ -73,7 +73,7 @@ export function WelcomeStage({
         className="flex flex-col items-center gap-2"
       >
         <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-[--color-text-tertiary]">
-          {tod}, {firstName}
+          {firstName ? `${tod}, ${firstName}` : tod}
         </span>
         <h1 className="m-0 max-w-[640px] text-center font-display text-[32px] font-medium leading-[1.15] tracking-[-0.02em] text-[--color-text-primary]">
           {pre}

@@ -56,6 +56,8 @@ class RetailSentimentData(BaseModel):
     # Optional cross-checks: the model fills these only when web search
     # surfaces a citable aggregated-sentiment or analyst-consensus figure.
     # A run that cannot obtain them omits both, and the payload still validates.
-    aggregated_sentiment: float | None = None
-    analyst_gap: float | None = None
+    # Both are normalized to [-1, 1] — the UI annotates them with that range,
+    # so a raw 0-100 vendor score must be rescaled before emitting.
+    aggregated_sentiment: float | None = Field(default=None, ge=-1.0, le=1.0)
+    analyst_gap: float | None = Field(default=None, ge=-2.0, le=2.0)
     captured_at: str | None = None

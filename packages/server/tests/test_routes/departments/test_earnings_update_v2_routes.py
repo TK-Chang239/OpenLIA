@@ -224,6 +224,9 @@ def _install_fake_eodhd_calendar(monkeypatch) -> None:
             self.api_key = api_key
 
         def get_upcoming_earnings_data(self, from_date=None, to_date=None, symbols=None) -> dict:
+            from datetime import UTC, datetime, timedelta
+
+            report_date = (datetime.now(UTC) + timedelta(days=30)).date().isoformat()
             return {
                 "type": "Earnings",
                 "description": "Historical and upcoming Earnings",
@@ -231,7 +234,7 @@ def _install_fake_eodhd_calendar(monkeypatch) -> None:
                 "earnings": [
                     {
                         "code": symbols,
-                        "report_date": "2026-07-30",
+                        "report_date": report_date,
                         "before_after_market": "AfterMarket",
                         "estimate": 1.9,
                     }
@@ -256,8 +259,11 @@ def test_watchlist_sync_with_eodhd_populates_schedule(client_eu_v2, monkeypatch)
     assert r.status_code == 200
     assert r.json()["synced"] == 1
 
+    from datetime import UTC, datetime, timedelta
+
+    expected_date = (datetime.now(UTC) + timedelta(days=30)).date().isoformat()
     schedule = client_eu_v2.get(f"{_BASE}/schedule").json()["schedule"]
-    assert any(row["ticker"] == "AAPL" and row["fiscal_date"] == "2026-07-30" for row in schedule)
+    assert any(row["ticker"] == "AAPL" and row["fiscal_date"] == expected_date for row in schedule)
 
 
 def test_templates_list_has_builtin(client_eu_v2):
@@ -527,3 +533,39 @@ def test_resolve_eu_transports_bridges_connector_key(client_eu_v2, monkeypatch):
     with session_mod.SessionLocal() as s:
         transports = eu_routes._resolve_eu_transports(s)
     assert transports is not None
+
+
+def test_schedule_excludes_past_pending_rows(client_eu_v2):
+    """A pending row whose scheduled time has passed is an orphan (missed
+    dispatch, or the print already happened) and must not surface as
+    'up next' (audit M1)."""
+    import uuid as _uuid
+    from datetime import UTC, datetime, timedelta
+
+    from openlia_server.db.models.report_eu import EuV2EarningsSchedule
+
+    now = datetime.now(UTC)
+    with session_mod.SessionLocal() as s:
+        for ticker, offset in (("AAPL", -18), ("ORCL", +23)):
+            s.add(
+                EuV2EarningsSchedule(
+                    id=str(_uuid.uuid4()),
+                    user_id="local",
+                    ticker=ticker,
+                    fiscal_date=(now + timedelta(days=offset)).date().isoformat(),
+                    release_timing="post_market",
+                    eps_estimate="1.9",
+                    revenue_estimate=None,
+                    scheduled_run_at=now + timedelta(days=offset),
+                    status="pending",
+                    attempts=0,
+                    synced_at=now,
+                    created_at=now,
+                )
+            )
+        s.commit()
+
+    schedule = client_eu_v2.get(f"{_BASE}/schedule").json()["schedule"]
+    tickers = {row["ticker"] for row in schedule}
+    assert "ORCL" in tickers
+    assert "AAPL" not in tickers

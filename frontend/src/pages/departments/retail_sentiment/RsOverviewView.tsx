@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { linkifyCitations } from "../../../lib/citationLinks";
 
 import {
   getDashboard,
@@ -155,6 +156,13 @@ function SignalRow({
   );
 }
 
+function evidenceAgeDays(publishedAt: string | null | undefined): number {
+  if (!publishedAt) return 0;
+  const ts = new Date(publishedAt).getTime();
+  if (Number.isNaN(ts)) return 0;
+  return Math.max(0, Math.floor((Date.now() - ts) / 86_400_000));
+}
+
 function EvidenceRow({
   item,
 }: {
@@ -197,6 +205,14 @@ function EvidenceRow({
         <div className="text-[11.5px] text-[--color-text-tertiary]">
           {item.source}
           {item.published_at ? ` · ${new Date(item.published_at).toLocaleDateString()}` : ""}
+          {evidenceAgeDays(item.published_at) > 30 ? (
+            <span
+              className="ml-1.5 font-mono text-[9px] uppercase tracking-[0.1em]"
+              style={{ color: "var(--color-feedback-warning)" }}
+            >
+              {`${Math.floor(evidenceAgeDays(item.published_at) / 30)}mo old`}
+            </span>
+          ) : null}
         </div>
       </div>
     </li>
@@ -275,7 +291,7 @@ function PayloadView({
             style={{ fontSize: 14.5, lineHeight: 1.65 }}
             data-testid="rs-narrative"
           >
-            {payload.narrative}
+            {linkifyCitations(payload.narrative, payload.citations)}
           </p>
           <div className="flex items-center gap-4 pt-1">
             <div className="flex flex-col gap-0.5">
@@ -392,7 +408,7 @@ function PayloadView({
                 key={i}
                 className="px-5 py-3 text-[13.5px] text-[--color-text-secondary]"
               >
-                {n}
+                {linkifyCitations(n, payload.citations)}
               </li>
             ))}
           </ul>

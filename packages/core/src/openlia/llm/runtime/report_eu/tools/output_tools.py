@@ -111,7 +111,7 @@ def _build_write_section_tool(workspace: RunWorkspace) -> ResearchTool:
         workspace.sections[section_id] = WrittenSection(
             section_id=section_id,
             title=_resolve_title(section_id),
-            markdown=markdown,
+            markdown=_normalize_chart_placement(markdown),
         )
         workspace.note_section_written(section_id)
         return ToolResult(
@@ -133,7 +133,8 @@ def _build_write_section_tool(workspace: RunWorkspace) -> ResearchTool:
                 "uses standard Markdown plus inline citation markers like "
                 "`[^web_3]` or `[^eodhd_1]` for every numeric or factual "
                 "claim. Reference previously-emitted charts with "
-                "`{{chart:<chart_id>}}`. Unresolved citation or chart "
+                "`{{chart:<chart_id>}}`, placing each marker on its own "
+                "line as its own paragraph. Unresolved citation or chart "
                 "references come back as an error; fix and re-emit."
             ),
             parameters={
@@ -170,6 +171,47 @@ _CHART_REF_RE = re.compile(r"\{\{chart:([a-z0-9_]+)\}\}")
 def _unresolved_chart_refs(markdown: str, workspace: RunWorkspace) -> list[str]:
     ids = set(_CHART_REF_RE.findall(markdown))
     return sorted(cid for cid in ids if cid not in workspace.charts)
+
+
+# An inline chart marker embedded mid-sentence ("...is shown in
+# {{chart:x}}.") splits into dangling fragments once renderers swap the
+# marker for a figure block. Promote every marker to its own paragraph and
+# absorb the connective/punctuation that pointed at it.
+_INLINE_CHART_TAIL_RE = re.compile(
+    r"(?:\s+(?:in|below|above|here)\s*|\s*[:,]\s*|\s+)?"
+    r"(\{\{chart:[a-z0-9_]+\}\})"
+    r"[ \t]*[.,;:]?[ \t]*",
+)
+
+
+def _normalize_chart_placement(markdown: str) -> str:
+    # Chart-free sections pass through untouched.
+    if not _CHART_REF_RE.search(markdown):
+        return markdown
+    normalized = _INLINE_CHART_TAIL_RE.sub(lambda m: f"\n\n{m.group(1)}\n\n", markdown)
+    # Collapse the blank-line runs the promotion can create.
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    # A sentence that pointed at the chart ("The trajectory is shown")
+    # now ends mid-clause; close it with a colon so it reads as an
+    # introduction to the figure below it.
+    lines = normalized.split("\n")
+    for i, line in enumerate(lines):
+        if not _CHART_REF_RE.fullmatch(line.strip()):
+            continue
+        j = i - 1
+        while j >= 0 and not lines[j].strip():
+            j -= 1
+        if j < 0:
+            continue
+        prev = lines[j].rstrip()
+        if (
+            prev
+            and not prev.lstrip().startswith("#")
+            and prev[-1] not in ".!?:—"
+            and not _CHART_REF_RE.fullmatch(prev.strip())
+        ):
+            lines[j] = prev + ":"
+    return "\n".join(lines).strip() + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +277,12 @@ def _build_emit_chart_tool(workspace: RunWorkspace) -> ResearchTool:
                             "type": "object",
                             "description": (
                                 "Each item carries either {label, value} for "
-                                "categorical charts or {x, y} for scatter/line."
+                                "categorical charts or {x, y} for scatter/line. "
+                                "Multi-series line/area charts add a 'series' "
+                                "name per item; items sharing a series name "
+                                "are drawn as one line over the shared x axis. "
+                                "Table values may be pre-formatted strings "
+                                "('$126.38') and are rendered verbatim."
                             ),
                         },
                     },
@@ -295,7 +342,10 @@ def _build_set_cover_tool(workspace: RunWorkspace) -> ResearchTool:
                 "(after most sections are written, before finalize). "
                 "Last call wins if invoked more than once — useful for "
                 "revisions that want to update the rating or thesis. "
-                "All fields are optional; pass only what's confident."
+                "All fields are optional; pass only what's confident. "
+                "Keep each metric card consistent with the figure the "
+                "report body states for it, and prefer values computed "
+                "from components over vendor aggregates."
             ),
             parameters={
                 "type": "object",
@@ -355,7 +405,8 @@ def _build_set_cover_tool(workspace: RunWorkspace) -> ResearchTool:
                     "rating": {
                         "type": "string",
                         "description": (
-                            "Investment rating, e.g. 'Buy', 'Hold', 'Overweight', 'N/A'."
+                            "Investment rating, e.g. 'Buy', 'Hold', 'Overweight'. Omit "
+                            "the field entirely when no rating applies."
                         ),
                     },
                     "upside_pct": {

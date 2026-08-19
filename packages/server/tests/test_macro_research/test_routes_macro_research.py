@@ -239,3 +239,42 @@ def test_refresh_409_for_unimplemented(
         rows = s.query(JobRun).filter_by(schedule_id="five_forces").all()
         assert rows == []
     fake_scheduler.run_now.assert_not_awaited()
+
+
+def test_list_dashboards_carries_age_and_staleness(client: TestClient, session_factory) -> None:
+    """Audit M1: the summary page needs per-framework generated_at +
+    is_stale without N+1 per-slug reads."""
+    from datetime import timedelta
+
+    with session_factory() as s:
+        s.add(
+            MrDashboardCache(
+                user_id="u-1",
+                dashboard="debt_cycle",
+                payload_json="{}",
+                provenance="live",
+                model_ref="anthropic:claude",
+                generated_at=datetime.now(UTC) - timedelta(days=76),
+            )
+        )
+        s.add(
+            MrDashboardCache(
+                user_id="u-1",
+                dashboard="four_seasons",
+                payload_json="{}",
+                provenance="live",
+                model_ref="anthropic:claude",
+                generated_at=datetime.now(UTC),
+            )
+        )
+        s.commit()
+
+    r = client.get("/departments/macro_research/dashboards")
+    assert r.status_code == 200
+    by_slug = {d["slug"]: d for d in r.json()["dashboards"]}
+    assert by_slug["debt_cycle"]["is_stale"] is True
+    assert by_slug["debt_cycle"]["generated_at"] is not None
+    assert by_slug["four_seasons"]["is_stale"] is False
+    # Never generated -> no timestamp, flagged stale.
+    assert by_slug["world_order"]["generated_at"] is None
+    assert by_slug["world_order"]["is_stale"] is True

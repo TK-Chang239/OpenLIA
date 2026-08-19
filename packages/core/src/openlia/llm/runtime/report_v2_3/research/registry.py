@@ -143,7 +143,13 @@ def build_eodhd_tools(
                     "Fetch the latest EODHD fundamentals snapshot for a ticker: "
                     "general info, latest income-statement, balance-sheet, "
                     "cash-flow figures. Use this when you need any reported "
-                    "financial line item (revenue, margins, debt, shares, etc.)."
+                    "financial line item (revenue, margins, debt, shares, etc.). "
+                    "For leverage, compute net cash / net debt from the "
+                    "balance-sheet components — cash, short-term investments, "
+                    "and total debt — and prefer that computed figure over "
+                    "vendor aggregate fields like netDebt, which vary in what "
+                    "they include; keep any figure you present reconciled with "
+                    "the components you cite."
                 ),
                 parameters={
                     "type": "object",

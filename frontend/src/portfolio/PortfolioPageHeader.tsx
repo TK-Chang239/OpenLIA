@@ -43,7 +43,16 @@ function formatSync(at: string | null): string {
   const d = new Date(t);
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${hh}:${mm} UTC`;
+  const now = new Date();
+  const sameUtcDay =
+    d.getUTCFullYear() === now.getUTCFullYear() &&
+    d.getUTCMonth() === now.getUTCMonth() &&
+    d.getUTCDate() === now.getUTCDate();
+  if (sameUtcDay) return `${hh}:${mm} UTC`;
+  // A stale sync must not masquerade as today's — always show the date.
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${mo}-${day} ${hh}:${mm} UTC`;
 }
 
 export function PortfolioPageHeader({

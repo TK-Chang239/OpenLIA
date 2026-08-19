@@ -209,9 +209,10 @@ report's headline thesis. Pass a one-sentence `tagline`, 3-5 `tldr`
 bullets distilling the most important takeaways, 3-6 `key_metrics`
 cards (label + pre-formatted value with units like '$1.2B' or
 '24.7%', plus an optional change like '+18% YoY'), and an investment
-`rating` ('Buy' / 'Hold' / 'Overweight' / etc., or 'N/A' for sector
-reports). This populates the report's cover hero panel — without it
-the cover renders bare with just the subject + template label.
+`rating` ('Buy' / 'Hold' / 'Overweight' / etc.; omit the field for
+sector reports where a single-name rating does not apply). This
+populates the report's cover hero panel — without it the cover
+renders bare with just the subject + template label.
 
 # When to call finalize()
 

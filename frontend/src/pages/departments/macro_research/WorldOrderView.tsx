@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getDashboard, runAssessment } from "../../../api/macro_research";
+import { CitationTableContext } from "../../../lib/citationLinks";
 import type {
   Status,
   T4AnalogCell,
@@ -135,6 +136,7 @@ export default function WorldOrderView(): JSX.Element {
   }));
 
   return (
+    <CitationTableContext.Provider value={data.citations ?? null}>
     <article>
       <DashHero
         eyebrow={data.header.subtitle}
@@ -263,6 +265,7 @@ export default function WorldOrderView(): JSX.Element {
         {data.sources}
       </SrcFoot>
     </article>
+    </CitationTableContext.Provider>
   );
 }
 

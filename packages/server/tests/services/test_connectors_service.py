@@ -442,3 +442,115 @@ async def test_validate_launch_passes_when_cli_mcp_returns_a_tool(
     result = await connectors_service._validate_launch(launch, {})
     assert isinstance(result, ValidationOk)
     assert result.tools == [tool]
+
+
+# ---------------------------------------------------------------------------
+# reconcile_runner_specs: boot-time guardrail keeping spec rows homed per
+# _NEED_DEPARTMENT_MAP (regression: June 2026 rescope left stock_quote rows
+# under macro_research with no data migration, silently killing Portfolio
+# price refresh)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reconcile_rehomes_misfiled_spec_row(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_validate_ok(monkeypatch)
+    connector = await install_builtin(db_session, template_id="eodhd", api_key="k")
+
+    row = (
+        db_session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.need_id == "stock_quote")
+        .one()
+    )
+    row.department_id = "macro_research"
+    db_session.commit()
+
+    fixed = connectors_service.reconcile_runner_specs(db_session)
+
+    assert fixed == 1
+    row = (
+        db_session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.need_id == "stock_quote")
+        .one()
+    )
+    assert row.department_id == "portfolio"
+    assert row.connector_id == connector.id
+
+
+@pytest.mark.asyncio
+async def test_reconcile_inserts_missing_spec_from_installed_template(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_validate_ok(monkeypatch)
+    connector = await install_builtin(db_session, template_id="eodhd", api_key="k")
+
+    db_session.query(RunnerCallableSpec).filter(
+        RunnerCallableSpec.need_id == "eod_history",
+    ).delete(synchronize_session=False)
+    db_session.commit()
+
+    fixed = connectors_service.reconcile_runner_specs(db_session)
+
+    assert fixed == 1
+    row = (
+        db_session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.need_id == "eod_history")
+        .one()
+    )
+    assert row.department_id == "portfolio"
+    assert row.connector_id == connector.id
+    assert row.access_mode == "python_lib"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_drops_duplicate_row_when_correct_home_exists(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import uuid as _uuid
+
+    _stub_validate_ok(monkeypatch)
+    connector = await install_builtin(db_session, template_id="eodhd", api_key="k")
+
+    correct = (
+        db_session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.need_id == "stock_quote")
+        .one()
+    )
+    db_session.add(
+        RunnerCallableSpec(
+            id=str(_uuid.uuid4()),
+            department_id="macro_research",
+            need_id="stock_quote",
+            connector_id=connector.id,
+            access_mode=correct.access_mode,
+            spec=correct.spec,
+        )
+    )
+    db_session.commit()
+
+    fixed = connectors_service.reconcile_runner_specs(db_session)
+
+    assert fixed == 1
+    rows = (
+        db_session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.need_id == "stock_quote")
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].department_id == "portfolio"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_is_noop_when_consistent(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_validate_ok(monkeypatch)
+    await install_builtin(db_session, template_id="eodhd", api_key="k")
+
+    assert connectors_service.reconcile_runner_specs(db_session) == 0

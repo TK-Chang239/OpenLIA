@@ -314,3 +314,114 @@ def test_resolve_enabled_connectors_honors_capability_override(db_session):
         db_session, provider_kind="anthropic", model="claude-haiku-4-6"
     )
     assert gated.web_search is True
+
+
+def test_dedupe_evidence_drops_syndicated_duplicate():
+    """Same story emitted twice under different source strings (audit M1)."""
+    from openlia_server.services.rs_dash_run_service import _dedupe_evidence
+
+    items = [
+        {
+            "title": "Reddit Has Turned Bearish on Tesla and the Crowd Might Be Right",
+            "url": "https://247wallst.com/a",
+            "source": "24/7 Wall St.",
+            "published_at": "2026-03-12",
+            "classification": "bearish",
+        },
+        {
+            "title": "Reddit Has Turned Bearish on Tesla and the Crowd Might Be Right",
+            "url": "https://finance.yahoo.com/b",
+            "source": "Yahoo Finance / 24/7 Wall St.",
+            "published_at": "2026-03-12T09:00:00Z",
+            "classification": "bearish",
+        },
+        {
+            "title": "Vanda: retail investors buying the dip",
+            "url": "https://barchart.com/c",
+            "source": "Barchart",
+            "published_at": "2026-08-14",
+            "classification": "bullish",
+        },
+    ]
+    out = _dedupe_evidence(items)
+    assert len(out) == 2
+    assert out[0]["source"] == "24/7 Wall St."
+    assert out[1]["title"].startswith("Vanda")
+
+
+def test_dedupe_evidence_keeps_same_title_on_different_dates():
+    from openlia_server.services.rs_dash_run_service import _dedupe_evidence
+
+    items = [
+        {"title": "TSLA daily sentiment wrap", "published_at": "2026-08-14"},
+        {"title": "TSLA daily sentiment wrap", "published_at": "2026-08-15"},
+    ]
+    assert len(_dedupe_evidence(items)) == 2
+
+
+def test_citation_rows_maps_web_and_provider_entries():
+    from dataclasses import dataclass, field
+
+    from openlia_server.services.dash_citations import citation_rows
+
+    @dataclass
+    class _Entry:
+        source_id: str
+        tool_name: str
+        provenance: dict = field(default_factory=dict)
+
+    rows = citation_rows(
+        [
+            _Entry(
+                "web_2",
+                "web_search",
+                {"type": "web", "url": "https://reuters.com/a", "title": "Reuters piece"},
+            ),
+            _Entry(
+                "web_9",
+                "web_search",
+                {"type": "web", "url": "search://tsla sentiment", "title": "Search"},
+            ),
+            _Entry(
+                "eodhd_1",
+                "get_news",
+                {"type": "data_provider", "provider": "EODHD", "endpoint": "news"},
+            ),
+        ]
+    )
+    assert rows[0] == {
+        "source_id": "web_2",
+        "title": "Reuters piece",
+        "url": "https://reuters.com/a",
+    }
+    # search:// pseudo-URLs are not linkable.
+    assert rows[1]["url"] is None
+    assert rows[2] == {"source_id": "eodhd_1", "title": "EODHD news", "url": None}
+
+
+def test_run_to_cache_attaches_citations(db_session, make_user):
+    """The cached payload carries the run's citation ledger so the UI can
+    link narrative markers (audit follow-up F3)."""
+    user = make_user()
+    payload = _complete_rs_payload(sentiment_score=0.1)
+    session = _fake_session(
+        [
+            _tool_call(
+                "classify_retail_sentiment",
+                {"bullish": 40, "bearish": 30, "neutral": 30, "buzz_level": "low"},
+            ),
+            _tool_call("emit_dashboard", {"payload": payload}),
+        ]
+    )
+    asyncio.run(
+        run_to_cache(
+            db_session,
+            user_id=user.id,
+            ticker="TSLA",
+            session=session,
+        )
+    )
+    row = db_session.query(RsDashboardCache).filter_by(user_id=user.id, ticker="TSLA").one()
+    stored = json.loads(row.payload_json)
+    assert "citations" in stored
+    assert isinstance(stored["citations"], list)

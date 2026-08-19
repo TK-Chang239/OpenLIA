@@ -162,7 +162,7 @@ class AdapterPriceProvider:
         try:
             result = asyncio.run(self._adapter.fetch("stock_quote", {"ticker": ticker.upper()}))
         except Exception as exc:
-            logger.debug("portfolio price fetch failed for %s: %s", ticker, exc)
+            logger.warning("portfolio price fetch failed for %s: %s", ticker, exc)
             return None
         payload = getattr(result, "payload", None)
         return _coerce_price(payload)

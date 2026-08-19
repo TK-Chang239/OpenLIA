@@ -8,6 +8,7 @@ are user-scoped.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, ClassVar
@@ -25,6 +26,8 @@ from openlia_server.services.portfolio_quote_refresh import (
     QuoteProvider,
     refresh_due_quotes,
 )
+
+log = logging.getLogger(__name__)
 
 
 class PortfolioPriceRefreshExecutor(BaseExecutor):
@@ -122,7 +125,8 @@ class _AdapterQuoteProvider:
             else:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     result = pool.submit(_run).result()
-        except Exception:
+        except Exception as exc:
+            log.warning("portfolio quote fetch failed for %s: %s", ticker, exc)
             return None
         payload = getattr(result, "payload", None)
         price = _coerce_price(payload)

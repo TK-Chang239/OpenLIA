@@ -29,6 +29,12 @@
   text-transform: uppercase;
   color: var(--color-feedback-success);
 }
+.mr-live-pill[data-stale="true"] {
+  background: rgba(217, 164, 65, 0.12);
+  border-color: rgba(217, 164, 65, 0.35);
+  color: var(--color-feedback-warning);
+}
+
 .mr-live-pill::before {
   content: "";
   width: 6px;

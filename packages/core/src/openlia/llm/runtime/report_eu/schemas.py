@@ -71,6 +71,9 @@ class ChartDataPoint(BaseModel):
     x: str | float | int | None = None
     y: float | int | str | None = None
     value: float | int | str | None = None
+    # Multi-series charts: points sharing a `series` name are drawn as one
+    # line/area over the shared x axis; omitted = single unnamed series.
+    series: str | None = None
 
 
 class ChartSpec(BaseModel):

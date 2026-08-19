@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.dashboard import MrDashboardCache
 from openlia_server.services import connectors_service, portfolio
+from openlia_server.services.dash_citations import citation_rows
 from openlia_server.services.llm_providers import (
     get_capability_override,
     resolve_provider_api_key,
@@ -118,6 +119,20 @@ def _cached_payload(db: DBSession, user_id: str, slug: str) -> dict | None:
     return json.loads(row.payload_json)
 
 
+def _cached_payload_with_age(
+    db: DBSession, user_id: str, slug: str
+) -> tuple[dict | None, datetime | None]:
+    """Like :func:`_cached_payload`, but also return the row's generated_at
+    so consumers can present the read's age instead of implying freshness."""
+    row = db.query(MrDashboardCache).filter_by(user_id=user_id, dashboard=slug).one_or_none()
+    if row is None:
+        return None, None
+    generated_at = row.generated_at
+    if generated_at is not None and generated_at.tzinfo is None:
+        generated_at = generated_at.replace(tzinfo=UTC)
+    return json.loads(row.payload_json), generated_at
+
+
 def _seeded_force_line(
     *,
     force_id: str,
@@ -178,12 +193,15 @@ def _summary_state_line(
     payload: dict | None,
     block_key: str,
     extra: str = "",
+    generated_at: datetime | None = None,
 ) -> str:
     """One cached-framework headline-state line for the Summary context block.
 
     Reads the source dashboard's headline block (``block_key`` -> e.g.
     "phaseBox" or "verdict") for its title; honestly notes a framework that has
     not been generated yet so the model says so rather than inventing a read.
+    Each line carries its as-of date so the model can (and is told to) flag
+    reads that have gone stale instead of presenting them as current.
     ``extra`` appends a framework-specific signal (e.g. the Five Forces
     active-count) when present.
     """
@@ -192,7 +210,11 @@ def _summary_state_line(
     block = payload.get(block_key, {})
     title = block.get("title", "")
     suffix = f" {extra}" if extra else ""
-    return f"- {label}: {title}.{suffix}"
+    age = ""
+    if generated_at is not None:
+        age_days = (datetime.now(UTC) - generated_at).days
+        age = f" (as of {generated_at.date().isoformat()}, {age_days}d old)"
+    return f"- {label}: {title}.{suffix}{age}"
 
 
 def _summary_data_context(db: DBSession, user_id: str) -> str:
@@ -204,11 +226,11 @@ def _summary_data_context(db: DBSession, user_id: str) -> str:
     into one authoritative context block. Frameworks with no cache row are
     flagged as not yet generated.
     """
-    debt = _cached_payload(db, user_id, "debt_cycle")
-    seasons = _cached_payload(db, user_id, "four_seasons")
-    world = _cached_payload(db, user_id, "world_order")
-    weather = _cached_payload(db, user_id, "all_weather")
-    forces = _cached_payload(db, user_id, "five_forces")
+    debt, debt_at = _cached_payload_with_age(db, user_id, "debt_cycle")
+    seasons, seasons_at = _cached_payload_with_age(db, user_id, "four_seasons")
+    world, world_at = _cached_payload_with_age(db, user_id, "world_order")
+    weather, weather_at = _cached_payload_with_age(db, user_id, "all_weather")
+    forces, forces_at = _cached_payload_with_age(db, user_id, "five_forces")
 
     world_extra = ""
     if world is not None:
@@ -220,31 +242,46 @@ def _summary_data_context(db: DBSession, user_id: str) -> str:
             forces_extra = f"Active forces: {count}."
 
     lines = [
-        _summary_state_line(label="T1 - Debt Cycle (phase)", payload=debt, block_key="phaseBox"),
         _summary_state_line(
-            label="T2 - Four Seasons (season)", payload=seasons, block_key="verdict"
+            label="T1 - Debt Cycle (phase)",
+            payload=debt,
+            block_key="phaseBox",
+            generated_at=debt_at,
+        ),
+        _summary_state_line(
+            label="T2 - Four Seasons (season)",
+            payload=seasons,
+            block_key="verdict",
+            generated_at=seasons_at,
         ),
         _summary_state_line(
             label="T4 - World Order (stage)",
             payload=world,
             block_key="verdict",
             extra=world_extra,
+            generated_at=world_at,
         ),
         _summary_state_line(
-            label="T3 - All-Weather (coverage)", payload=weather, block_key="verdict"
+            label="T3 - All-Weather (coverage)",
+            payload=weather,
+            block_key="verdict",
+            generated_at=weather_at,
         ),
         _summary_state_line(
             label="T5 - Five Forces (active-count)",
             payload=forces,
             block_key="verdict",
             extra=forces_extra,
+            generated_at=forces_at,
         ),
     ]
     return (
-        "The five framework dashboards' current cached states are below. Treat "
-        "each as the authoritative read for that framework; synthesize, do not "
-        "contradict. Emit one frameworkStatus card per framework reflecting its "
-        "state.\n" + "\n".join(lines)
+        "The five framework dashboards' latest cached reads are below, each "
+        "with its as-of date. Treat each as the authoritative read for that "
+        "framework as of that date; synthesize, do not contradict. When a "
+        "read is more than a few days old, say so explicitly wherever the "
+        "synthesis leans on it. Emit one frameworkStatus card per framework "
+        "reflecting its state.\n" + "\n".join(lines)
     )
 
 
@@ -416,11 +453,16 @@ async def run_to_cache(
             f"status={result.status} message={result.message}"
         )
 
+    # Attach the run's citation ledger so the UI can render the prose's
+    # [^source_id] markers as links instead of showing/stripping raw tokens.
+    payload = dict(result.payload)
+    payload["citations"] = citation_rows(result.citations)
+
     _upsert_cache(
         db,
         user_id=user_id,
         dashboard_slug=dashboard_slug,
-        payload=result.payload,
+        payload=payload,
         model_ref=request.model,
     )
     return dashboard_slug

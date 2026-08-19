@@ -590,3 +590,18 @@ body {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
 }
+
+/* Superscript citation links resolved from dashboard payload ledgers. */
+.cite-sup {
+  font-size: 0.72em;
+  line-height: 0;
+  margin-left: 1px;
+  color: var(--color-text-tertiary);
+}
+.cite-sup a {
+  color: var(--color-feedback-success);
+  text-decoration: none;
+}
+.cite-sup a:hover {
+  text-decoration: underline;
+}

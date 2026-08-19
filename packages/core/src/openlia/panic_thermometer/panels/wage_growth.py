@@ -89,6 +89,7 @@ class WageGrowthPanel:
             key=lambda e: e.get("date", ""),
         )
         values = [float(e["actual"]) for e in wage_events]
+        dates = [str(e.get("date") or "") for e in wage_events]
         value = values[-1] if values else None
         prev_value = values[-2] if len(values) >= 2 else None
 
@@ -123,6 +124,6 @@ class WageGrowthPanel:
                 "avg_12m": avg_12m,
                 "cpi_mom": cpi_mom,
             },
-            raw_series={"value": values},
+            raw_series={"value": values, "date": dates},
             warnings=warnings,
         )

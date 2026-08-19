@@ -305,3 +305,51 @@ def test_apply_preset_then_dashboard_reflects_streak_condition(pt_client):
     body = pt_client.get("/departments/panic_thermometer/config").json()
     oil = next(p for p in body["panel_config"] if p["panel_id"] == "oil")
     assert oil["streak_condition"] == "price > ma200 * ma_multiplier"
+
+
+# --- Dashboard snapshot cache (audit follow-up F2) ---------------------------
+
+
+def test_dashboard_serves_cached_payload_without_recompute(pt_client):
+    """A fresh pt_dashboard_cache row is served as-is — no runner compute."""
+    first = pt_client.get("/departments/panic_thermometer/dashboard")
+    assert first.status_code == 200
+
+    calls = {"n": 0}
+    real = pt_client.app.state.pt_runner.compute_dashboard
+
+    def _counting(user_id):
+        calls["n"] += 1
+        return real(user_id)
+
+    pt_client.app.state.pt_runner.compute_dashboard = _counting
+    try:
+        second = pt_client.get("/departments/panic_thermometer/dashboard")
+    finally:
+        pt_client.app.state.pt_runner.compute_dashboard = real
+
+    assert second.status_code == 200
+    assert calls["n"] == 0
+    assert second.json() == first.json()
+
+
+def test_config_update_invalidates_dashboard_cache(pt_client):
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.dashboard import PtDashboardCache
+
+    assert pt_client.get("/departments/panic_thermometer/dashboard").status_code == 200
+    with session_mod.SessionLocal() as s:
+        assert s.query(PtDashboardCache).count() == 1
+
+    cfg = pt_client.get("/departments/panic_thermometer/config").json()
+    r = pt_client.put(
+        "/departments/panic_thermometer/config",
+        json={
+            "panel_config": cfg["panel_config"],
+            "composite_settings": cfg["composite_settings"],
+        },
+    )
+    assert r.status_code == 200
+
+    with session_mod.SessionLocal() as s:
+        assert s.query(PtDashboardCache).count() == 0

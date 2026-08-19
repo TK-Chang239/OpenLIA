@@ -121,7 +121,7 @@ export const inflationPanel: InflationPanel = {
   presetLabel: "Preset · Report defaults ▾",
   bigValue: "2.9%",
   bigValueTone: "warn",
-  bigValueUnit: "Michigan 5Y · y/y",
+  bigValueUnit: "Michigan 5Y · survey level",
   bigValueStamp: { tone: "warn", label: "+0.2pp m/m" },
   narrative: {
     parts: [

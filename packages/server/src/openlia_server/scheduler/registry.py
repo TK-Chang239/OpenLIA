@@ -21,6 +21,7 @@ class JobType(StrEnum):
     PORTFOLIO_PRICE_REFRESH = "portfolio_price_refresh"
     EU_V2_SYNC = "eu_v2_sync"
     EU_V2_DISPATCH = "eu_v2_dispatch"
+    PT_DASH = "pt_dash"
 
 
 class JobStatus(StrEnum):
@@ -41,6 +42,7 @@ MAINTENANCE_JOB_KEY = "system_maintenance"
 PORTFOLIO_PRICE_REFRESH_KEY = "portfolio_price_refresh"
 EU_V2_SYNC_KEY = "eu_v2_sync"
 EU_V2_DISPATCH_KEY = "eu_v2_dispatch"
+PT_DASH_KEY = "pt_dash"
 
 
 _DEPARTMENT_BY_JOB: dict[JobType, str] = {
@@ -52,6 +54,7 @@ _DEPARTMENT_BY_JOB: dict[JobType, str] = {
     JobType.PORTFOLIO_PRICE_REFRESH: "portfolio",
     JobType.EU_V2_SYNC: "earnings_update_v2",
     JobType.EU_V2_DISPATCH: "earnings_update_v2",
+    JobType.PT_DASH: "panic_thermometer",
 }
 
 
@@ -76,6 +79,9 @@ def job_key(
         return EU_V2_SYNC_KEY
     if job_type is JobType.EU_V2_DISPATCH:
         return EU_V2_DISPATCH_KEY
+    if job_type is JobType.PT_DASH:
+        # Global fan-out job — no per-user keying.
+        return PT_DASH_KEY
     if not user_id:
         raise ValueError(f"user_id required for job_type={job_type.value}")
     base = f"{job_type.value}:{user_id}"
@@ -95,6 +101,8 @@ def parse_job_key(key: str) -> tuple[JobType, str | None]:
         return (JobType.EU_V2_SYNC, None)
     if key == EU_V2_DISPATCH_KEY:
         return (JobType.EU_V2_DISPATCH, None)
+    if key == PT_DASH_KEY:
+        return (JobType.PT_DASH, None)
     prefix, _, rest = key.partition(":")
     try:
         job_type = JobType(prefix)

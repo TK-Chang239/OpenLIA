@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.dashboard import RsDashboardCache
 from openlia_server.services import connectors_service
+from openlia_server.services.dash_citations import citation_rows
 from openlia_server.services.llm_providers import (
     get_capability_override,
     resolve_provider_api_key,
@@ -93,6 +94,29 @@ def _null_transports() -> MbDataTransports:
         economic_calendar=lambda _window: [],
         macro_indicators=lambda _keys: {},
     )
+
+
+def _dedupe_evidence(evidence: list) -> list:
+    """Drop evidence items that repeat an earlier item's story.
+
+    Key is normalized title + published date — the observed duplicate pair
+    shared both but differed in the ``source`` string (syndicated copy), so
+    URL equality is not a sufficient key. First occurrence wins.
+    """
+    seen: set[tuple[str, str]] = set()
+    out: list = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            out.append(item)
+            continue
+        title = " ".join(str(item.get("title") or "").lower().split())
+        published = str(item.get("published_at") or "")[:10]
+        key = (title, published)
+        if title and key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
 
 
 def _prior_scores(db: DBSession, *, user_id: str, ticker: str) -> list[float]:
@@ -224,9 +248,20 @@ async def run_to_cache(
         payload["momentum"] = momentum
         payload["trend_label"] = trend_label
 
+    # The evidence list is LLM-authored; the same story sometimes arrives
+    # twice under different source strings (syndication). Dedupe on
+    # normalized title + date before persisting.
+    evidence = payload.get("evidence")
+    if isinstance(evidence, list):
+        payload["evidence"] = _dedupe_evidence(evidence)
+
     # Stamp captured_at if not already set by the engine.
     if not payload.get("captured_at"):
         payload["captured_at"] = datetime.now(UTC).isoformat()
+
+    # Attach the run's citation ledger so the UI can render the narrative's
+    # [^source_id] markers as links instead of stripping them.
+    payload["citations"] = citation_rows(result.citations)
 
     _insert_cache(
         db,

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.dashboard import PtPreset
 from openlia_server.middleware.auth import build_require_active_user
+from openlia_server.services import pt_dash_cache
 from openlia_server.services.pt_config import PtConfigService
 from openlia_server.services.pt_runner import PtRunner
 
@@ -89,18 +90,30 @@ def build_panic_thermometer_router(
             )
         return runner
 
+    def _invalidate_dashboard_cache(user_id: str) -> None:
+        with db_session_factory() as s:
+            pt_dash_cache.invalidate(s, user_id)
+            s.commit()
+
     @router.get("/dashboard")
     def get_dashboard(
         user: User = require_auth,
         runner: PtRunner = Depends(_runner_dep),
     ) -> dict[str, Any]:
+        # Serve the persisted snapshot when fresh — a full compute costs
+        # ~12 upstream calls. The pt_dash scheduler job keeps rows warm,
+        # so even a first load after a restart is usually instant.
+        with db_session_factory() as s:
+            cached, generated_at = pt_dash_cache.read_cache(s, user.id)
+        if cached is not None and pt_dash_cache.is_fresh(generated_at):
+            return cached
+
         payload = runner.compute_dashboard(user.id)
-        return {
-            "panels": payload.panels,
-            "composite": payload.composite,
-            "generated_at": payload.generated_at,
-            "warnings": payload.warnings,
-        }
+        data = pt_dash_cache.payload_to_dict(payload)
+        with db_session_factory() as s:
+            pt_dash_cache.upsert_cache(s, user.id, data)
+            s.commit()
+        return data
 
     @router.get("/config")
     def get_config(user: User = require_auth) -> dict[str, Any]:
@@ -114,6 +127,9 @@ def build_panic_thermometer_router(
             panel_config=payload.panel_config,
             composite_settings=payload.composite_settings,
         )
+        # A ruleset change makes the cached dashboard wrong; recompute on
+        # the next read.
+        _invalidate_dashboard_cache(user.id)
         return _config_out(cfg)
 
     @router.get("/config/export")
@@ -129,6 +145,7 @@ def build_panic_thermometer_router(
             cfg = _config_service().import_config(user.id, payload)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        _invalidate_dashboard_cache(user.id)
         return _config_out(cfg)
 
     @router.get("/presets")
@@ -174,6 +191,7 @@ def build_panic_thermometer_router(
             cfg = _config_service().apply_preset(user.id, preset_id)
         except ValueError as exc:
             raise HTTPException(404, str(exc)) from exc
+        _invalidate_dashboard_cache(user.id)
         return _config_out(cfg)
 
     @router.post("/formula/parse")
