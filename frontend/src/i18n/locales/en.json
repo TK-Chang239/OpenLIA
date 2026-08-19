@@ -1742,6 +1742,7 @@
     "mb_empty": "No briefing yet",
     "mb_empty_hint": "Schedule a Morning Briefing to see today’s read here.",
     "mb_loading": "Loading briefing...",
+    "ticker_source_as_of": "EODHD \u00b7 as of {{time}}",
     "ticker_connect_eodhd": "Connect EODHD to see market indices"
   },
   "report": {

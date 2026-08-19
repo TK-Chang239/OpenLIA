@@ -13,6 +13,8 @@ export interface IndicesResponse {
   /** False when no EODHD key/connector is configured. */
   available: boolean;
   indices: IndexQuote[];
+  /** ISO timestamp of the underlying EODHD fetch; null when nothing fetched yet. */
+  as_of?: string | null;
 }
 
 export const fetchMarketIndices = () =>

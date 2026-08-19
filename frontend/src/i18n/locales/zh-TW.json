@@ -1741,6 +1741,7 @@
     "mb_empty": "尚無簡報",
     "mb_empty_hint": "排定晨間簡報後，即可在此看到今日重點。",
     "mb_loading": "載入簡報...",
+    "ticker_source_as_of": "EODHD \u00b7 \u6578\u64da\u6642\u9593 {{time}}",
     "ticker_connect_eodhd": "連接 EODHD 以查看市場指數"
   },
   "report": {

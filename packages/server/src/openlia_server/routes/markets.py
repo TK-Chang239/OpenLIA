@@ -13,6 +13,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter
@@ -49,12 +50,12 @@ def build_markets_router(
     async def indices(_user: User = require_user) -> dict:
         api_key = _resolve_key()
         if not api_key:
-            return {"available": False, "indices": []}
+            return {"available": False, "indices": [], "as_of": None}
 
         now = time.monotonic()
         cached = cache["data"]
         if cached is not None and now - float(cache["ts"]) < _CACHE_TTL_SECONDS:
-            return {"available": True, "indices": cached}
+            return {"available": True, "indices": cached, "as_of": cache.get("as_of")}
 
         try:
             data = await asyncio.wait_for(
@@ -66,12 +67,17 @@ def build_markets_router(
             # Serve stale data if we have any; otherwise an empty (but available)
             # basket so the strip degrades quietly rather than erroring.
             if cached is not None:
-                return {"available": True, "indices": cached}
-            return {"available": True, "indices": []}
+                return {"available": True, "indices": cached, "as_of": cache.get("as_of")}
+            return {"available": True, "indices": [], "as_of": None}
 
         cache["data"] = data
         cache["ts"] = now
-        return {"available": True, "indices": data}
+        # Fetch timestamp, so the UI can label how fresh (and from which
+        # source) these figures are — engine-authored dashboards may cite
+        # different feeds and moments, and unlabeled disagreement reads as
+        # a bug.
+        cache["as_of"] = datetime.now(UTC).isoformat()
+        return {"available": True, "indices": data, "as_of": cache["as_of"]}
 
     return router
 
